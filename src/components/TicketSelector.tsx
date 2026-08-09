@@ -1,124 +1,53 @@
 "use client";
 
-import { Badge, Card, Group, NumberInput, Select, Stack, Text } from "@mantine/core";
-import type { PublicProduct } from "@/lib/publicEventApi";
+import { Badge, Card, Group, NumberInput, Stack, Text } from "@mantine/core";
+import type { PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
+import { formatMoney } from "@/lib/money";
 
-function formatPrice(price: string | null): string {
-  if (price === null) return "Free";
-  const amount = Number(price);
-  return amount === 0 ? "Free" : `$${amount.toFixed(2)}`;
-}
+export const ticketLineKey = (productId: number, optionId: number | null) => `${productId}:${optionId ?? "direct"}`;
 
-/**
- * Controlled — cart state lives in the parent Checkout wizard (needed
- * once "continue to details" has to read it), not locally. Renders
- * just the per-product rows; the running total and continue button are
- * the wizard's job.
- */
-export function TicketSelector({
-  products,
-  quantities,
-  onQuantityChange,
-  selectedTierId,
-  onTierChange,
-}: {
+export function TicketSelector({ products, quantities, onQuantityChange, currencyCode }: {
   products: PublicProduct[];
-  quantities: Record<number, number>;
-  onQuantityChange: (productId: number, quantity: number) => void;
-  selectedTierId: Record<number, number | null>;
-  onTierChange: (productId: number, tierId: number | null) => void;
+  quantities: Record<string, number>;
+  onQuantityChange: (productId: number, optionId: number | null, quantity: number) => void;
+  currencyCode: string;
 }) {
-  if (products.length === 0) {
-    return (
-      <Text c="dimmed" size="sm">
-        No tickets available for this event yet.
-      </Text>
-    );
-  }
+  if (products.length === 0) return <Text c="dimmed" size="sm">No tickets available for this event yet.</Text>;
 
-  return (
-    <Stack gap="md">
-      {products.map((product) => (
-        <ProductRow
-          key={product.id}
-          product={product}
-          quantity={quantities[product.id] ?? 0}
-          onQuantityChange={(qty) => onQuantityChange(product.id, qty)}
-          selectedTierId={selectedTierId[product.id] ?? product.active_tier_id ?? null}
-          onTierChange={(tierId) => onTierChange(product.id, tierId)}
-        />
-      ))}
-    </Stack>
-  );
+  return <Stack gap="md">{products.map((product) => (
+    <Card key={product.id} withBorder radius="lg" p="md">
+      <Stack gap="sm">
+        <Text fw={700}>{product.title}</Text>
+        {product.type === "TIERED" ? product.options?.map((option) => (
+          <TicketOptionRow key={option.id} product={product} option={option}
+            quantity={quantities[ticketLineKey(product.id, option.id)] ?? 0}
+            onChange={(quantity) => onQuantityChange(product.id, option.id, quantity)} currencyCode={currencyCode} />
+        )) : (
+          <TicketOptionRow product={product} option={null}
+            quantity={quantities[ticketLineKey(product.id, null)] ?? 0}
+            onChange={(quantity) => onQuantityChange(product.id, null, quantity)} currencyCode={currencyCode} />
+        )}
+      </Stack>
+    </Card>
+  ))}</Stack>;
 }
 
-function ProductRow({
-  product,
-  quantity,
-  onQuantityChange,
-  selectedTierId,
-  onTierChange,
-}: {
-  product: PublicProduct;
-  quantity: number;
-  onQuantityChange: (qty: number) => void;
-  selectedTierId: number | null;
-  onTierChange: (tierId: number | null) => void;
+function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: {
+  product: PublicProduct; option: PublicTicketOption | null; quantity: number;
+  onChange: (quantity: number) => void; currencyCode: string;
 }) {
-  const soldOut = product.is_sold_out || (product.type === "TIERED" && product.active_tier_id == null);
-  const activeTier = product.tiers?.find((t) => t.id === selectedTierId);
-  const displayPrice = product.type === "TIERED" ? (activeTier?.price ?? null) : product.current_price;
-
-  return (
-    <Card withBorder radius="lg" p="md">
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Stack gap={4} style={{ flex: 1 }}>
-          <Group gap="xs">
-            <Text fw={600}>{product.title}</Text>
-            {soldOut && (
-              <Badge color="red" variant="light" size="sm">
-                Sold out
-              </Badge>
-            )}
-          </Group>
-
-          {product.type === "TIERED" && product.tiers && product.tiers.length > 0 && (
-            <Select
-              size="xs"
-              maw={220}
-              data={product.tiers.map((tier) => ({
-                value: String(tier.id),
-                label: `${tier.name} — ${formatPrice(tier.price)}${tier.is_available ? "" : " (unavailable)"}`,
-                disabled: !tier.is_available,
-              }))}
-              value={selectedTierId !== null ? String(selectedTierId) : null}
-              onChange={(value) => onTierChange(value ? Number(value) : null)}
-              placeholder="Select a tier"
-            />
-          )}
-
-          {product.type !== "TIERED" && (
-            <Text size="sm" c="dimmed">
-              {formatPrice(displayPrice)}
-            </Text>
-          )}
-
-          {product.quantity_remaining !== null && !soldOut && (
-            <Text size="xs" c="dimmed">
-              {product.quantity_remaining} remaining
-            </Text>
-          )}
-        </Stack>
-
-        <NumberInput
-          w={90}
-          min={0}
-          max={10}
-          value={quantity}
-          onChange={(value) => onQuantityChange(Number(value) || 0)}
-          disabled={soldOut}
-        />
-      </Group>
-    </Card>
-  );
+  const status = option?.status ?? (product.is_sold_out ? "SOLD_OUT" : product.is_on_sale ? "AVAILABLE" : "PAUSED");
+  const available = option ? option.is_available : product.is_on_sale && !product.is_sold_out;
+  const remaining = option?.quantity_remaining ?? product.quantity_remaining;
+  const limit = option?.max_attendees_per_registration ?? product.max_attendees_per_registration ?? 10;
+  return <Group justify="space-between" align="center" wrap="nowrap">
+    <Stack gap={2} style={{ flex: 1 }}>
+      {option && <Text fw={600} size="sm">{option.name}</Text>}
+      <Text size="sm" c="dimmed">{formatMoney(option?.price ?? product.current_price, currencyCode)}</Text>
+      {remaining !== null && <Text size="xs" c="dimmed">{remaining} remaining</Text>}
+      {!available && <Badge color={status === "SOLD_OUT" ? "red" : "gray"} variant="light" size="sm">{status.replaceAll("_", " ")}</Badge>}
+    </Stack>
+    <NumberInput w={90} min={0} max={Math.min(10, limit, remaining ?? 10)} value={quantity}
+      onChange={(value) => onChange(Number(value) || 0)} disabled={!available} />
+  </Group>;
 }

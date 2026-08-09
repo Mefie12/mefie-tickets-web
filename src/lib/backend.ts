@@ -15,8 +15,8 @@ import { cookies } from "next/headers";
  * Milestone 2's backend work was split from its frontend follow-up.
  */
 
-const API_URL = process.env.API_URL ?? "http://localhost:8000";
-const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+export const API_URL = process.env.API_URL ?? "http://localhost:8000";
+export const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
 export type BackendResult<T> = {
   status: number;
@@ -40,7 +40,7 @@ function parseCookiePairs(cookieHeaderOrSetCookies: string[]): Map<string, strin
   return pairs;
 }
 
-async function currentCookieHeader(): Promise<string> {
+export async function currentCookieHeader(): Promise<string> {
   const jar = await cookies();
   return jar
     .getAll()

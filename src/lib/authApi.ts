@@ -7,13 +7,26 @@
 
 export type Role = "SUPERADMIN" | "ADMIN" | "ORGANIZER";
 
+export type UserStatus = "ACTIVE" | "SUSPENDED" | "REMOVED";
+
+/**
+ * Matches the raw `User` model as returned by GET/PATCH /api/users/me
+ * (ShowCurrentUserAction / UpdateCurrentUserAction just dump
+ * $request->user(), no Resource layer) minus its #[Hidden] fields
+ * (password, email_verification_code, security_stamp). Notably this has
+ * NO role/account_id — a user's role now lives on a per-organization
+ * OrganizationMembership row, not on the user. See src/lib/session.ts's
+ * SessionUser for the enriched type that resolves role for the caller's
+ * current organization.
+ */
 export type CurrentUser = {
   id: number;
-  account_id: number;
   first_name: string;
   last_name: string;
   email: string;
-  role: Role;
+  status: UserStatus;
+  /** Which org this user is acting as — not itself a permissions source, see currentMembership on the backend. */
+  current_organization_id: string | null;
   email_verified_at: string | null;
   /** When the current pending verification code expires — null if none is active. Server-authoritative; drives the live countdown on the verify screen. */
   email_verification_code_expires_at: string | null;
@@ -57,8 +70,8 @@ async function request<T>(
   return data as T;
 }
 
-export function registerAccount(input: {
-  account_name: string;
+export function registerOrganization(input: {
+  organization_name: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -99,6 +112,27 @@ export function acceptInvitation(
     method: "POST",
     body: input,
   });
+}
+
+/**
+ * The "existing email, already logged in as that email" acceptance path
+ * — no body, since AcceptInvitationAction reads $request->user() instead
+ * of a create-password payload in that case.
+ */
+export function acceptInvitationAsCurrentUser(token: string) {
+  return request<{ user: CurrentUser }>(`/api/auth/invitation/${encodeURIComponent(token)}`, { method: "POST" });
+}
+
+export type InvitationPreview = {
+  organization_name: string;
+  email: string;
+  role: Role;
+  /** True if this email already has an account elsewhere — the accept page must branch to a login-first flow instead of the create-password form. */
+  requires_login: boolean;
+};
+
+export function previewInvitation(token: string) {
+  return request<InvitationPreview>(`/api/auth/invitation/${encodeURIComponent(token)}`);
 }
 
 export function fetchCurrentUser() {

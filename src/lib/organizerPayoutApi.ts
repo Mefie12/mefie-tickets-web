@@ -1,7 +1,7 @@
 /**
- * Types matching GET /api/organizers/{id}/payouts (ListPayoutsAction).
+ * Types matching GET /api/organizations/{id}/payouts (ListPayoutsAction).
  * Read-only for now — fetched server-side directly via backendRequest
- * in the organizer detail page, no client Route Handler needed since
+ * in the organization page, no client Route Handler needed since
  * there's no release-recording UI in this pass (that stays an
  * ops/SUPERADMIN API-only capability — see
  * docs/09_mvp_development_plan.md Milestone 6).
@@ -24,5 +24,7 @@ export type OrganizerPayoutSummary = {
   collected: string;
   released: string;
   balance: string;
+  /** ISO 4217 code — one currency per organizer for MVP, see EventService::resolveCurrencyCode. */
+  currency: string;
   history: OrganizerPayoutRelease[];
 };

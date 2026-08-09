@@ -8,10 +8,10 @@ import { Anchor, Button, PasswordInput, Stack, Text, TextInput } from "@mantine/
 import { notifications } from "@mantine/notifications";
 import { AuthLayout } from "@/components/AuthLayout";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
-import { ApiError, type CurrentUser, registerAccount } from "@/lib/authApi";
+import { ApiError, type CurrentUser, registerOrganization } from "@/lib/authApi";
 
 type RegisterValues = {
-  account_name: string;
+  organization_name: string;
   first_name: string;
   last_name: string;
   email: string;
@@ -26,7 +26,7 @@ export default function RegisterPage() {
 
   const form = useForm<RegisterValues>({
     initialValues: {
-      account_name: "",
+      organization_name: "",
       first_name: "",
       last_name: "",
       email: "",
@@ -34,7 +34,7 @@ export default function RegisterPage() {
       password_confirmation: "",
     },
     validate: {
-      account_name: (v) => (v.trim().length === 0 ? "Account name is required" : null),
+      organization_name: (v) => (v.trim().length === 0 ? "Organization name is required" : null),
       first_name: (v) => (v.trim().length === 0 ? "First name is required" : null),
       last_name: (v) => (v.trim().length === 0 ? "Last name is required" : null),
       email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? null : "Enter a valid email"),
@@ -44,7 +44,7 @@ export default function RegisterPage() {
   });
 
   const registerMutation = useMutation({
-    mutationFn: registerAccount,
+    mutationFn: registerOrganization,
     onSuccess: (data: { user: CurrentUser }) => {
       setCodeExpiresAt(data.user.email_verification_code_expires_at);
       setStep("verify");
@@ -60,21 +60,26 @@ export default function RegisterPage() {
     },
   });
 
+  // Post-verify: the founding admin still has to set up their org profile
+  // and (optionally) their team before landing on the dashboard — see
+  // /onboarding. An invited teammate skips this (AcceptInvitationForm
+  // goes straight to the dashboard): there's no org-level setup for them
+  // to do.
   if (step === "verify") {
-    return <VerifyStep onVerified={() => router.push("/settings")} expiresAt={codeExpiresAt} />;
+    return <VerifyStep onVerified={() => router.push("/onboarding")} expiresAt={codeExpiresAt} />;
   }
 
   return (
     <AuthLayout
       title="Create your account"
-      subtitle="Set up an Account and Organizer profile to start selling tickets."
+      subtitle="Set up your Organization to start selling tickets."
     >
       <form onSubmit={form.onSubmit((values) => registerMutation.mutate(values))}>
         <Stack>
           <TextInput
-            label="Account name"
+            label="Organization name"
             placeholder="Acme Events"
-            {...form.getInputProps("account_name")}
+            {...form.getInputProps("organization_name")}
           />
           <TextInput label="First name" placeholder="Ada" {...form.getInputProps("first_name")} />
           <TextInput label="Last name" placeholder="Lovelace" {...form.getInputProps("last_name")} />

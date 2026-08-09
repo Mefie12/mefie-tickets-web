@@ -11,7 +11,7 @@ export default async function VerifyEmailPage() {
   }
 
   if (user.email_verified_at) {
-    redirect("/settings");
+    redirect("/dashboard");
   }
 
   return (

@@ -21,8 +21,9 @@ import { notifications } from "@mantine/notifications";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, changeEmail, type CurrentUser, updateCurrentUser } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
+import type { SessionUser } from "@/lib/session";
 
-export function SettingsForm({ initialUser }: { initialUser: CurrentUser }) {
+export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
   const [user, setUser] = useState(initialUser);
   const router = useRouter();
 
@@ -33,7 +34,7 @@ export function SettingsForm({ initialUser }: { initialUser: CurrentUser }) {
   const updateMutation = useMutation({
     mutationFn: updateCurrentUser,
     onSuccess: (data: { user: CurrentUser }) => {
-      setUser(data.user);
+      setUser((prev) => ({ ...data.user, role: prev.role }));
       notifications.show({ color: "teal", message: "Profile updated." });
     },
     onError: (error: Error) => {
@@ -102,8 +103,8 @@ function ChangeEmailField({
   user,
   onChanged,
 }: {
-  user: CurrentUser;
-  onChanged: (user: CurrentUser) => void;
+  user: SessionUser;
+  onChanged: (updater: (prev: SessionUser) => SessionUser) => void;
 }) {
   const [opened, setOpened] = useState(false);
   const router = useRouter();
@@ -119,7 +120,7 @@ function ChangeEmailField({
   const changeMutation = useMutation({
     mutationFn: changeEmail,
     onSuccess: (data: { user: CurrentUser }) => {
-      onChanged(data.user);
+      onChanged((prev) => ({ ...data.user, role: prev.role }));
       setOpened(false);
       form.reset();
       notifications.show({ color: "teal", message: "Email updated. A new verification code has been sent." });

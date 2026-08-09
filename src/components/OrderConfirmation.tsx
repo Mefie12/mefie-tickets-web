@@ -3,6 +3,7 @@
 import { Badge, Card, Divider, Group, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { IconCircleCheck } from "@tabler/icons-react";
 import type { Order } from "@/lib/checkoutApi";
+import { formatMoney } from "@/lib/money";
 
 /**
  * Shown either immediately (a FREE order completes synchronously with
@@ -35,14 +36,13 @@ export function OrderConfirmation({ order }: { order: Order }) {
             <Group key={index} justify="space-between">
               <Stack gap={0}>
                 <Text size="sm" fw={500}>
-                  {item.product_title}
-                  {item.tier_name ? ` — ${item.tier_name}` : ""}
+                  {item.ticket_display_name}
                 </Text>
                 <Text size="xs" c="dimmed">
                   Qty {item.quantity}
                 </Text>
               </Stack>
-              <Text size="sm">{Number(item.item_total) === 0 ? "Free" : `${order.currency} ${item.item_total}`}</Text>
+              <Text size="sm">{formatMoney(item.item_total, order.currency)}</Text>
             </Group>
           ))}
 
@@ -50,7 +50,7 @@ export function OrderConfirmation({ order }: { order: Order }) {
 
           <Group justify="space-between">
             <Text fw={600}>Total paid</Text>
-            <Text fw={600}>{Number(order.total_amount) === 0 ? "Free" : `${order.currency} ${order.total_amount}`}</Text>
+            <Text fw={600}>{formatMoney(order.total_amount, order.currency)}</Text>
           </Group>
         </Stack>
       </Card>
@@ -67,7 +67,7 @@ export function OrderConfirmation({ order }: { order: Order }) {
                   {attendee.first_name} {attendee.last_name}
                 </Text>
                 <Badge variant="light" size="sm">
-                  {attendee.product_title}
+                  {attendee.ticket_display_name}
                 </Badge>
               </Group>
             ))}

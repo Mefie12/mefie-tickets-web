@@ -23,73 +23,153 @@ import { IconChevronDown, IconChevronUp, IconPlus, IconTicket, IconTrash } from 
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { createProduct, type PricingType, type Product, type TierInput, updateProduct } from "@/lib/productApi";
+import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
+import { createProduct, type PricingType, type Product, type TicketOptionInput, updateProduct } from "@/lib/productApi";
+import { currencySymbol, formatMoney } from "@/lib/money";
+
+/** Mantine gives nested-list validators a path like "tiers.2.ends_at_time". */
+function tierIndexFromPath(path: string): number {
+  return Number(path.split(".")[1]);
+}
 
 type TierFormValue = {
   id: number | null;
   name: string;
-  price: string;
-  starts_at: string;
-  ends_at: string;
-  quantity_threshold: string;
+  // NumberInput's onChange hands back a number once edited (never a
+  // string), even though its *initial* value can be seeded as either —
+  // "" is the only valid empty state, never "" AND a numeric string.
+  price: number | "";
+  // Wall-clock parts, read/written in the parent EVENT's timezone — the
+  // server resolves them to instants. "" means "no window set".
+  starts_at_date: string;
+  starts_at_time: string;
+  ends_at_date: string;
+  ends_at_time: string;
+  quantity_available: number | "";
   is_enabled: boolean;
+  // Caps how many attendees one order may register for this specific
+  // tier — independent of the product's own cap below. "" = unlimited.
+  max_attendees_per_registration: number | "";
 };
 
 type ProductFormValues = {
   title: string;
   type: PricingType;
-  price: string;
-  quantity_available: string;
+  price: number | "";
+  quantity_available: number | "";
+  // Caps how many attendees one order may register for this product —
+  // meaningless (and not rendered) for TIERED, which uses each tier's
+  // own field instead. "" = unlimited.
+  max_attendees_per_registration: number | "";
+  // Wall-clock parts, read/written in the parent EVENT's timezone — same
+  // pattern as a tier's own window (see TierFormValue). "" means "no
+  // window set" for that side.
+  starts_at_date: string;
+  starts_at_time: string;
+  ends_at_date: string;
+  ends_at_time: string;
+  is_enabled: boolean;
   tiers: TierFormValue[];
 };
 
 const PRICING_OPTIONS: { value: PricingType; label: string }[] = [
-  { value: "FREE", label: "Free" },
+  { value: "REGISTRATION", label: "Free (requires registration)" },
   { value: "PAID", label: "Paid (single price)" },
-  { value: "TIERED", label: "Tiered pricing" },
+  { value: "TIERED", label: "Ticket group with options" },
 ];
 
+/** REGISTRATION is the only creatable $0 ticket type — every free ticket requires registration. */
+const RECOGNIZED_TYPES: PricingType[] = ["TIERED", "FREE", "REGISTRATION", "PAID"];
+
+/**
+ * Null (not 0) when there are no enabled tiers, or any enabled tier is
+ * itself uncapped — an unlimited tier makes the sum meaningless, same
+ * rule the server applies (see ProductService::assertTierThresholdsFitTotal).
+ */
+function enabledTierQuantitySum(tiers: TierFormValue[]): number | null {
+  const enabled = tiers.filter((t) => t.is_enabled);
+  if (enabled.length === 0 || enabled.some((t) => t.quantity_available === "")) return null;
+  return enabled.reduce((total, t) => total + (t.quantity_available === "" ? 0 : t.quantity_available), 0);
+}
+
 function emptyTier(): TierFormValue {
-  return { id: null, name: "", price: "", starts_at: "", ends_at: "", quantity_threshold: "", is_enabled: true };
+  return {
+    id: null,
+    name: "",
+    price: "",
+    starts_at_date: "",
+    starts_at_time: "",
+    ends_at_date: "",
+    ends_at_time: "",
+    quantity_available: "",
+    is_enabled: true,
+    max_attendees_per_registration: "",
+  };
 }
 
-function toDatetimeLocal(isoString: string | null): string {
-  if (!isoString) return "";
-  const d = new Date(isoString);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function productToFormValues(product?: Product): ProductFormValues {
+function productToFormValues(product: Product | undefined, eventTimezone: string): ProductFormValues {
   if (!product) {
-    return { title: "", type: "PAID", price: "", quantity_available: "", tiers: [emptyTier()] };
+    return {
+      title: "",
+      type: "PAID",
+      price: "",
+      quantity_available: "",
+      max_attendees_per_registration: "",
+      starts_at_date: "",
+      starts_at_time: "",
+      ends_at_date: "",
+      ends_at_time: "",
+      is_enabled: true,
+      tiers: [emptyTier()],
+    };
   }
+  const startsAt = utcIsoToZonedPartsOrEmpty(product.starts_at, eventTimezone);
+  const endsAt = utcIsoToZonedPartsOrEmpty(product.ends_at, eventTimezone);
   return {
     title: product.title,
-    type: product.type === "TIERED" ? "TIERED" : product.type === "FREE" ? "FREE" : "PAID",
-    price: product.price ?? "",
-    quantity_available: product.quantity_available !== null ? String(product.quantity_available) : "",
+    type: RECOGNIZED_TYPES.includes(product.type) ? product.type : "PAID",
+    price: product.price !== null ? Number(product.price) : "",
+    quantity_available: product.quantity_available !== null ? product.quantity_available : "",
+    max_attendees_per_registration:
+      product.max_attendees_per_registration !== null ? product.max_attendees_per_registration : "",
+    starts_at_date: startsAt.date,
+    starts_at_time: startsAt.time,
+    ends_at_date: endsAt.date,
+    ends_at_time: endsAt.time,
+    is_enabled: product.disabled_at === null,
     tiers:
       product.price_tiers.length > 0
-        ? product.price_tiers.map((t) => ({
-            id: t.id,
-            name: t.name,
-            price: t.price,
-            starts_at: toDatetimeLocal(t.starts_at),
-            ends_at: toDatetimeLocal(t.ends_at),
-            quantity_threshold: t.quantity_threshold !== null ? String(t.quantity_threshold) : "",
-            is_enabled: t.is_enabled,
-          }))
+        ? product.price_tiers.map((t) => {
+            const startsAt = utcIsoToZonedPartsOrEmpty(t.starts_at, eventTimezone);
+            const endsAt = utcIsoToZonedPartsOrEmpty(t.ends_at, eventTimezone);
+            return {
+              id: t.id,
+              name: t.name,
+              price: Number(t.price),
+              starts_at_date: startsAt.date,
+              starts_at_time: startsAt.time,
+              ends_at_date: endsAt.date,
+              ends_at_time: endsAt.time,
+              quantity_available: t.quantity_available,
+              is_enabled: t.is_enabled,
+              max_attendees_per_registration:
+                t.max_attendees_per_registration !== null ? t.max_attendees_per_registration : "",
+            };
+          })
         : [emptyTier()],
   };
 }
 
 export function ProductsEditor({
   eventId,
+  eventTimezone,
+  eventCurrency,
   initialProducts,
   disabled,
 }: {
   eventId: number;
+  eventTimezone: string;
+  eventCurrency: string;
   initialProducts: Product[];
   disabled: boolean;
 }) {
@@ -134,9 +214,14 @@ export function ProductsEditor({
                         Sold out
                       </Badge>
                     )}
+                    {!product.is_on_sale && !product.is_sold_out && (
+                      <Badge size="sm" color="gray" variant="light">
+                        {product.disabled_at ? "Paused" : "Not on sale"}
+                      </Badge>
+                    )}
                   </Group>
                   <Text size="sm" c="dimmed">
-                    {productSummary(product)}
+                    {productSummary(product, eventCurrency)}
                   </Text>
                 </Stack>
                 {!disabled && (
@@ -153,6 +238,8 @@ export function ProductsEditor({
       {modalProduct !== null && (
         <ProductFormModal
           eventId={eventId}
+          eventTimezone={eventTimezone}
+          eventCurrency={eventCurrency}
           product={modalProduct === "new" ? undefined : modalProduct}
           onClose={() => setModalProduct(null)}
           onSaved={(saved) => {
@@ -168,26 +255,35 @@ export function ProductsEditor({
   );
 }
 
-function productSummary(product: Product): string {
-  if (product.type === "FREE") {
-    return product.quantity_available !== null ? `Free · ${product.quantity_remaining} of ${product.quantity_available} left` : "Free · unlimited";
+function productSummary(product: Product, currencyCode: string): string {
+  if (product.type === "REGISTRATION" || product.type === "FREE") {
+    const label = product.type === "REGISTRATION" ? "Free · registration required" : "Free (legacy)";
+    return product.quantity_available !== null
+      ? `${label} · ${product.quantity_remaining} of ${product.quantity_available} left`
+      : `${label} · unlimited`;
   }
   if (product.type === "TIERED") {
     const count = product.price_tiers.filter((t) => t.is_enabled).length;
-    return `${count} active tier${count === 1 ? "" : "s"}${product.current_price ? ` · currently $${product.current_price}` : ""}`;
+    const currently = product.current_price ? ` · currently ${formatMoney(product.current_price, currencyCode)}` : "";
+    return `${count} active option${count === 1 ? "" : "s"}${currently}`;
   }
+  const price = formatMoney(product.price, currencyCode);
   return product.quantity_available !== null
-    ? `$${product.price} · ${product.quantity_remaining} of ${product.quantity_available} left`
-    : `$${product.price} · unlimited`;
+    ? `${price} · ${product.quantity_remaining} of ${product.quantity_available} left`
+    : `${price} · unlimited`;
 }
 
 function ProductFormModal({
   eventId,
+  eventTimezone,
+  eventCurrency,
   product,
   onClose,
   onSaved,
 }: {
   eventId: number;
+  eventTimezone: string;
+  eventCurrency: string;
   product?: Product;
   onClose: () => void;
   onSaved: (product: Product) => void;
@@ -197,14 +293,47 @@ function ProductFormModal({
   const router = useRouter();
 
   const form = useForm<ProductFormValues>({
-    initialValues: productToFormValues(product),
+    initialValues: productToFormValues(product, eventTimezone),
     validate: {
       title: (v) => (v.trim().length === 0 ? "Title is required" : null),
-      price: (v, values) => (values.type === "PAID" && v.trim().length === 0 ? "Price is required" : null),
+      price: (v, values) => (values.type === "PAID" && v === "" ? "Price is required" : null),
+      starts_at_time: (v, values) =>
+        Boolean(values.starts_at_date) !== Boolean(v) ? "Set both a date and a time, or neither" : null,
+      ends_at_time: (v, values) => {
+        if (Boolean(values.ends_at_date) !== Boolean(v)) return "Set both a date and a time, or neither";
+        if (values.starts_at_date && values.ends_at_date && `${values.ends_at_date} ${v}` <= `${values.starts_at_date} ${values.starts_at_time}`) {
+          return "Must end after it starts";
+        }
+        return null;
+      },
+      quantity_available: (v, values) => {
+        if (values.type !== "TIERED") return null;
+        if (v === "") return "Ticket group capacity is required.";
+        const enabledTiers = values.tiers.filter((t) => t.is_enabled);
+        if (enabledTiers.some((t) => t.quantity_available === "")) return "Every enabled option needs a capacity.";
+        const sum = enabledTiers.reduce((total, t) => total + (t.quantity_available === "" ? 0 : t.quantity_available), 0);
+        return sum > v ? `The enabled options' combined capacity (${sum}) exceeds this group capacity (${v}).` : null;
+      },
       tiers: {
         name: (v, values, path) =>
           values.type === "TIERED" && path.startsWith("tiers") && v.trim().length === 0 ? "Name is required" : null,
-        price: (v, values) => (values.type === "TIERED" && v.trim().length === 0 ? "Price is required" : null),
+        price: (v, values) => (values.type === "TIERED" && v === "" ? "Price is required" : null),
+        quantity_available: (v, values) => (values.type === "TIERED" && v === "" ? "Capacity is required" : null),
+        // A date without its time is meaningless — the server rejects it,
+        // so catch it here rather than round-tripping a 422.
+        starts_at_time: (v, values, path) => {
+          const tier = values.tiers[tierIndexFromPath(path)];
+          return tier && Boolean(tier.starts_at_date) !== Boolean(v) ? "Set both a date and a time, or neither" : null;
+        },
+        ends_at_time: (v, values, path) => {
+          const tier = values.tiers[tierIndexFromPath(path)];
+          if (!tier) return null;
+          if (Boolean(tier.ends_at_date) !== Boolean(v)) return "Set both a date and a time, or neither";
+          if (tier.starts_at_date && tier.ends_at_date && `${tier.ends_at_date} ${v}` <= `${tier.starts_at_date} ${tier.starts_at_time}`) {
+            return "Must end after it starts";
+          }
+          return null;
+        },
       },
     },
   });
@@ -214,20 +343,35 @@ function ProductFormModal({
       const input = {
         title: values.title,
         type: values.type,
-        price: values.type === "PAID" ? Number(values.price) : null,
-        quantity_available: values.quantity_available.trim() === "" ? null : Number(values.quantity_available),
+        price: values.type === "PAID" && values.price !== "" ? values.price : null,
+        quantity_available: values.quantity_available === "" ? null : values.quantity_available,
+        max_attendees_per_registration:
+          values.max_attendees_per_registration === "" ? null : values.max_attendees_per_registration,
+        // Forwarded as typed; the server resolves them against the
+        // event's timezone. No client-side conversion.
+        starts_at_date: values.starts_at_date || null,
+        starts_at_time: values.starts_at_time || null,
+        ends_at_date: values.ends_at_date || null,
+        ends_at_time: values.ends_at_time || null,
+        is_enabled: values.is_enabled,
         tiers:
           values.type === "TIERED"
             ? values.tiers.map(
-                (t, index): TierInput => ({
+                (t, index): TicketOptionInput => ({
                   id: t.id,
                   name: t.name,
                   sort_order: index,
-                  price: Number(t.price),
-                  starts_at: t.starts_at ? new Date(t.starts_at).toISOString() : null,
-                  ends_at: t.ends_at ? new Date(t.ends_at).toISOString() : null,
-                  quantity_threshold: t.quantity_threshold.trim() === "" ? null : Number(t.quantity_threshold),
+                  price: t.price === "" ? 0 : t.price,
+                  // Forwarded as typed; the server resolves them against
+                  // the event's timezone. No client-side conversion.
+                  starts_at_date: t.starts_at_date || null,
+                  starts_at_time: t.starts_at_time || null,
+                  ends_at_date: t.ends_at_date || null,
+                  ends_at_time: t.ends_at_time || null,
+                  quantity_available: t.quantity_available === "" ? 0 : t.quantity_available,
                   is_enabled: t.is_enabled,
+                  max_attendees_per_registration:
+                    t.max_attendees_per_registration === "" ? null : t.max_attendees_per_registration,
                 }),
               )
             : undefined,
@@ -258,16 +402,37 @@ function ProductFormModal({
     <Modal opened onClose={onClose} title={isEdit ? "Edit ticket type" : "Add ticket type"} size="lg">
       <form onSubmit={form.onSubmit((values) => saveMutation.mutate(values))}>
         <Stack>
-          <TextInput label="Title" placeholder="General Admission" {...form.getInputProps("title")} />
           <Select
             label="Pricing type"
-            data={PRICING_OPTIONS}
+            data={
+              product?.type === "FREE"
+                ? [{ value: "FREE", label: "Free (legacy)", disabled: true }, ...PRICING_OPTIONS]
+                : PRICING_OPTIONS
+            }
             allowDeselect={false}
             {...form.getInputProps("type")}
           />
+          <TextInput label="Title" placeholder="General Admission" {...form.getInputProps("title")} />
+
+          {form.values.type === "REGISTRATION" && (
+            <Group gap="xs">
+              <Text size="sm" fw={500}>
+                Requires registration:
+              </Text>
+              <Badge color="teal" variant="light">
+                Yes
+              </Badge>
+            </Group>
+          )}
 
           {form.values.type === "PAID" && (
-            <NumberInput label="Price" prefix="$" min={0} decimalScale={2} {...form.getInputProps("price")} />
+            <NumberInput
+              label="Price"
+              prefix={currencySymbol(eventCurrency)}
+              min={0}
+              decimalScale={2}
+              {...form.getInputProps("price")}
+            />
           )}
 
           <NumberInput
@@ -276,6 +441,35 @@ function ProductFormModal({
             min={0}
             {...form.getInputProps("quantity_available")}
           />
+          {form.values.type === "TIERED" && enabledTierQuantitySum(tiers) !== null && (
+            <Text size="xs" c="dimmed">
+              Enabled tiers currently add up to {enabledTierQuantitySum(tiers)} tickets.
+            </Text>
+          )}
+
+          {form.values.type !== "TIERED" && (
+            <NumberInput
+              label="Max attendees per registration"
+              description="Leave blank for unlimited"
+              min={1}
+              {...form.getInputProps("max_attendees_per_registration")}
+            />
+          )}
+
+          <Divider label="Sale window & availability" labelPosition="left" mt="sm" />
+          <Text size="xs" c="dimmed">
+            Times are in {eventTimezone}, this event&apos;s timezone.
+            {form.values.type === "TIERED" && " Applies on top of each tier's own window below."}
+          </Text>
+          <Group grow align="flex-start">
+            <TextInput type="date" label="Starts (optional)" {...form.getInputProps("starts_at_date")} />
+            <TextInput type="time" label="At" {...form.getInputProps("starts_at_time")} />
+          </Group>
+          <Group grow align="flex-start">
+            <TextInput type="date" label="Ends (optional)" {...form.getInputProps("ends_at_date")} />
+            <TextInput type="time" label="At" {...form.getInputProps("ends_at_time")} />
+          </Group>
+          <Switch label="Enabled" {...form.getInputProps("is_enabled", { type: "checkbox" })} />
 
           {form.values.type === "TIERED" && (
             <>
@@ -322,28 +516,41 @@ function ProductFormModal({
                     />
                     <NumberInput
                       label="Price"
-                      prefix="$"
+                      prefix={currencySymbol(eventCurrency)}
                       min={0}
                       decimalScale={2}
                       {...form.getInputProps(`tiers.${index}.price`)}
                     />
-                    <Group grow>
+                    <Text size="xs" c="dimmed">
+                      Sale window times are in {eventTimezone}, this event&apos;s timezone.
+                    </Text>
+                    <Group grow align="flex-start">
                       <TextInput
-                        type="datetime-local"
+                        type="date"
                         label="Starts (optional)"
-                        {...form.getInputProps(`tiers.${index}.starts_at`)}
+                        {...form.getInputProps(`tiers.${index}.starts_at_date`)}
                       />
+                      <TextInput type="time" label="At" {...form.getInputProps(`tiers.${index}.starts_at_time`)} />
+                    </Group>
+                    <Group grow align="flex-start">
                       <TextInput
-                        type="datetime-local"
+                        type="date"
                         label="Ends (optional)"
-                        {...form.getInputProps(`tiers.${index}.ends_at`)}
+                        {...form.getInputProps(`tiers.${index}.ends_at_date`)}
                       />
+                      <TextInput type="time" label="At" {...form.getInputProps(`tiers.${index}.ends_at_time`)} />
                     </Group>
                     <NumberInput
-                      label="Quantity available in this tier"
-                      description="Leave blank for unlimited"
+                      label="Option capacity"
+                      description="Required. You can increase it later within the ticket group capacity."
                       min={0}
-                      {...form.getInputProps(`tiers.${index}.quantity_threshold`)}
+                      {...form.getInputProps(`tiers.${index}.quantity_available`)}
+                    />
+                    <NumberInput
+                      label="Max attendees per registration"
+                      description="Leave blank for unlimited — e.g. cap Early Bird at 1 per order, leave Regular uncapped"
+                      min={1}
+                      {...form.getInputProps(`tiers.${index}.max_attendees_per_registration`)}
                     />
                     <Switch
                       label="Enabled"
@@ -359,7 +566,7 @@ function ProductFormModal({
                 onClick={() => form.insertListItem("tiers", emptyTier())}
                 style={{ alignSelf: "flex-start" }}
               >
-                Add tier
+                Add ticket option
               </Button>
             </>
           )}

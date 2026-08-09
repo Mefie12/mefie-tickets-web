@@ -8,18 +8,13 @@ import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { createPaymentIntent, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
-import { TicketSelector } from "@/components/TicketSelector";
+import { formatMoney } from "@/lib/money";
+import { TicketSelector, ticketLineKey } from "@/components/TicketSelector";
 import { CheckoutDetailsForm } from "@/components/CheckoutDetailsForm";
 import { CheckoutPaymentStep } from "@/components/CheckoutPaymentStep";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
 
 type Step = "cart" | "details" | "payment" | "confirmation";
-
-function formatPrice(price: string | null): string {
-  if (price === null) return "Free";
-  const amount = Number(price);
-  return amount === 0 ? "Free" : `$${amount.toFixed(2)}`;
-}
 
 /**
  * Owns the whole checkout wizard's state — cart selection through
@@ -36,30 +31,30 @@ function formatPrice(price: string | null): string {
  */
 export function Checkout({ event }: { event: PublicEvent }) {
   const [step, setStep] = useState<Step>("cart");
-  const [quantities, setQuantities] = useState<Record<number, number>>({});
-  const [selectedTierId, setSelectedTierId] = useState<Record<number, number | null>>({});
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [order, setOrder] = useState<Order | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
 
   const cartItems = useMemo(
     () =>
-      event.products
-        .filter((p) => (quantities[p.id] ?? 0) > 0)
-        .map((p) => ({ product_id: p.id, product_title: p.title, quantity: quantities[p.id] })),
+      event.products.flatMap((product) => {
+        const lines = product.type === "TIERED" ? (product.options ?? []) : [null];
+        return lines.flatMap((option) => {
+          const quantity = quantities[ticketLineKey(product.id, option?.id ?? null)] ?? 0;
+          return quantity > 0 ? [{ product_id: product.id, ticket_option_id: option?.id ?? null,
+            product_title: option ? `${product.title} — ${option.name}` : product.title, quantity }] : [];
+        });
+      }),
     [event.products, quantities],
   );
 
   const total = useMemo(() => {
     return event.products.reduce((sum, product) => {
-      const qty = quantities[product.id] ?? 0;
-      if (qty === 0) return sum;
-      const price =
-        product.type === "TIERED"
-          ? product.tiers?.find((t) => t.id === (selectedTierId[product.id] ?? product.active_tier_id))?.price
-          : product.current_price;
-      return sum + (price ? Number(price) * qty : 0);
+      if (product.type !== "TIERED") return sum + Number(product.current_price ?? 0) * (quantities[ticketLineKey(product.id, null)] ?? 0);
+      return sum + (product.options ?? []).reduce((optionTotal, option) =>
+        optionTotal + Number(option.price) * (quantities[ticketLineKey(product.id, option.id)] ?? 0), 0);
     }, 0);
-  }, [event.products, quantities, selectedTierId]);
+  }, [event.products, quantities]);
 
   const paymentIntentMutation = useMutation({
     mutationFn: (o: Order) => createPaymentIntent(event.id, o.short_id),
@@ -121,6 +116,7 @@ export function Checkout({ event }: { event: PublicEvent }) {
       <CheckoutDetailsForm
         event={event}
         cartItems={cartItems}
+        totalDue={total}
         onOrderCreated={handleOrderCreated}
         onBack={() => setStep("cart")}
       />
@@ -135,14 +131,13 @@ export function Checkout({ event }: { event: PublicEvent }) {
       <TicketSelector
         products={event.products}
         quantities={quantities}
-        onQuantityChange={(productId, qty) => setQuantities((prev) => ({ ...prev, [productId]: qty }))}
-        selectedTierId={selectedTierId}
-        onTierChange={(productId, tierId) => setSelectedTierId((prev) => ({ ...prev, [productId]: tierId }))}
+        onQuantityChange={(productId, optionId, qty) => setQuantities((prev) => ({ ...prev, [ticketLineKey(productId, optionId)]: qty }))}
+        currencyCode={event.currency_code}
       />
 
       <Group justify="space-between" pt="sm">
         <Text fw={600}>Total</Text>
-        <Text fw={600}>{formatPrice(total === 0 ? "0" : String(total))}</Text>
+        <Text fw={600}>{formatMoney(total, event.currency_code)}</Text>
       </Group>
 
       <Button size="md" fullWidth disabled={cartItems.length === 0} onClick={() => setStep("details")}>

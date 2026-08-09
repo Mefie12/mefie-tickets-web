@@ -6,6 +6,7 @@ import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-
 import { Alert, Button, Stack, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import type { Order } from "@/lib/checkoutApi";
+import { formatMoney } from "@/lib/money";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
@@ -88,7 +89,7 @@ function PaymentForm({ order, onPaid }: { order: Order; onPaid: () => void }) {
     <form onSubmit={handleSubmit}>
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          Paying {order.currency} {order.total_amount} for order {order.short_id}
+          Paying {formatMoney(order.total_amount, order.currency)} for order {order.short_id}
         </Text>
         <PaymentElement options={paymentElementOptions} />
         {errorMessage && (
@@ -97,7 +98,7 @@ function PaymentForm({ order, onPaid }: { order: Order; onPaid: () => void }) {
           </Alert>
         )}
         <Button type="submit" loading={submitting} disabled={!stripe || !elements} size="md">
-          Pay {order.currency} {order.total_amount}
+          Pay {formatMoney(order.total_amount, order.currency)}
         </Button>
       </Stack>
     </form>

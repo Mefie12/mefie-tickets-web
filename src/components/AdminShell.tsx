@@ -14,21 +14,24 @@ import {
 } from "@mantine/core";
 import {
   IconBuildingStore,
+  IconCalendarEvent,
   IconChevronDown,
+  IconLayoutDashboard,
   IconLogout,
   IconTicket,
   IconUserCircle,
+  IconUsers,
 } from "@tabler/icons-react";
-import { type CurrentUser, logout } from "@/lib/authApi";
+import { logout } from "@/lib/authApi";
+import type { SessionUser } from "@/lib/session";
 
 /**
- * The organizer admin portal shell (nav + auth guard) called for by
- * 09_mvp_development_plan.md Milestone 3a. Deliberately minimal — just
- * enough nav to move between organizer management and account settings.
- * Event/product/order nav sections land with the milestones that
- * actually build those screens, not provisioned ahead of need here.
+ * The organization admin portal shell (nav + auth guard) called for by
+ * 09_mvp_development_plan.md Milestone 3a, filled in once the
+ * Organization/Events/Team milestones landed (previously deliberately
+ * minimal — see git history).
  */
-export function AdminShell({ user, children }: { user: CurrentUser; children: React.ReactNode }) {
+export function AdminShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -80,10 +83,31 @@ export function AdminShell({ user, children }: { user: CurrentUser; children: Re
       <AppShell.Navbar p="md">
         <NavLink
           component={Link}
-          href="/organizers"
-          label="Organizers"
+          href="/dashboard"
+          label="Dashboard"
+          leftSection={<IconLayoutDashboard size={16} />}
+          active={pathname === "/dashboard"}
+        />
+        <NavLink
+          component={Link}
+          href="/events"
+          label="Events"
+          leftSection={<IconCalendarEvent size={16} />}
+          active={pathname.startsWith("/events")}
+        />
+        <NavLink
+          component={Link}
+          href="/organization"
+          label="Organization"
           leftSection={<IconBuildingStore size={16} />}
-          active={pathname.startsWith("/organizers")}
+          active={pathname === "/organization"}
+        />
+        <NavLink
+          component={Link}
+          href="/organization/team"
+          label="Team"
+          leftSection={<IconUsers size={16} />}
+          active={pathname.startsWith("/organization/team")}
         />
         <NavLink
           component={Link}

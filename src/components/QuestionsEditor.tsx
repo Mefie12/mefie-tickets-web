@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import {
   ActionIcon,
+  Alert,
   Badge,
   Button,
   Card,
@@ -18,7 +19,15 @@ import {
   Textarea,
   TextInput,
 } from "@mantine/core";
-import { IconChevronDown, IconChevronUp, IconHelpCircle, IconPlus, IconTrash, IconX } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconHelpCircle,
+  IconInfoCircle,
+  IconPlus,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
@@ -47,6 +56,25 @@ const TYPE_OPTIONS: { value: QuestionType; label: string }[] = [
 ];
 
 const OPTIONS_TYPES: QuestionType[] = ["SINGLE_SELECT", "MULTI_SELECT", "RADIO"];
+
+const CORE_FIELD_KEYWORDS: { label: string; keywords: string[] }[] = [
+  { label: "email", keywords: ["email", "e-mail", "email address"] },
+  { label: "phone number", keywords: ["phone", "phone number", "mobile", "mobile number", "cell number"] },
+  { label: "name", keywords: ["full name", "first name", "last name", "surname", "given name"] },
+];
+
+// Simple MVP substring match, not semantic detection — flags obvious duplicates
+// of the system-collected identity fields without blocking the organizer from saving.
+function detectCoreFieldCollision(title: string): string | null {
+  const normalized = title.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!normalized) return null;
+  for (const { label, keywords } of CORE_FIELD_KEYWORDS) {
+    if (keywords.some((kw) => normalized === kw || normalized.includes(kw))) {
+      return `We already collect ${label} automatically as part of checkout.`;
+    }
+  }
+  return null;
+}
 
 type QuestionFormValues = {
   title: string;
@@ -129,6 +157,12 @@ export function QuestionsEditor({
           </Button>
         )}
       </Group>
+
+      <Alert variant="light" color="blue" icon={<IconInfoCircle size={16} />}>
+        First name, last name, email, and phone number are already collected automatically for every
+        order and attendee. You don&apos;t need to add questions for these — focus your questions on
+        anything else you need to know.
+      </Alert>
 
       {questions.length === 0 ? (
         <Card withBorder radius="lg" p="xl">
@@ -285,6 +319,11 @@ function QuestionFormModal({
       <form onSubmit={form.onSubmit((values) => saveMutation.mutate(values))}>
         <Stack>
           <TextInput label="Question" placeholder="What is your t-shirt size?" {...form.getInputProps("title")} />
+          {detectCoreFieldCollision(form.values.title) && (
+            <Text size="xs" c="orange.7" mt={-8}>
+              {detectCoreFieldCollision(form.values.title)}
+            </Text>
+          )}
           <Textarea label="Description (optional)" autosize minRows={1} {...form.getInputProps("description")} />
           <Select label="Asked" data={SCOPE_OPTIONS} allowDeselect={false} {...form.getInputProps("scope")} />
           <Select label="Answer type" data={TYPE_OPTIONS} allowDeselect={false} {...form.getInputProps("type")} />

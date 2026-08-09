@@ -2,10 +2,8 @@ import { NextRequest } from "next/server";
 import { backendRequest } from "@/lib/backend";
 import { relayResponse } from "@/lib/relayResponse";
 
-export async function GET(request: NextRequest) {
-  const organizerId = request.nextUrl.searchParams.get("organizer_id");
-  const query = organizerId ? `?organizer_id=${encodeURIComponent(organizerId)}` : "";
-  const result = await backendRequest(`/api/events${query}`, { method: "GET" });
+export async function GET() {
+  const result = await backendRequest("/api/events", { method: "GET" });
   return relayResponse(result);
 }
 

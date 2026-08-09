@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Anchor, Button, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
@@ -11,8 +11,21 @@ import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, type CurrentUser, login } from "@/lib/authApi";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [unverifiedUser, setUnverifiedUser] = useState<CurrentUser | null>(null);
   const router = useRouter();
+  // Lets e.g. the invitation-accept page send an unauthenticated visitor
+  // here, then land them back where they came from once logged in —
+  // see AcceptInvitationForm's "requires_login" branch.
+  const next = useSearchParams().get("next");
+  const destination = next && next.startsWith("/") ? next : "/dashboard";
 
   const form = useForm({
     initialValues: { email: "", password: "" },
@@ -26,7 +39,7 @@ export default function LoginPage() {
     mutationFn: login,
     onSuccess: (data: { user: CurrentUser }) => {
       if (data.user.email_verified_at) {
-        router.push("/settings");
+        router.push(destination);
       } else {
         setUnverifiedUser(data.user);
       }
@@ -49,7 +62,7 @@ export default function LoginPage() {
         subtitle={`Enter the 6-digit code we sent to ${unverifiedUser.email} to continue.`}
       >
         <VerifyEmailPanel
-          onVerified={() => router.push("/settings")}
+          onVerified={() => router.push(destination)}
           expiresAt={unverifiedUser.email_verification_code_expires_at}
         />
       </AuthLayout>

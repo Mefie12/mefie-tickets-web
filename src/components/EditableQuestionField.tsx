@@ -1,6 +1,7 @@
 "use client";
 
 import { Checkbox, Group, Radio, Select, Stack, Text, Textarea, TextInput } from "@mantine/core";
+import { CountrySelector } from "@/components/CountrySelector";
 import type { PublicQuestion } from "@/lib/publicEventApi";
 import type { AddressAnswer, AnswerValue } from "@/lib/checkoutApi";
 
@@ -126,10 +127,11 @@ export function EditableQuestionField({
               value={address.postal_code}
               onChange={(e) => setField("postal_code", e.currentTarget.value)}
             />
-            <TextInput
+            <CountrySelector
               placeholder="Country"
-              value={address.country}
-              onChange={(e) => setField("country", e.currentTarget.value)}
+              aria-label="Country"
+              value={address.country || null}
+              onChange={(v) => setField("country", v ?? "")}
             />
           </Group>
         </Stack>

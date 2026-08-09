@@ -7,5 +7,5 @@ import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 export function VerifyEmailRedirect({ expiresAt }: { expiresAt: string | null }) {
   const router = useRouter();
 
-  return <VerifyEmailPanel onVerified={() => router.push("/settings")} expiresAt={expiresAt} />;
+  return <VerifyEmailPanel onVerified={() => router.push("/dashboard")} expiresAt={expiresAt} />;
 }

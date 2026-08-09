@@ -1,7 +1,7 @@
 /**
  * Client-side helpers for the checkout Route Handlers under
  * /api/public/events/{id}/order[...]. Same-origin calls, same
- * ApiError/request<T> shape as authApi.ts/organizerApi.ts.
+ * ApiError/request<T> shape as authApi.ts/organizationApi.ts.
  */
 
 import { ApiError } from "@/lib/authApi";
@@ -23,14 +23,20 @@ export type AnswerInput = {
 
 export type CartItemInput = {
   product_id: number;
+  ticket_option_id?: number | null;
   quantity: number;
 };
 
 export type AttendeeInput = {
   product_id: number;
+  ticket_option_id?: number | null;
   first_name: string;
   last_name: string;
-  email: string;
+  // Optional — a non-buyer attendee (e.g. a child) may have neither.
+  // See DeliverAttendeeTicketEmailJob's null-email guard on the backend.
+  email?: string | null;
+  phone?: string | null;
+  is_buyer?: boolean;
   answers?: AnswerInput[];
 };
 
@@ -38,26 +44,32 @@ export type CreateOrderInput = {
   first_name: string;
   last_name: string;
   email: string;
+  phone: string;
   items: CartItemInput[];
   order_answers?: AnswerInput[];
   attendees?: AttendeeInput[];
+  // Buyer-controlled: whether non-buyer attendees get individually
+  // emailed their assigned ticket. Never gates the buyer's own ticket.
+  notify_attendees?: boolean;
 };
 
 export type OrderStatus = "RESERVED" | "COMPLETED" | "CANCELLED" | "AWAITING_OFFLINE_PAYMENT" | "ABANDONED";
 
 export type OrderItemSummary = {
-  product_title: string;
-  tier_name: string | null;
+  ticket_group_name: string;
+  ticket_option_name: string | null;
+  ticket_display_name: string;
   price: string;
   quantity: number;
   item_total: string;
+  currency_code: string;
 };
 
 export type OrderAttendeeSummary = {
   short_id: string;
   first_name: string;
   last_name: string;
-  product_title: string;
+  ticket_display_name: string;
 };
 
 export type Order = {
@@ -66,6 +78,7 @@ export type Order = {
   first_name: string;
   last_name: string;
   email: string;
+  phone: string;
   subtotal: string;
   tax_amount: string;
   platform_fee: string;
@@ -85,7 +98,7 @@ async function request<T>(path: string, options: { method?: "GET" | "POST"; body
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors);
+    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
   }
 
   return data as T;

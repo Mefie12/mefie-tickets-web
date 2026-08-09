@@ -10,18 +10,27 @@
   },
   "dependencies": {
     "@mantine/core": "^7.17.0",
+    "@mantine/dropzone": "^7.17.8",
     "@mantine/form": "^7.17.8",
     "@mantine/hooks": "^7.17.0",
+    "@mantine/modals": "^7.17.8",
     "@mantine/notifications": "^7.17.0",
+    "@mantine/tiptap": "^7.17.8",
     "@sentry/nextjs": "^8.55.0",
     "@stripe/react-stripe-js": "^6.8.0",
     "@stripe/stripe-js": "^9.13.0",
     "@tabler/icons-react": "^3.34.0",
     "@tanstack/react-query": "^5.90.0",
+    "@tiptap/extension-link": "^3.29.2",
+    "@tiptap/react": "^3.29.2",
+    "@tiptap/starter-kit": "^3.29.2",
     "axios": "^1.7.9",
+    "html5-qrcode": "^2.3.8",
+    "libphonenumber-js": "^1.13.10",
     "next": "15.5.22",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "world-countries": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^20",

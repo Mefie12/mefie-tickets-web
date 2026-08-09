@@ -1,40 +1,100 @@
-import { Badge, Container, Group, Stack, Text } from "@mantine/core";
+import type { Metadata } from "next";
+import { Container, SimpleGrid, Stack, Text, Title, Card } from "@mantine/core";
 import { IconTicket } from "@tabler/icons-react";
-import { SystemStatusCard } from "@/components/SystemStatusCard";
+import { backendRequest } from "@/lib/backend";
+import type { PaginationMeta, PublicEventCard as PublicEventCardData, PublicEventTaxonomies } from "@/lib/publicEventApi";
+import { EventFilterBar } from "@/components/EventFilterBar";
+import { EventCard } from "@/components/EventCard";
+import { EventPaginationControl } from "@/components/EventPaginationControl";
 
-export default function Home() {
+const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+
+type SearchParams = {
+  q?: string;
+  category?: string;
+  subcategory?: string;
+  country?: string;
+  from?: string;
+  to?: string;
+  page?: string;
+};
+
+function buildQueryString(params: SearchParams): string {
+  const query = new URLSearchParams();
+  if (params.q) query.set("q", params.q);
+  if (params.category) query.set("category", params.category);
+  if (params.subcategory) query.set("subcategory", params.subcategory);
+  if (params.country) query.set("country", params.country);
+  if (params.from) query.set("from", params.from);
+  if (params.to) query.set("to", params.to);
+  if (params.page) query.set("page", params.page);
+  return query.toString();
+}
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}): Promise<Metadata> {
+  const params = await searchParams;
+  const title = params.category ? `${params.category} events | Mefie Tickets` : "Browse events | Mefie Tickets";
+  const description = "Find and buy tickets to live events.";
+  const query = buildQueryString(params);
+  const canonicalPath = query ? `/?${query}` : "/";
+
+  return {
+    title,
+    description,
+    alternates: { canonical: `${APP_URL}${canonicalPath}` },
+  };
+}
+
+export default async function Home({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const params = await searchParams;
+  const query = buildQueryString(params);
+
+  const [eventsResult, taxonomiesResult] = await Promise.all([
+    backendRequest<{ events: PublicEventCardData[]; meta: PaginationMeta }>(`/api/public/events${query ? `?${query}` : ""}`),
+    backendRequest<PublicEventTaxonomies>("/api/public/event-taxonomies"),
+  ]);
+
+  const events = eventsResult.status === 200 ? eventsResult.data.events : [];
+  const meta = eventsResult.status === 200 ? eventsResult.data.meta : null;
+  const taxonomies: PublicEventTaxonomies =
+    taxonomiesResult.status === 200 ? taxonomiesResult.data : { categories: [] };
+
   return (
-    <Container size="sm" py={80}>
+    <Container size="lg" py={40}>
       <Stack gap="xl">
         <Stack gap={4}>
-          <Group gap="xs">
-            <IconTicket size={22} />
-            <Text size="sm" c="dimmed" fw={500}>
-              Mefie Tickets
-            </Text>
-            <Badge variant="light" color="brand" ml="auto">
-              Milestone 0
-            </Badge>
-          </Group>
-          <Text
-            component="h1"
-            fz={40}
-            fw={800}
-            lh={1.15}
-            variant="gradient"
-            gradient={{ from: "brand.4", to: "grape.5", deg: 135 }}
-          >
-            Environment &amp; Architecture Setup
-          </Text>
-          <Text c="dimmed" maw={520}>
-            This placeholder screen exists to prove the frontend build works end
-            to end — real UI design lands with Milestone 4 onward. What matters
-            here is the chain underneath it: Next.js BFF talking to the Laravel
-            API.
-          </Text>
+          <Title order={1} fz={34} fw={800}>
+            Browse events
+          </Title>
+          <Text c="dimmed">Find and buy tickets to live events.</Text>
         </Stack>
 
-        <SystemStatusCard />
+        <EventFilterBar taxonomies={taxonomies} />
+
+        {events.length === 0 ? (
+          <Card withBorder radius="lg" p="xl">
+            <Stack align="center" gap="xs" py="lg">
+              <IconTicket size={32} opacity={0.5} />
+              <Text c="dimmed" ta="center">
+                No events match your filters.
+              </Text>
+            </Stack>
+          </Card>
+        ) : (
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+            {events.map((event) => (
+              <EventCard key={event.id} event={event} />
+            ))}
+          </SimpleGrid>
+        )}
+
+        {meta && meta.last_page > 1 && (
+          <EventPaginationControl currentPage={meta.current_page} totalPages={meta.last_page} />
+        )}
       </Stack>
     </Container>
   );

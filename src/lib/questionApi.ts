@@ -5,8 +5,7 @@ export type QuestionScope = "ORDER" | "ATTENDEE";
 
 export type Question = {
   id: number;
-  account_id: number;
-  organizer_id: number;
+  organization_id: string;
   event_id: number;
   title: string;
   description: string | null;
@@ -30,7 +29,7 @@ async function request<T>(
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors);
+    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
   }
 
   return data as T;
