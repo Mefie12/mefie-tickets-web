@@ -61,10 +61,23 @@ export type OrderItemDetail = {
   priceTier: { id: number; name: string } | null;
 };
 
+export type OrderTermsAcceptance = {
+  accepted: true;
+  version_id: number;
+  version_number: number;
+  accepted_at: string;
+  content_type: "RICH_TEXT" | "PDF";
+  /** null for PDF — see the version's own PDF stream route instead. */
+  rich_text_content: string | null;
+};
+
 export type OrderDetail = OrderListItem & {
   items: OrderItemDetail[];
   attendees: OrderAttendee[];
   answers: OrderQuestionAnswer[];
+  // Always the version the buyer actually accepted, never the event's
+  // current one — see ShowEventOrderAction on the backend.
+  terms_acceptance: OrderTermsAcceptance | null;
 };
 
 export type OrderListResponse = {

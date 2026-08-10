@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Alert, Button, Center, Loader, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Center, Loader, PasswordInput, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import { AuthLayout } from "@/components/AuthLayout";
 import {
   acceptInvitation,
   acceptInvitationAsCurrentUser,
   ApiError,
   fetchCurrentUser,
+  type InvitationPreview,
   previewInvitation,
 } from "@/lib/authApi";
 
@@ -81,7 +82,7 @@ export function AcceptInvitationForm() {
   const invitation = preview.data;
 
   if (!invitation.requires_login) {
-    return <CreatePasswordStep token={token} organizationName={invitation.organization_name} />;
+    return <CreatePasswordStep token={token} invitation={invitation} />;
   }
 
   // requires_login: wait for the current-user check before deciding
@@ -97,7 +98,7 @@ export function AcceptInvitationForm() {
     );
   }
 
-  const loggedInAsInvitedEmail = currentUser.data?.email === invitation.email;
+  const loggedInAsInvitedEmail = currentUser.data?.user.email === invitation.email;
 
   if (!loggedInAsInvitedEmail) {
     return <LogInToAcceptStep token={token} organizationName={invitation.organization_name} email={invitation.email} />;
@@ -106,7 +107,7 @@ export function AcceptInvitationForm() {
   return (
     <ConfirmAcceptStep
       token={token}
-      organizationName={invitation.organization_name}
+      invitation={invitation}
       onAccepted={() => router.push("/dashboard")}
     />
   );
@@ -139,11 +140,11 @@ function LogInToAcceptStep({
 
 function ConfirmAcceptStep({
   token,
-  organizationName,
+  invitation,
   onAccepted,
 }: {
   token: string;
-  organizationName: string;
+  invitation: InvitationPreview;
   onAccepted: () => void;
 }) {
   const acceptMutation = useMutation({
@@ -154,9 +155,8 @@ function ConfirmAcceptStep({
   return (
     <AuthLayout title="Join your team">
       <Stack>
-        <Text size="sm">
-          Accept the invitation to join <strong>{organizationName}</strong>?
-        </Text>
+        <Text size="sm">Review your invitation details, then accept to join the team.</Text>
+        <InvitationDetails invitation={invitation} />
         {acceptMutation.isError && (
           <Alert color="red">
             {acceptMutation.error instanceof ApiError ? acceptMutation.error.message : "Something went wrong."}
@@ -170,14 +170,12 @@ function ConfirmAcceptStep({
   );
 }
 
-function CreatePasswordStep({ token, organizationName }: { token: string; organizationName: string }) {
+function CreatePasswordStep({ token, invitation }: { token: string; invitation: InvitationPreview }) {
   const router = useRouter();
 
   const form = useForm({
-    initialValues: { first_name: "", last_name: "", password: "", password_confirmation: "" },
+    initialValues: { password: "", password_confirmation: "" },
     validate: {
-      first_name: (v) => (v.trim().length === 0 ? "First name is required" : null),
-      last_name: (v) => (v.trim().length === 0 ? "Last name is required" : null),
       password: (v) => (v.length < 8 ? "Must be at least 8 characters" : null),
       password_confirmation: (v, values) => (v !== values.password ? "Passwords do not match" : null),
     },
@@ -199,14 +197,13 @@ function CreatePasswordStep({ token, organizationName }: { token: string; organi
   });
 
   return (
-    <AuthLayout title="Join your team" subtitle={`Set your name and password to finish joining ${organizationName}.`}>
+    <AuthLayout title="Join your team" subtitle="Review your invitation details and create a password to continue.">
       <form onSubmit={form.onSubmit((values) => acceptMutation.mutate(values))}>
         <Stack>
           {acceptMutation.isError && !(acceptMutation.error instanceof ApiError && acceptMutation.error.errors) && (
             <Alert color="red">{(acceptMutation.error as Error).message}</Alert>
           )}
-          <TextInput label="First name" placeholder="Bob" {...form.getInputProps("first_name")} />
-          <TextInput label="Last name" placeholder="Builder" {...form.getInputProps("last_name")} />
+          <InvitationDetails invitation={invitation} />
           <PasswordInput
             label="Password"
             placeholder="At least 8 characters"
@@ -219,5 +216,20 @@ function CreatePasswordStep({ token, organizationName }: { token: string; organi
         </Stack>
       </form>
     </AuthLayout>
+  );
+}
+
+function InvitationDetails({ invitation }: { invitation: InvitationPreview }) {
+  const roleLabel = invitation.role === "SUPERADMIN" ? "Super Admin" : invitation.role === "ADMIN" ? "Admin" : "Organizer";
+
+  return (
+    <SimpleGrid cols={{ base: 1, sm: 2 }}>
+      <TextInput label="First name" value={invitation.first_name} readOnly />
+      <TextInput label="Last name" value={invitation.last_name} readOnly />
+      <TextInput label="Email" value={invitation.email} readOnly />
+      <TextInput label="Phone" value={invitation.phone ?? "Not provided"} readOnly />
+      <TextInput label="Organization" value={invitation.organization_name} readOnly />
+      <TextInput label="Role" value={roleLabel} readOnly />
+    </SimpleGrid>
   );
 }

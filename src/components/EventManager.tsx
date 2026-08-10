@@ -52,8 +52,9 @@ import type { Question } from "@/lib/questionApi";
 import { ProductsEditor } from "@/components/ProductsEditor";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
+import { EventTermsEditor } from "@/components/EventTermsEditor";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "tickets", "questions"];
+const VALID_TABS = ["details", "date-time", "location", "media", "tickets", "questions", "terms"];
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -159,6 +160,7 @@ export function EventManager({
           <Tabs.Tab value="media">Media</Tabs.Tab>
           <Tabs.Tab value="tickets">Tickets &amp; Pricing</Tabs.Tab>
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
+          <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="details" pt="lg">
@@ -184,6 +186,9 @@ export function EventManager({
         </Tabs.Panel>
         <Tabs.Panel value="questions" pt="lg">
           <QuestionsEditor eventId={event.id} initialQuestions={initialQuestions} disabled={archived} />
+        </Tabs.Panel>
+        <Tabs.Panel value="terms" pt="lg">
+          <EventTermsEditor eventId={event.id} disabled={archived} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

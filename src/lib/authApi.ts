@@ -24,6 +24,7 @@ export type CurrentUser = {
   first_name: string;
   last_name: string;
   email: string;
+  phone: string | null;
   status: UserStatus;
   /** Which org this user is acting as — not itself a permissions source, see currentMembership on the backend. */
   current_organization_id: string | null;
@@ -119,7 +120,7 @@ export function changeEmail(input: { email: string; current_password: string }) 
 
 export function acceptInvitation(
   token: string,
-  input: { first_name: string; last_name: string; password: string; password_confirmation: string },
+  input: { password: string; password_confirmation: string },
 ) {
   return request<{ user: CurrentUser }>(`/api/auth/invitation/${encodeURIComponent(token)}`, {
     method: "POST",
@@ -138,7 +139,10 @@ export function acceptInvitationAsCurrentUser(token: string) {
 
 export type InvitationPreview = {
   organization_name: string;
+  first_name: string;
+  last_name: string;
   email: string;
+  phone: string | null;
   role: Role;
   /** True if this email already has an account elsewhere — the accept page must branch to a login-first flow instead of the create-password form. */
   requires_login: boolean;
@@ -152,6 +156,6 @@ export function fetchCurrentUser() {
   return request<{ user: CurrentUser }>("/api/users/me");
 }
 
-export function updateCurrentUser(input: { first_name?: string; last_name?: string }) {
+export function updateCurrentUser(input: { first_name?: string; last_name?: string; phone?: string | null }) {
   return request<{ user: CurrentUser }>("/api/users/me", { method: "PATCH", body: input });
 }

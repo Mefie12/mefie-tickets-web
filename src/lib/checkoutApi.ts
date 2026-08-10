@@ -51,6 +51,21 @@ export type CreateOrderInput = {
   // Buyer-controlled: whether non-buyer attendees get individually
   // emailed their assigned ticket. Never gates the buyer's own ticket.
   notify_attendees?: boolean;
+  // Only required when event.terms is present and the cart triggers it
+  // (see OrderService::resolveRequiredTermsVersionId on the backend).
+  // terms_version_id must be the version_id the buyer was actually shown
+  // — a stale value is rejected with code TERMS_VERSION_CHANGED.
+  terms_accepted?: boolean;
+  terms_version_id?: number;
+};
+
+export type OrderTermsAcceptance = {
+  accepted: true;
+  version_number: number;
+  accepted_at: string;
+  content_type: "RICH_TEXT" | "PDF";
+  /** null for PDF — the confirmation screen links to the public PDF route instead. */
+  rich_text_content: string | null;
 };
 
 export type OrderStatus = "RESERVED" | "COMPLETED" | "CANCELLED" | "AWAITING_OFFLINE_PAYMENT" | "ABANDONED";
@@ -86,6 +101,7 @@ export type Order = {
   currency: string;
   items: OrderItemSummary[];
   attendees: OrderAttendeeSummary[];
+  terms_acceptance: OrderTermsAcceptance | null;
 };
 
 async function request<T>(path: string, options: { method?: "GET" | "POST"; body?: unknown } = {}): Promise<T> {
