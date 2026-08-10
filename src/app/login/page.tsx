@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Anchor, Button, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Button, Checkbox, Group, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AuthLayout } from "@/components/AuthLayout";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
@@ -28,7 +28,7 @@ function LoginForm() {
   const destination = next && next.startsWith("/") ? next : "/dashboard";
 
   const form = useForm({
-    initialValues: { email: "", password: "" },
+    initialValues: { email: "", password: "", remember: false },
     validate: {
       email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? null : "Enter a valid email"),
       password: (v) => (v.length === 0 ? "Password is required" : null),
@@ -75,6 +75,12 @@ function LoginForm() {
         <Stack>
           <TextInput label="Email" placeholder="you@example.com" {...form.getInputProps("email")} />
           <PasswordInput label="Password" {...form.getInputProps("password")} />
+          <Group justify="space-between">
+            <Checkbox label="Remember me" {...form.getInputProps("remember", { type: "checkbox" })} />
+            <Anchor href="/forgot-password" size="sm">
+              Forgot password?
+            </Anchor>
+          </Group>
           <Button type="submit" fullWidth loading={loginMutation.isPending} mt="sm">
             Log in
           </Button>

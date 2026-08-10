@@ -81,8 +81,21 @@ export function registerOrganization(input: {
   return request<{ user: CurrentUser }>("/api/auth/registration", { method: "POST", body: input });
 }
 
-export function login(input: { email: string; password: string }) {
+export function login(input: { email: string; password: string; remember?: boolean }) {
   return request<{ user: CurrentUser }>("/api/auth/login", { method: "POST", body: input });
+}
+
+export function requestPasswordReset(input: { email: string }) {
+  return request<{ message: string }>("/api/auth/password/forgot", { method: "POST", body: input });
+}
+
+export function resetPassword(input: {
+  token: string;
+  email: string;
+  password: string;
+  password_confirmation: string;
+}) {
+  return request<{ message: string }>("/api/auth/password/reset", { method: "POST", body: input });
 }
 
 export function logout() {
