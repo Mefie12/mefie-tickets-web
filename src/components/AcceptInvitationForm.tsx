@@ -97,7 +97,7 @@ export function AcceptInvitationForm() {
     );
   }
 
-  const loggedInAsInvitedEmail = currentUser.data?.email === invitation.email;
+  const loggedInAsInvitedEmail = currentUser.data?.user.email === invitation.email;
 
   if (!loggedInAsInvitedEmail) {
     return <LogInToAcceptStep token={token} organizationName={invitation.organization_name} email={invitation.email} />;
