@@ -18,6 +18,8 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { isValidPhoneNumber } from "libphonenumber-js";
+import { PhoneInput } from "@/components/PhoneInput";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, changeEmail, type CurrentUser, updateCurrentUser } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
@@ -28,11 +30,16 @@ export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
   const router = useRouter();
 
   const form = useForm({
-    initialValues: { first_name: user.first_name, last_name: user.last_name },
+    initialValues: { first_name: user.first_name, last_name: user.last_name, phone: user.phone ?? "" },
+    validate: {
+      first_name: (v) => (v.trim() ? null : "First name is required"),
+      last_name: (v) => (v.trim() ? null : "Last name is required"),
+      phone: (v) => (v.trim() && !isValidPhoneNumber(v) ? "Enter a valid phone number" : null),
+    },
   });
 
   const updateMutation = useMutation({
-    mutationFn: updateCurrentUser,
+    mutationFn: (values: typeof form.values) => updateCurrentUser({ ...values, phone: values.phone || null }),
     onSuccess: (data: { user: CurrentUser }) => {
       setUser((prev) => ({ ...data.user, role: prev.role }));
       notifications.show({ color: "teal", message: "Profile updated." });
@@ -69,6 +76,7 @@ export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
               <Stack>
                 <TextInput label="First name" {...form.getInputProps("first_name")} />
                 <TextInput label="Last name" {...form.getInputProps("last_name")} />
+                <PhoneInput label="Phone (optional)" {...form.getInputProps("phone")} />
                 <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>
                   Save changes
                 </Button>

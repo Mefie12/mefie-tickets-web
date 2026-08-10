@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Button, Card, Checkbox, Divider, Group, SegmentedControl, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, Card, Checkbox, Divider, Group, SegmentedControl, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { ApiError } from "@/lib/authApi";
@@ -10,8 +10,14 @@ import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
 import { PhoneInput } from "@/components/PhoneInput";
+import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 
 type CartLine = { product_id: number; ticket_option_id: number | null; product_title: string; quantity: number };
+
+// Mirrors OrderService::TERMS_TRIGGERING_TYPES on the backend — FREE
+// alone never gates on terms, but a cart mixing FREE with any of these
+// still triggers it, order-level, since one line item is all it takes.
+const TERMS_TRIGGERING_TYPES = new Set(["PAID", "TIERED", "REGISTRATION", "DONATION"]);
 
 // null = not yet chosen — every ticket must end in "me" or "other" before
 // submit is allowed, there is no implicit default (see the redesign notes:
@@ -81,11 +87,17 @@ export function CheckoutDetailsForm({
   const [orderAnswers, setOrderAnswers] = useState<Record<number, AnswerValue>>({});
   const [attendees, setAttendees] = useState<AttendeeSlot[]>(() => buildAttendeeSlots(cartItems));
   const [notifyAttendees, setNotifyAttendees] = useState(true);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [termsVersionChanged, setTermsVersionChanged] = useState(false);
 
   const orderQuestions = event.questions.filter((q) => q.scope === "ORDER").sort((a, b) => a.sort_order - b.sort_order);
   const attendeeQuestions = event.questions
     .filter((q) => q.scope === "ATTENDEE")
     .sort((a, b) => a.sort_order - b.sort_order);
+
+  const productTypeById = new Map(event.products.map((p) => [p.id, p.type]));
+  const termsRequired =
+    event.terms !== null && cartItems.some((item) => TERMS_TRIGGERING_TYPES.has(productTypeById.get(item.product_id) ?? ""));
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -97,6 +109,9 @@ export function CheckoutDetailsForm({
         items: cartItems.map((item) => ({ product_id: item.product_id, ticket_option_id: item.ticket_option_id, quantity: item.quantity })),
         order_answers: orderQuestions.map((q) => ({ question_id: q.id, answer: orderAnswers[q.id] ?? "" })),
         notify_attendees: notifyAttendees,
+        ...(termsRequired && event.terms
+          ? { terms_accepted: termsAccepted, terms_version_id: event.terms.version_id }
+          : {}),
         attendees: attendees.map((a) => {
           const isBuyerSlot = a.assignment === "me";
           return {
@@ -112,17 +127,27 @@ export function CheckoutDetailsForm({
         }),
       }),
     onSuccess: (data: { order: Order }) => onOrderCreated(data.order),
-    onError: (error: Error) =>
+    onError: (error: Error) => {
+      // The version_id this form has in local state (from the initial
+      // page load) no longer matches the event's current published
+      // version — resubmitting as-is would just fail again, so this
+      // needs a fresh page load rather than a notification to dismiss.
+      if (error instanceof ApiError && error.code === "TERMS_VERSION_CHANGED") {
+        setTermsVersionChanged(true);
+        return;
+      }
       notifications.show({
         color: "red",
         message: error instanceof ApiError ? error.message : "Something went wrong.",
-      }),
+      });
+    },
   });
 
   function validate(): string | null {
     if (!firstName.trim() || !lastName.trim()) return "Enter your first and last name.";
     if (!/^\S+@\S+\.\S+$/.test(email)) return "Enter a valid email address.";
     if (!phone.trim() || !isValidPhoneNumber(phone)) return "Enter a valid phone number.";
+    if (termsRequired && !termsAccepted) return "You must accept the Terms & Conditions to continue.";
 
     for (const q of orderQuestions) {
       if (!isQuestionAnswered(q, orderAnswers[q.id])) return `'${q.title}' is required.`;
@@ -290,11 +315,41 @@ export function CheckoutDetailsForm({
         />
       </Stack>
 
+      {termsRequired && event.terms && (
+        <Stack gap="xs">
+          <Divider label="Terms & Conditions" labelPosition="left" />
+          <Checkbox
+            label={
+              <>
+                I have read and accept the{" "}
+                <TermsAndConditionsLink eventId={event.id} terms={event.terms} label="Terms & Conditions" />
+              </>
+            }
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.currentTarget.checked)}
+          />
+        </Stack>
+      )}
+
+      {termsVersionChanged && (
+        <Alert color="orange" title="Terms & Conditions updated">
+          <Stack gap="xs">
+            <Text size="sm">
+              The organizer published a new version of the Terms &amp; Conditions while you were checking out. Reload
+              the page to review the latest version before continuing.
+            </Text>
+            <Button size="xs" style={{ alignSelf: "flex-start" }} onClick={() => window.location.reload()}>
+              Reload page
+            </Button>
+          </Stack>
+        </Alert>
+      )}
+
       <Group justify="space-between">
         <Button variant="subtle" onClick={onBack} disabled={mutation.isPending}>
           Back to tickets
         </Button>
-        <Button onClick={handleSubmit} loading={mutation.isPending}>
+        <Button onClick={handleSubmit} loading={mutation.isPending} disabled={termsVersionChanged}>
           {totalDue === 0 ? "Register for free" : "Continue"}
         </Button>
       </Group>

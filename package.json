@@ -2,6 +2,9 @@
   "name": "mefie-tickets-web",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -16,7 +19,6 @@
     "@mantine/modals": "^7.17.8",
     "@mantine/notifications": "^7.17.0",
     "@mantine/tiptap": "^7.17.8",
-    "@sentry/nextjs": "^8.55.0",
     "@stripe/react-stripe-js": "^6.8.0",
     "@stripe/stripe-js": "^9.13.0",
     "@tabler/icons-react": "^3.34.0",
@@ -27,25 +29,25 @@
     "axios": "^1.7.9",
     "html5-qrcode": "^2.3.8",
     "libphonenumber-js": "^1.13.10",
-    "next": "15.5.22",
+    "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "world-countries": "^5.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "15.5.22",
-    "postcss": "^8.5.1",
-    "postcss-preset-mantine": "^1.17.0",
-    "postcss-simple-vars": "^7.0.1",
+    "@types/node": "^24",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.3.0",
     "typescript": "^5"
+  },
+  "overrides": {
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4"
   },
   "allowScripts": {
     "sharp": true,
-    "@sentry/cli": true,
     "unrs-resolver": true,
     "fsevents@2.3.3": true
   }

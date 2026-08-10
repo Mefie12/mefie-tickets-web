@@ -1,9 +1,10 @@
-import Link from "next/link";
-import { Badge, Button, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { Badge, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { IconConfetti, IconPlus } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import { formatEventDate } from "@/lib/eventDateTime";
 import type { Event, EventStatus } from "@/lib/eventApi";
+import { LinkButton } from "@/components/LinkButton";
+import { LinkCard } from "@/components/LinkCard";
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -30,9 +31,9 @@ export default async function DashboardPage() {
             <Text c="dimmed" ta="center" maw={420}>
               Your organization is set up. The next step is creating an event so you can start selling tickets.
             </Text>
-            <Button component={Link} href="/events/new" leftSection={<IconPlus size={16} />} mt="sm" size="md">
+            <LinkButton href="/events/new" leftSection={<IconPlus size={16} />} mt="sm" size="md">
               Create your first event
-            </Button>
+            </LinkButton>
           </Stack>
         </Card>
       </Stack>
@@ -51,9 +52,9 @@ export default async function DashboardPage() {
         <Title order={2} fz={28}>
           Dashboard
         </Title>
-        <Button component={Link} href="/events/new" leftSection={<IconPlus size={16} />}>
+        <LinkButton href="/events/new" leftSection={<IconPlus size={16} />}>
           Create event
-        </Button>
+        </LinkButton>
       </Group>
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
@@ -86,14 +87,13 @@ export default async function DashboardPage() {
       <Stack gap="sm">
         <Group justify="space-between">
           <Text fw={600}>Recent events</Text>
-          <Button component={Link} href="/events" variant="subtle" size="compact-sm">
+          <LinkButton href="/events" variant="subtle" size="compact-sm">
             View all
-          </Button>
+          </LinkButton>
         </Group>
         {recentEvents.map((event) => (
-          <Card
+          <LinkCard
             key={event.id}
-            component={Link}
             href={`/events/${event.id}`}
             withBorder
             radius="lg"
@@ -113,7 +113,7 @@ export default async function DashboardPage() {
                 {event.status}
               </Badge>
             </Group>
-          </Card>
+          </LinkCard>
         ))}
       </Stack>
     </Stack>

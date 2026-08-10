@@ -5,11 +5,22 @@ import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Input, Stack } from "@mantine/core";
 
-export function RichTextDescription({ value, onChange, error, disabled = false }: {
+export function RichTextDescription({
+  value,
+  onChange,
+  error,
+  disabled = false,
+  label = "Event description",
+  description = "Tell attendees what to expect. You can add headings, lists, links, and emphasis.",
+  required = true,
+}: {
   value: string;
   onChange: (value: string) => void;
   error?: React.ReactNode;
   disabled?: boolean;
+  label?: string;
+  description?: string;
+  required?: boolean;
 }) {
   const editor = useEditor({
     // Tiptap v3's StarterKit bundles Link itself (unlike v2) — adding a
@@ -23,8 +34,8 @@ export function RichTextDescription({ value, onChange, error, disabled = false }
 
   return (
     <Stack gap={5}>
-      <Input.Label required>Event description</Input.Label>
-      <Input.Description>Tell attendees what to expect. You can add headings, lists, links, and emphasis.</Input.Description>
+      <Input.Label required={required}>{label}</Input.Label>
+      <Input.Description>{description}</Input.Description>
       <RichTextEditor editor={editor}>
         <RichTextEditor.Toolbar sticky stickyOffset={60}>
           <RichTextEditor.ControlsGroup>

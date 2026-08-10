@@ -5,6 +5,7 @@ import { backendRequest } from "@/lib/backend";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { Checkout } from "@/components/Checkout";
+import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 
 export default async function PublicEventPage({
   params,
@@ -144,6 +145,15 @@ export default async function PublicEventPage({
                 )}
               </Stack>
             </Paper>
+          )}
+
+          {event.terms && (
+            <Group gap={6}>
+              <Text size="sm" fw={600}>
+                Terms &amp; Conditions
+              </Text>
+              <TermsAndConditionsLink eventId={event.id} terms={event.terms} />
+            </Group>
           )}
 
           {/* `has_ended` is server-computed so it can't disagree with the

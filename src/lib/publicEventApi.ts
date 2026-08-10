@@ -83,6 +83,14 @@ export type EventLocation = {
   access_instructions: string | null;
 };
 
+export type PublicEventTerms = {
+  version_id: number;
+  version_number: number;
+  content_type: "RICH_TEXT" | "PDF";
+  /** null for PDF — see the PDF stream route instead. */
+  rich_text_content: string | null;
+};
+
 export type PublicEventCategoryItem = { id: number; name: string; slug: string };
 
 export type PublicEventCategory = PublicEventCategoryItem & { subcategories: PublicEventCategoryItem[] };
@@ -133,4 +141,6 @@ export type PublicEvent = {
   organization: PublicOrganization;
   products: PublicProduct[];
   questions: PublicQuestion[];
+  /** null when the organizer hasn't enabled a published version — no acceptance is required at checkout. */
+  terms: PublicEventTerms | null;
 };

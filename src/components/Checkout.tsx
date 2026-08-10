@@ -80,7 +80,7 @@ export function Checkout({ event }: { event: PublicEvent }) {
   }
 
   if (step === "confirmation" && order) {
-    return <OrderConfirmation order={order} />;
+    return <OrderConfirmation eventId={event.id} order={order} />;
   }
 
   if (step === "payment" && order) {

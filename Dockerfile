@@ -1,6 +1,6 @@
 # Dev-mode Dockerfile — hot reload via bind mount (see docker-compose.yml
 # at the workspace root). Not a production build (that's Milestone 9).
-FROM node:20-alpine
+FROM node:24.18.0-alpine
 
 WORKDIR /app
 

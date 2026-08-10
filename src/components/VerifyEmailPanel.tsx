@@ -48,6 +48,11 @@ export function VerifyEmailPanel({
   const [codeSecondsLeft, setCodeSecondsLeft] = useState(() => secondsUntil(expiresAt));
 
   useEffect(() => {
+    // Resyncs the countdown whenever the server hands back a new expiry
+    // (e.g. after a resend) — codeSecondsLeft can't be purely derived
+    // from expiresAt since the effect below also ticks it down locally
+    // every second between resyncs.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCodeSecondsLeft(secondsUntil(expiresAt));
   }, [expiresAt]);
 

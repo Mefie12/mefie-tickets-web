@@ -1,8 +1,8 @@
-import Link from "next/link";
-import { Avatar, Badge, Box, Card, Group, Image, Stack, Text } from "@mantine/core";
+import { Avatar, Badge, Box, Group, Image, Stack, Text } from "@mantine/core";
 import { IconMapPin, IconWorld } from "@tabler/icons-react";
 import { formatEventDate } from "@/lib/eventDateTime";
 import type { PublicEventCard as PublicEventCardData } from "@/lib/publicEventApi";
+import { LinkCard } from "@/components/LinkCard";
 
 /**
  * One tag, never both: subcategory if the organizer set one, else the
@@ -24,8 +24,7 @@ export function EventCard({ event }: { event: PublicEventCardData }) {
   const location = locationSummary(event);
 
   return (
-    <Card
-      component={Link}
+    <LinkCard
       href={`/${event.organizer.slug}/${event.slug}`}
       withBorder
       radius="lg"
@@ -67,6 +66,6 @@ export function EventCard({ event }: { event: PublicEventCardData }) {
           </Text>
         </Group>
       </Stack>
-    </Card>
+    </LinkCard>
   );
 }

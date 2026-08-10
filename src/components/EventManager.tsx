@@ -52,8 +52,9 @@ import type { Question } from "@/lib/questionApi";
 import { ProductsEditor } from "@/components/ProductsEditor";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
+import { EventTermsEditor } from "@/components/EventTermsEditor";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "tickets", "questions"];
+const VALID_TABS = ["details", "date-time", "location", "media", "tickets", "questions", "terms"];
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -159,6 +160,7 @@ export function EventManager({
           <Tabs.Tab value="media">Media</Tabs.Tab>
           <Tabs.Tab value="tickets">Tickets &amp; Pricing</Tabs.Tab>
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
+          <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="details" pt="lg">
@@ -184,6 +186,9 @@ export function EventManager({
         </Tabs.Panel>
         <Tabs.Panel value="questions" pt="lg">
           <QuestionsEditor eventId={event.id} initialQuestions={initialQuestions} disabled={archived} />
+        </Tabs.Panel>
+        <Tabs.Panel value="terms" pt="lg">
+          <EventTermsEditor eventId={event.id} disabled={archived} />
         </Tabs.Panel>
       </Tabs>
     </Stack>
@@ -224,10 +229,12 @@ function EventDetailsForm({
   // Suggested from the event's already-saved location (not live Location-tab
   // typing — that's a separate form/tab). Dismissible, never auto-applied.
   const suggestedCurrency = suggestCurrencyForCountryCode(event.location_details?.country);
-  const [dismissedSuggestion, setDismissedSuggestion] = useState(false);
-  useEffect(() => setDismissedSuggestion(false), [suggestedCurrency]);
+  // Tracks *which* currency was dismissed (not a plain boolean) so a
+  // later location change that suggests a different currency isn't
+  // silently suppressed by an earlier, unrelated dismissal.
+  const [dismissedCurrency, setDismissedCurrency] = useState<string | null>(null);
   const showCurrencySuggestion =
-    !!suggestedCurrency && suggestedCurrency !== form.values.currency_code && !dismissedSuggestion;
+    !!suggestedCurrency && suggestedCurrency !== form.values.currency_code && suggestedCurrency !== dismissedCurrency;
   const suggestedCountryName = event.location_details?.country
     ? (COUNTRIES_BY_CODE.get(event.location_details.country)?.name ?? event.location_details.country)
     : "";
@@ -270,7 +277,7 @@ function EventDetailsForm({
                 >
                   Switch to {suggestedCurrency}
                 </Button>
-                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => setDismissedSuggestion(true)}>
+                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => setDismissedCurrency(suggestedCurrency)}>
                   Dismiss
                 </Button>
               </Alert>

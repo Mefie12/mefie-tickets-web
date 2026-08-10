@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { Badge, Button, Card, Divider, Group, Stack, Text, Textarea, Title } from "@mantine/core";
+import { Badge, Box, Button, Card, Divider, Group, Modal, Stack, Text, Textarea, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
@@ -40,6 +40,7 @@ export function OrderDetail({
   // modal opened — typed input would never reach onConfirm's closure
   // either, for the same reason. A ref sidesteps both.
   const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const [viewingTerms, setViewingTerms] = useState(false);
 
   const cancelMutation = useMutation({
     mutationFn: (cancelReason: string) => cancelOrder(eventId, order.id, cancelReason || undefined),
@@ -146,6 +147,35 @@ export function OrderDetail({
         </Stack>
       </Card>
 
+      {order.terms_acceptance && (
+        <Card withBorder radius="lg" p="xl">
+          <Group justify="space-between" align="center">
+            <Stack gap={0}>
+              <Text fw={600}>Terms &amp; Conditions</Text>
+              <Text size="sm" c="dimmed">
+                Accepted v{order.terms_acceptance.version_number} on{" "}
+                {formatEventDate(order.terms_acceptance.accepted_at, event.timezone)}
+              </Text>
+            </Stack>
+            {order.terms_acceptance.content_type === "PDF" ? (
+              <Button
+                component="a"
+                href={`/api/events/${eventId}/terms/versions/${order.terms_acceptance.version_id}/pdf`}
+                target="_blank"
+                size="xs"
+                variant="light"
+              >
+                View accepted terms
+              </Button>
+            ) : (
+              <Button size="xs" variant="light" onClick={() => setViewingTerms(true)}>
+                View accepted terms
+              </Button>
+            )}
+          </Group>
+        </Card>
+      )}
+
       <Card withBorder radius="lg" p="xl">
         <Stack gap="sm">
           <Title order={3} fz={18}>
@@ -224,6 +254,10 @@ export function OrderDetail({
           </Button>
         </Group>
       )}
+
+      <Modal opened={viewingTerms} onClose={() => setViewingTerms(false)} title="Accepted Terms & Conditions" size="lg">
+        <Box dangerouslySetInnerHTML={{ __html: order.terms_acceptance?.rich_text_content ?? "" }} />
+      </Modal>
     </Stack>
   );
 }

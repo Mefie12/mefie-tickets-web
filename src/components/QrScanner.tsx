@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 import type { Html5QrcodeScanner } from "html5-qrcode";
 
 const QR_READER_ELEMENT_ID = "gate-qr-reader";
@@ -16,8 +16,10 @@ const QR_READER_ELEMENT_ID = "gate-qr-reader";
  */
 export function QrScanner({ onScan }: { onScan: (decodedText: string) => void }) {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
-  const onScanRef = useRef(onScan);
-  onScanRef.current = onScan;
+  // Always calls the latest onScan without needing it in the effect's
+  // dependency array (which must stay empty — the scanner is only ever
+  // set up once).
+  const handleScan = useEffectEvent((decodedText: string) => onScan(decodedText));
 
   useEffect(() => {
     let cancelled = false;
@@ -33,7 +35,7 @@ export function QrScanner({ onScan }: { onScan: (decodedText: string) => void })
       );
 
       scanner.render(
-        (decodedText) => onScanRef.current(decodedText),
+        (decodedText) => handleScan(decodedText),
         () => {},
       );
 
