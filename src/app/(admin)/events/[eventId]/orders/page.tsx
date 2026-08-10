@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, Group, Stack, Text, Title } from "@mantine/core";
 import { IconReceipt } from "@tabler/icons-react";
@@ -8,6 +7,7 @@ import { formatAmount } from "@/lib/money";
 import type { OrderListResponse, OrderStatus } from "@/lib/orderApi";
 import type { Event } from "@/lib/eventApi";
 import { OrdersPagination } from "@/components/OrdersPagination";
+import { LinkCard } from "@/components/LinkCard";
 
 const STATUS_COLOR: Record<OrderStatus, string> = {
   RESERVED: "yellow",
@@ -64,9 +64,8 @@ export default async function EventOrdersPage({
       ) : (
         <Stack gap="sm">
           {orders.map((order) => (
-            <Card
+            <LinkCard
               key={order.id}
-              component={Link}
               href={`/events/${eventId}/orders/${order.id}`}
               withBorder
               radius="lg"
@@ -90,7 +89,7 @@ export default async function EventOrdersPage({
                   <Text size="sm">{formatAmount(order.total_amount, order.currency)}</Text>
                 </Stack>
               </Group>
-            </Card>
+            </LinkCard>
           ))}
         </Stack>
       )}

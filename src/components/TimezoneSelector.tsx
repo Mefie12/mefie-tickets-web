@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { Group, Select, Text } from "@mantine/core";
 import type { ComboboxItem, ComboboxParsedItem } from "@mantine/core";
 import { getTimezones, offsetLabelFor } from "@/lib/timezones";
@@ -56,8 +56,11 @@ export function TimezoneSelector({
   // late, the fix is to not render it during SSR at all — compute it
   // only after mount, same reasoning as browserTimezone() never running
   // at render/module scope.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const selectedOffset = mounted && value ? (byId.get(value)?.offsetLabel ?? offsetLabelFor(value)) : "";
 
   return (

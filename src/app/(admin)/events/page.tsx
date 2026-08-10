@@ -1,9 +1,10 @@
-import Link from "next/link";
-import { Badge, Button, Card, Group, Stack, Text, Title } from "@mantine/core";
+import { Badge, Card, Group, Stack, Text, Title } from "@mantine/core";
 import { IconCalendarEvent, IconPlus } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import { formatEventDate } from "@/lib/eventDateTime";
 import type { Event, EventStatus } from "@/lib/eventApi";
+import { LinkButton } from "@/components/LinkButton";
+import { LinkCard } from "@/components/LinkCard";
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -21,9 +22,9 @@ export default async function EventsPage() {
         <Title order={2} fz={28}>
           Events
         </Title>
-        <Button component={Link} href="/events/new" leftSection={<IconPlus size={16} />}>
+        <LinkButton href="/events/new" leftSection={<IconPlus size={16} />}>
           Create event
-        </Button>
+        </LinkButton>
       </Group>
 
       {events.length === 0 ? (
@@ -38,9 +39,8 @@ export default async function EventsPage() {
       ) : (
         <Stack gap="sm">
           {events.map((event) => (
-            <Card
+            <LinkCard
               key={event.id}
-              component={Link}
               href={`/events/${event.id}`}
               withBorder
               radius="lg"
@@ -63,7 +63,7 @@ export default async function EventsPage() {
                   {event.status}
                 </Badge>
               </Group>
-            </Card>
+            </LinkCard>
           ))}
         </Stack>
       )}

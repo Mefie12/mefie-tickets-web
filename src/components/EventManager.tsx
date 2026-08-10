@@ -229,10 +229,12 @@ function EventDetailsForm({
   // Suggested from the event's already-saved location (not live Location-tab
   // typing — that's a separate form/tab). Dismissible, never auto-applied.
   const suggestedCurrency = suggestCurrencyForCountryCode(event.location_details?.country);
-  const [dismissedSuggestion, setDismissedSuggestion] = useState(false);
-  useEffect(() => setDismissedSuggestion(false), [suggestedCurrency]);
+  // Tracks *which* currency was dismissed (not a plain boolean) so a
+  // later location change that suggests a different currency isn't
+  // silently suppressed by an earlier, unrelated dismissal.
+  const [dismissedCurrency, setDismissedCurrency] = useState<string | null>(null);
   const showCurrencySuggestion =
-    !!suggestedCurrency && suggestedCurrency !== form.values.currency_code && !dismissedSuggestion;
+    !!suggestedCurrency && suggestedCurrency !== form.values.currency_code && suggestedCurrency !== dismissedCurrency;
   const suggestedCountryName = event.location_details?.country
     ? (COUNTRIES_BY_CODE.get(event.location_details.country)?.name ?? event.location_details.country)
     : "";
@@ -275,7 +277,7 @@ function EventDetailsForm({
                 >
                   Switch to {suggestedCurrency}
                 </Button>
-                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => setDismissedSuggestion(true)}>
+                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => setDismissedCurrency(suggestedCurrency)}>
                   Dismiss
                 </Button>
               </Alert>

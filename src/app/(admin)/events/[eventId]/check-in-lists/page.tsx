@@ -1,10 +1,11 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge, Button, Card, Group, Stack, Text, Title } from "@mantine/core";
+import { Badge, Card, Group, Stack, Text, Title } from "@mantine/core";
 import { IconPlus, IconQrcode } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import type { CheckInListWithLinks } from "@/lib/checkInListApi";
 import type { Event } from "@/lib/eventApi";
+import { LinkButton } from "@/components/LinkButton";
+import { LinkCard } from "@/components/LinkCard";
 
 export default async function CheckInListsPage({
   params,
@@ -36,13 +37,9 @@ export default async function CheckInListsPage({
             Check-In Lists
           </Title>
         </Stack>
-        <Button
-          component={Link}
-          href={`/events/${eventId}/check-in-lists/new`}
-          leftSection={<IconPlus size={16} />}
-        >
+        <LinkButton href={`/events/${eventId}/check-in-lists/new`} leftSection={<IconPlus size={16} />}>
           New check-in list
-        </Button>
+        </LinkButton>
       </Group>
 
       {lists.length === 0 ? (
@@ -57,9 +54,8 @@ export default async function CheckInListsPage({
       ) : (
         <Stack gap="sm">
           {lists.map((list) => (
-            <Card
+            <LinkCard
               key={list.id}
-              component={Link}
               href={`/events/${eventId}/check-in-lists/${list.id}`}
               withBorder
               radius="lg"
@@ -79,7 +75,7 @@ export default async function CheckInListsPage({
                   {list.product_ids === null ? "All ticket types" : `${list.product_ids.length} ticket type(s)`}
                 </Badge>
               </Group>
-            </Card>
+            </LinkCard>
           ))}
         </Stack>
       )}
