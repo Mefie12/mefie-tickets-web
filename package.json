@@ -42,5 +42,11 @@
     "postcss-preset-mantine": "^1.17.0",
     "postcss-simple-vars": "^7.0.1",
     "typescript": "^5"
+  },
+  "allowScripts": {
+    "sharp": true,
+    "@sentry/cli": true,
+    "unrs-resolver": true,
+    "fsevents@2.3.3": true
   }
 }
