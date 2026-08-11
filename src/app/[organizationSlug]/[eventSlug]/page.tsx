@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
-import { Alert, Avatar, Box, Container, Group, Image, Paper, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { Alert, Avatar, Box, Breadcrumbs, Container, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import { IconCalendar, IconMapPin, IconWorld } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { Checkout } from "@/components/Checkout";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
+import { PublicSiteHeader } from "@/components/PublicSiteHeader";
+import { EventGallery } from "@/components/EventGallery";
 
 export default async function PublicEventPage({
   params,
@@ -45,6 +47,7 @@ export default async function PublicEventPage({
 
   return (
     <Box>
+      <PublicSiteHeader />
       <Box
         h={260}
         style={{
@@ -62,6 +65,15 @@ export default async function PublicEventPage({
 
       <Container size="md" py="xl">
         <Stack gap="xl">
+          <Breadcrumbs separator="/">
+            <Text component="a" href="/" size="sm" c="dimmed">
+              Browse events
+            </Text>
+            <Text size="sm" c="dimmed" lineClamp={1}>
+              {event.title}
+            </Text>
+          </Breadcrumbs>
+
           <Group gap="md" align="flex-start">
             <Avatar src={organization.logo_url} size={56} radius="lg" color="brand" mt={-48}>
               {organization.name[0]}
@@ -116,13 +128,7 @@ export default async function PublicEventPage({
 
           {event.description && <Box maw={700} dangerouslySetInnerHTML={{ __html: event.description }} />}
 
-          {event.gallery.length > 0 && (
-            <SimpleGrid cols={{ base: 1, sm: event.gallery.length }} spacing="sm" maw={700}>
-              {event.gallery.map((image) => (
-                <Image key={image.id} src={image.url} alt={image.alt_text ?? ""} radius="md" h={180} />
-              ))}
-            </SimpleGrid>
-          )}
+          {event.gallery.length > 0 && <EventGallery gallery={event.gallery} />}
 
           {/* Always visible, never gated behind purchase: the event can be
               months out and there's no ticket-email system yet to deliver

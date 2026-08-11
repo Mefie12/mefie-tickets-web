@@ -205,8 +205,10 @@ export function CheckoutDetailsForm({
           <TextInput label="First name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
           <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
         </Group>
-        <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-        <PhoneInput label="Phone" required value={phone} onChange={setPhone} />
+        <Group grow>
+          <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
+          <PhoneInput label="Phone" required value={phone} onChange={setPhone} />
+        </Group>
       </Stack>
 
       {orderQuestions.length > 0 && (
@@ -275,19 +277,21 @@ export function CheckoutDetailsForm({
                         onChange={(e) => updateAttendee(index, { last_name: e.currentTarget.value })}
                       />
                     </Group>
-                    <TextInput
-                      label="Email (optional)"
-                      description="We'll send them their ticket if provided"
-                      size="sm"
-                      type="email"
-                      value={attendee.email}
-                      onChange={(e) => updateAttendee(index, { email: e.currentTarget.value })}
-                    />
-                    <PhoneInput
-                      label="Phone (optional)"
-                      value={attendee.phone}
-                      onChange={(value) => updateAttendee(index, { phone: value })}
-                    />
+                    <Group grow align="flex-start">
+                      <TextInput
+                        label="Email (optional)"
+                        description="We'll send them their ticket if provided"
+                        size="sm"
+                        type="email"
+                        value={attendee.email}
+                        onChange={(e) => updateAttendee(index, { email: e.currentTarget.value })}
+                      />
+                      <PhoneInput
+                        label="Phone (optional)"
+                        value={attendee.phone}
+                        onChange={(value) => updateAttendee(index, { phone: value })}
+                      />
+                    </Group>
                   </>
                 )}
 
