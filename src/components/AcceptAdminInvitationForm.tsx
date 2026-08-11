@@ -6,46 +6,42 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Alert, Button, Center, Loader, PasswordInput, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import { AuthLayout } from "@/components/AuthLayout";
+import { fetchCurrentUser, ApiError, type PlatformRole } from "@/lib/authApi";
 import {
-  acceptInvitation,
-  acceptInvitationAsCurrentUser,
-  ApiError,
-  fetchCurrentUser,
-  type InvitationPreview,
-  previewInvitation,
-} from "@/lib/authApi";
+  acceptAdminInvitation,
+  acceptAdminInvitationAsCurrentUser,
+  previewAdminInvitation,
+  type PlatformInvitationPreview,
+} from "@/lib/adminAuthApi";
+
+const ROLE_LABEL: Record<PlatformRole, string> = {
+  PLATFORM_SUPER_ADMIN: "Super Admin",
+  PLATFORM_OPERATIONS: "Operations",
+  PLATFORM_FINANCE: "Finance",
+  PLATFORM_SUPPORT: "Support",
+};
 
 /**
- * Reads ?token=... — matches the link shape built by the backend's
- * TeammateInvitationNotification (mefie-tickets-api
- * app/Notifications/TeammateInvitationNotification.php): FRONTEND_URL +
- * "/invitations/accept?token={token}".
- *
- * Three real states once the token itself checks out (see
- * GET /api/auth/invitation/{token}'s requires_login flag):
- *   - requires_login=false: brand-new email, show the create-password
- *     form (unchanged from before).
- *   - requires_login=true, not currently logged in as that email: prompt
- *     to log in first, then come back to this same URL.
- *   - requires_login=true, already logged in as that exact email: a
- *     one-click confirmation (no password form — the account already
- *     exists).
+ * Mirrors AcceptInvitationForm's shape for Platform Admin invitations —
+ * see that component's docblock for the general three-branch pattern
+ * (new email / requires login / already logged in as invited email).
+ * Accepting only creates the Sanctum session + Platform membership;
+ * reaching the console itself still requires the separate MFA step, so
+ * every branch here lands on /admin/mfa, not /admin/dashboard directly.
  */
-export function AcceptInvitationForm() {
+export function AcceptAdminInvitationForm() {
   const router = useRouter();
   const token = useSearchParams().get("token");
 
   const preview = useQuery({
-    queryKey: ["invitation-preview", token],
-    queryFn: () => previewInvitation(token!),
+    queryKey: ["admin-invitation-preview", token],
+    queryFn: () => previewAdminInvitation(token!),
     enabled: !!token,
     retry: false,
   });
 
-  // Only fetched once we know the invite requires an existing login —
-  // no need to hit /api/users/me for the brand-new-email path.
   const currentUser = useQuery({
-    queryKey: ["current-user-for-invitation"],
+    queryKey: ["current-user-for-admin-invitation"],
     queryFn: fetchCurrentUser,
     enabled: !!preview.data?.requires_login,
     retry: false,
@@ -85,9 +81,6 @@ export function AcceptInvitationForm() {
     return <CreatePasswordStep token={token} invitation={invitation} />;
   }
 
-  // requires_login: wait for the current-user check before deciding
-  // between the login prompt and the confirmation button, so we don't
-  // flash the wrong one.
   if (currentUser.isLoading) {
     return (
       <AuthLayout title="Checking your invitation...">
@@ -101,34 +94,20 @@ export function AcceptInvitationForm() {
   const loggedInAsInvitedEmail = currentUser.data?.user.email === invitation.email;
 
   if (!loggedInAsInvitedEmail) {
-    return <LogInToAcceptStep token={token} organizationName={invitation.organization_name} email={invitation.email} />;
+    return <LogInToAcceptStep token={token} email={invitation.email} />;
   }
 
-  return (
-    <ConfirmAcceptStep
-      token={token}
-      invitation={invitation}
-      onAccepted={() => router.push("/dashboard")}
-    />
-  );
+  return <ConfirmAcceptStep token={token} invitation={invitation} onAccepted={() => router.push("/admin/mfa")} />;
 }
 
-function LogInToAcceptStep({
-  token,
-  organizationName,
-  email,
-}: {
-  token: string;
-  organizationName: string;
-  email: string;
-}) {
-  const nextUrl = `/invitations/accept?token=${encodeURIComponent(token)}`;
+function LogInToAcceptStep({ token, email }: { token: string; email: string }) {
+  const nextUrl = `/admin/invitations/accept?token=${encodeURIComponent(token)}`;
   return (
     <AuthLayout title="Log in to accept">
       <Stack>
         <Text size="sm">
-          The invitation to join <strong>{organizationName}</strong> is for <strong>{email}</strong>, which already
-          has an account. Log in as that address to accept it.
+          This Admin Console invitation is for <strong>{email}</strong>, which already has an account. Log in as
+          that address to accept it.
         </Text>
         <Button component={Link} href={`/login?next=${encodeURIComponent(nextUrl)}`} fullWidth>
           Log in to continue
@@ -144,18 +123,18 @@ function ConfirmAcceptStep({
   onAccepted,
 }: {
   token: string;
-  invitation: InvitationPreview;
+  invitation: PlatformInvitationPreview;
   onAccepted: () => void;
 }) {
   const acceptMutation = useMutation({
-    mutationFn: () => acceptInvitationAsCurrentUser(token),
+    mutationFn: () => acceptAdminInvitationAsCurrentUser(token),
     onSuccess: onAccepted,
   });
 
   return (
-    <AuthLayout title="Join your team">
+    <AuthLayout title="Join the Admin Console">
       <Stack>
-        <Text size="sm">Review your invitation details, then accept to join the team.</Text>
+        <Text size="sm">Review your invitation details, then accept to continue to the verification step.</Text>
         <InvitationDetails invitation={invitation} />
         {acceptMutation.isError && (
           <Alert color="red">
@@ -170,7 +149,7 @@ function ConfirmAcceptStep({
   );
 }
 
-function CreatePasswordStep({ token, invitation }: { token: string; invitation: InvitationPreview }) {
+function CreatePasswordStep({ token, invitation }: { token: string; invitation: PlatformInvitationPreview }) {
   const router = useRouter();
 
   const form = useForm({
@@ -182,11 +161,8 @@ function CreatePasswordStep({ token, invitation }: { token: string; invitation: 
   });
 
   const acceptMutation = useMutation({
-    mutationFn: (values: typeof form.values) => acceptInvitation(token, values),
-    // No org-level setup for an invited teammate to do — /settings is
-    // just the user's own profile, and the dashboard is the natural
-    // landing spot once they're in.
-    onSuccess: () => router.push("/dashboard"),
+    mutationFn: (values: typeof form.values) => acceptAdminInvitation(token, values),
+    onSuccess: () => router.push("/admin/mfa"),
     onError: (error: Error) => {
       if (error instanceof ApiError && error.errors) {
         form.setErrors(
@@ -197,18 +173,14 @@ function CreatePasswordStep({ token, invitation }: { token: string; invitation: 
   });
 
   return (
-    <AuthLayout title="Join your team" subtitle="Review your invitation details and create a password to continue.">
+    <AuthLayout title="Join the Admin Console" subtitle="Review your invitation details and create a password to continue.">
       <form onSubmit={form.onSubmit((values) => acceptMutation.mutate(values))}>
         <Stack>
           {acceptMutation.isError && !(acceptMutation.error instanceof ApiError && acceptMutation.error.errors) && (
             <Alert color="red">{(acceptMutation.error as Error).message}</Alert>
           )}
           <InvitationDetails invitation={invitation} />
-          <PasswordInput
-            label="Password"
-            placeholder="At least 8 characters"
-            {...form.getInputProps("password")}
-          />
+          <PasswordInput label="Password" placeholder="At least 8 characters" {...form.getInputProps("password")} />
           <PasswordInput label="Confirm password" {...form.getInputProps("password_confirmation")} />
           <Button type="submit" fullWidth loading={acceptMutation.isPending} mt="sm">
             Accept invitation
@@ -219,17 +191,13 @@ function CreatePasswordStep({ token, invitation }: { token: string; invitation: 
   );
 }
 
-function InvitationDetails({ invitation }: { invitation: InvitationPreview }) {
-  const roleLabel = invitation.role === "ADMIN" ? "Admin" : "Organizer";
-
+function InvitationDetails({ invitation }: { invitation: PlatformInvitationPreview }) {
   return (
     <SimpleGrid cols={{ base: 1, sm: 2 }}>
       <TextInput label="First name" value={invitation.first_name} readOnly />
       <TextInput label="Last name" value={invitation.last_name} readOnly />
       <TextInput label="Email" value={invitation.email} readOnly />
-      <TextInput label="Phone" value={invitation.phone ?? "Not provided"} readOnly />
-      <TextInput label="Organization" value={invitation.organization_name} readOnly />
-      <TextInput label="Role" value={roleLabel} readOnly />
+      <TextInput label="Role" value={ROLE_LABEL[invitation.role]} readOnly />
     </SimpleGrid>
   );
 }

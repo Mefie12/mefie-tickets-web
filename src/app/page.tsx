@@ -6,6 +6,7 @@ import type { PaginationMeta, PublicEventCard as PublicEventCardData, PublicEven
 import { EventFilterBar } from "@/components/EventFilterBar";
 import { EventCard } from "@/components/EventCard";
 import { EventPaginationControl } from "@/components/EventPaginationControl";
+import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 
 const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
 
@@ -64,38 +65,41 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
     taxonomiesResult.status === 200 ? taxonomiesResult.data : { categories: [] };
 
   return (
-    <Container size="lg" py={40}>
-      <Stack gap="xl">
-        <Stack gap={4}>
-          <Title order={1} fz={34} fw={800}>
-            Browse events
-          </Title>
-          <Text c="dimmed">Find and buy tickets to live events.</Text>
+    <>
+      <PublicSiteHeader />
+      <Container size="lg" py={40}>
+        <Stack gap="xl">
+          <Stack gap={4}>
+            <Title order={1} fz={34} fw={800}>
+              Browse events
+            </Title>
+            <Text c="dimmed">Find and buy tickets to live events.</Text>
+          </Stack>
+
+          <EventFilterBar taxonomies={taxonomies} />
+
+          {events.length === 0 ? (
+            <Card withBorder radius="lg" p="xl">
+              <Stack align="center" gap="xs" py="lg">
+                <IconTicket size={32} opacity={0.5} />
+                <Text c="dimmed" ta="center">
+                  No events match your filters.
+                </Text>
+              </Stack>
+            </Card>
+          ) : (
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
+              {events.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </SimpleGrid>
+          )}
+
+          {meta && meta.last_page > 1 && (
+            <EventPaginationControl currentPage={meta.current_page} totalPages={meta.last_page} />
+          )}
         </Stack>
-
-        <EventFilterBar taxonomies={taxonomies} />
-
-        {events.length === 0 ? (
-          <Card withBorder radius="lg" p="xl">
-            <Stack align="center" gap="xs" py="lg">
-              <IconTicket size={32} opacity={0.5} />
-              <Text c="dimmed" ta="center">
-                No events match your filters.
-              </Text>
-            </Stack>
-          </Card>
-        ) : (
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="lg">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-          </SimpleGrid>
-        )}
-
-        {meta && meta.last_page > 1 && (
-          <EventPaginationControl currentPage={meta.current_page} totalPages={meta.last_page} />
-        )}
-      </Stack>
-    </Container>
+      </Container>
+    </>
   );
 }

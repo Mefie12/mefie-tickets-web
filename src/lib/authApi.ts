@@ -5,7 +5,16 @@
  * this file can stay a thin, typed fetch wrapper.
  */
 
-export type Role = "SUPERADMIN" | "ADMIN" | "ORGANIZER";
+export type Role = "ADMIN" | "ORGANIZER";
+
+/**
+ * The four fixed Mefie Admin Console staff roles — see
+ * config/platform_permissions.php on the backend for the permission
+ * bundle each one carries. Distinct from Role above: a Platform
+ * membership's role always casts to PlatformRole, never Role (see
+ * App\Casts\MembershipRole on the backend).
+ */
+export type PlatformRole = "PLATFORM_SUPER_ADMIN" | "PLATFORM_OPERATIONS" | "PLATFORM_FINANCE" | "PLATFORM_SUPPORT";
 
 export type UserStatus = "ACTIVE" | "SUSPENDED" | "REMOVED";
 

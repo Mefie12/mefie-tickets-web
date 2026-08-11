@@ -12,6 +12,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@mantine/carousel": "^7.17.8",
     "@mantine/core": "^7.17.0",
     "@mantine/dropzone": "^7.17.8",
     "@mantine/form": "^7.17.8",
@@ -27,6 +28,7 @@
     "@tiptap/react": "^3.29.2",
     "@tiptap/starter-kit": "^3.29.2",
     "axios": "^1.7.9",
+    "embla-carousel-react": "^8.6.0",
     "html5-qrcode": "^2.3.8",
     "libphonenumber-js": "^1.13.10",
     "next": "16.3.0",

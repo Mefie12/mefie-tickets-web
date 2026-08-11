@@ -16,7 +16,7 @@ import type { TeamRow } from "@/lib/teamApi";
 export type SessionUser = CurrentUser & { role: Role | null };
 
 /**
- * Wrapped in React's cache() so the (admin) layout's auth guard and any
+ * Wrapped in React's cache() so the (organization) layout's auth guard and any
  * page under it that also needs the current user share one Laravel call
  * per request, instead of each Server Component fetching it separately.
  */
@@ -28,7 +28,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
 
   if (!user.email_verified_at) {
     // Unverified sessions can't call the members endpoint (verified-only)
-    // and don't need a role yet — the (admin) layout redirects these to
+    // and don't need a role yet — the (organization) layout redirects these to
     // /verify-email before anything role-gated is ever rendered.
     return { ...user, role: null };
   }
