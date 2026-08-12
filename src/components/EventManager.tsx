@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -21,7 +20,6 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconArrowLeft, IconQrcode, IconReceipt } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { TimezoneSelector } from "@/components/TimezoneSelector";
 import { RichTextDescription } from "@/components/RichTextDescription";
@@ -54,7 +52,7 @@ import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "tickets", "questions", "terms"];
+const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "questions", "terms"];
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -94,39 +92,11 @@ export function EventManager({
   return (
     <Stack gap="xl">
       <Stack gap="xs">
-        <Button
-          component={Link}
-          href="/events"
-          variant="subtle"
-          size="compact-sm"
-          leftSection={<IconArrowLeft size={14} />}
-          style={{ alignSelf: "flex-start" }}
-        >
-          Back to events
-        </Button>
         <Group justify="space-between">
           <Title order={2} fz={28}>
             {event.title}
           </Title>
           <Group gap="sm">
-            <Button
-              component={Link}
-              href={`/events/${event.id}/orders`}
-              variant="light"
-              size="compact-sm"
-              leftSection={<IconReceipt size={14} />}
-            >
-              Orders
-            </Button>
-            <Button
-              component={Link}
-              href={`/events/${event.id}/check-in-lists`}
-              variant="light"
-              size="compact-sm"
-              leftSection={<IconQrcode size={14} />}
-            >
-              Check-In Lists
-            </Button>
             <Badge color={STATUS_COLOR[event.status]} variant="light">
               {event.status}
             </Badge>
@@ -158,7 +128,7 @@ export function EventManager({
           <Tabs.Tab value="date-time">Date &amp; Time</Tabs.Tab>
           <Tabs.Tab value="location">Location &amp; Access</Tabs.Tab>
           <Tabs.Tab value="media">Media</Tabs.Tab>
-          <Tabs.Tab value="tickets">Tickets &amp; Pricing</Tabs.Tab>
+          <Tabs.Tab value="ticket-setup">Ticket Setup</Tabs.Tab>
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
           <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
         </Tabs.List>
@@ -175,7 +145,7 @@ export function EventManager({
         <Tabs.Panel value="media" pt="lg">
           <EventMediaEditor eventId={event.id} initialEvent={event} disabled={archived} />
         </Tabs.Panel>
-        <Tabs.Panel value="tickets" pt="lg">
+        <Tabs.Panel value="ticket-setup" pt="lg">
           <ProductsEditor
             eventId={event.id}
             eventTimezone={event.timezone}
