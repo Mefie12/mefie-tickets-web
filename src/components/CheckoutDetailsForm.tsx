@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Checkbox, Divider, Group, SegmentedControl, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -89,6 +89,7 @@ export function CheckoutDetailsForm({
   const [notifyAttendees, setNotifyAttendees] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsVersionChanged, setTermsVersionChanged] = useState(false);
+  const checkoutIdempotencyKey = useRef(crypto.randomUUID());
 
   const orderQuestions = event.questions.filter((q) => q.scope === "ORDER").sort((a, b) => a.sort_order - b.sort_order);
   const attendeeQuestions = event.questions
@@ -106,6 +107,7 @@ export function CheckoutDetailsForm({
         last_name: lastName,
         email,
         phone,
+        checkout_idempotency_key: checkoutIdempotencyKey.current,
         items: cartItems.map((item) => ({ product_id: item.product_id, ticket_option_id: item.ticket_option_id, quantity: item.quantity })),
         order_answers: orderQuestions.map((q) => ({ question_id: q.id, answer: orderAnswers[q.id] ?? "" })),
         notify_attendees: notifyAttendees,

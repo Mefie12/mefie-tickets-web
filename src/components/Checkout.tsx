@@ -58,7 +58,7 @@ export function Checkout({ event }: { event: PublicEvent }) {
 
   const paymentIntentMutation = useMutation({
     mutationFn: (o: Order) => createPaymentIntent(event.id, o.short_id),
-    onSuccess: (data: { client_secret: string }) => {
+    onSuccess: (data: { client_secret: string; provider: "STRIPE"; provider_account_id: string }) => {
       setClientSecret(data.client_secret);
       setStep("payment");
     },
@@ -96,7 +96,7 @@ export function Checkout({ event }: { event: PublicEvent }) {
     }
 
     if (clientSecret) {
-      return <CheckoutPaymentStep order={order} clientSecret={clientSecret} onPaid={() => setStep("confirmation")} />;
+      return <CheckoutPaymentStep eventId={event.id} order={order} clientSecret={clientSecret} onPaid={() => setStep("confirmation")} />;
     }
 
     // Reservation was created but the payment-intent call failed —

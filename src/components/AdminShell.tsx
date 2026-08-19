@@ -21,6 +21,7 @@ import {
   IconTicket,
   IconUserCircle,
   IconUsers,
+  IconCreditCard,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import type { SessionUser } from "@/lib/session";
@@ -81,6 +82,15 @@ export function AdminShell({ user, children }: { user: SessionUser; children: Re
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
+        {user.role === "ADMIN" && (
+          <NavLink
+            component={Link}
+            href="/organization/payments"
+            label="Payments & Payouts"
+            leftSection={<IconCreditCard size={16} />}
+            active={pathname.startsWith("/organization/payments")}
+          />
+        )}
         <NavLink
           component={Link}
           href="/dashboard"

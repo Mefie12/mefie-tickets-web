@@ -100,7 +100,7 @@ async function prepareAuthenticatedRequest(
  */
 export async function backendRequest<T = unknown>(
   path: string,
-  options: { method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown } = {},
+  options: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown } = {},
 ): Promise<BackendResult<T>> {
   const method = options.method ?? "GET";
   const { cookieHeader, xsrfToken, setCookieHeaders } = await prepareAuthenticatedRequest(method !== "GET");

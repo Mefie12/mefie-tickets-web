@@ -57,6 +57,7 @@ export type CreateOrderInput = {
   // — a stale value is rejected with code TERMS_VERSION_CHANGED.
   terms_accepted?: boolean;
   terms_version_id?: number;
+  checkout_idempotency_key?: string;
 };
 
 export type OrderTermsAcceptance = {
@@ -125,8 +126,14 @@ export function createOrder(eventId: number, input: CreateOrderInput) {
 }
 
 export function createPaymentIntent(eventId: number, shortId: string) {
-  return request<{ client_secret: string }>(
-    `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/stripe/payment-intent`,
+  return request<{ client_secret: string; provider: "STRIPE"; provider_account_id: string }>(
+    `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/payment`,
     { method: "POST" },
+  );
+}
+
+export function getOrderPaymentStatus(eventId: number, shortId: string) {
+  return request<{ status: OrderStatus; completed_at: string | null }>(
+    `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/payment-status`,
   );
 }
