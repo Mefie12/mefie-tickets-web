@@ -8,11 +8,8 @@ import { formatMoney } from "@/lib/money";
 
 /**
  * Shown either immediately (a FREE order completes synchronously with
- * no payment step) or right after CheckoutPaymentStep's confirmPayment()
- * resolves "succeeded". Trusts that client-side signal rather than
- * re-polling the backend for the webhook-driven COMPLETED status — in
- * practice webhook delivery is near-instant, and there's no public
- * order-status endpoint to poll against yet. No dedicated URL: "Find My
+ * no payment step) or only after CheckoutPaymentStep verifies Mefie's
+ * webhook-authoritative COMPLETED status. No dedicated URL: "Find My
  * Tickets" is out of MVP scope, so there's nothing durable to link to.
  */
 export function OrderConfirmation({ eventId, order }: { eventId: number; order: Order }) {

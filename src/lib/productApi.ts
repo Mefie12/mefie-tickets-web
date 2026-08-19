@@ -18,6 +18,7 @@ export type TicketOption = {
   quantity_available: number;
   quantity_sold: number;
   quantity_reserved: number;
+  quantity_complimentary_held: number;
   disabled_at: string | null;
   is_enabled: boolean;
   max_attendees_per_registration: number | null;

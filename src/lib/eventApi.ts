@@ -44,9 +44,10 @@ export type Event = {
   organization_id: string;
   title: string;
   description: string;
-  event_category_id: number;
+  event_category_id: number | null;
   event_subcategory_id: number | null;
-  category: EventTaxonomyItem;
+  classification_version: number;
+  category: EventTaxonomyItem | null;
   subcategory: EventTaxonomyItem | null;
   audiences: EventTaxonomyItem[];
   attributes: EventTaxonomyItem[];
@@ -114,7 +115,7 @@ export function createEvent(
   input: Partial<EventScheduleInput> & {
     title: string;
     description: string;
-    event_category_id: number;
+    event_category_id?: number | null;
     event_subcategory_id?: number | null;
     audience_ids?: number[];
     attribute_ids?: number[];
@@ -130,8 +131,9 @@ export function updateEvent(
   input: Partial<EventScheduleInput> & {
     title?: string;
     description?: string;
-    event_category_id?: number;
+    event_category_id?: number | null;
     event_subcategory_id?: number | null;
+    classification_version?: number;
     audience_ids?: number[];
     attribute_ids?: number[];
     currency_code?: string;

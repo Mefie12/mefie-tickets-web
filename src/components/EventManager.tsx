@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -21,7 +20,6 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconArrowLeft, IconQrcode, IconReceipt } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { TimezoneSelector } from "@/components/TimezoneSelector";
 import { RichTextDescription } from "@/components/RichTextDescription";
@@ -53,8 +51,10 @@ import { ProductsEditor } from "@/components/ProductsEditor";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
+import { ComplimentarySettings } from "@/components/ComplimentarySettings";
+import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "tickets", "questions", "terms"];
+const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "terms"];
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -66,10 +66,12 @@ export function EventManager({
   initialEvent,
   initialProducts,
   initialQuestions,
+  initialComplimentaryProgram,
 }: {
   initialEvent: Event;
   initialProducts: Product[];
   initialQuestions: Question[];
+  initialComplimentaryProgram: ComplimentaryProgram;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const archived = event.status === "ARCHIVED";
@@ -94,39 +96,11 @@ export function EventManager({
   return (
     <Stack gap="xl">
       <Stack gap="xs">
-        <Button
-          component={Link}
-          href="/events"
-          variant="subtle"
-          size="compact-sm"
-          leftSection={<IconArrowLeft size={14} />}
-          style={{ alignSelf: "flex-start" }}
-        >
-          Back to events
-        </Button>
         <Group justify="space-between">
           <Title order={2} fz={28}>
             {event.title}
           </Title>
           <Group gap="sm">
-            <Button
-              component={Link}
-              href={`/events/${event.id}/orders`}
-              variant="light"
-              size="compact-sm"
-              leftSection={<IconReceipt size={14} />}
-            >
-              Orders
-            </Button>
-            <Button
-              component={Link}
-              href={`/events/${event.id}/check-in-lists`}
-              variant="light"
-              size="compact-sm"
-              leftSection={<IconQrcode size={14} />}
-            >
-              Check-In Lists
-            </Button>
             <Badge color={STATUS_COLOR[event.status]} variant="light">
               {event.status}
             </Badge>
@@ -158,7 +132,8 @@ export function EventManager({
           <Tabs.Tab value="date-time">Date &amp; Time</Tabs.Tab>
           <Tabs.Tab value="location">Location &amp; Access</Tabs.Tab>
           <Tabs.Tab value="media">Media</Tabs.Tab>
-          <Tabs.Tab value="tickets">Tickets &amp; Pricing</Tabs.Tab>
+          <Tabs.Tab value="ticket-setup">Ticket Setup</Tabs.Tab>
+          <Tabs.Tab value="complimentary">Complimentary</Tabs.Tab>
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
           <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
         </Tabs.List>
@@ -175,7 +150,7 @@ export function EventManager({
         <Tabs.Panel value="media" pt="lg">
           <EventMediaEditor eventId={event.id} initialEvent={event} disabled={archived} />
         </Tabs.Panel>
-        <Tabs.Panel value="tickets" pt="lg">
+        <Tabs.Panel value="ticket-setup" pt="lg">
           <ProductsEditor
             eventId={event.id}
             eventTimezone={event.timezone}
@@ -183,6 +158,9 @@ export function EventManager({
             initialProducts={initialProducts}
             disabled={archived}
           />
+        </Tabs.Panel>
+        <Tabs.Panel value="complimentary" pt="lg">
+          <ComplimentarySettings eventId={event.id} initialProgram={initialComplimentaryProgram} products={initialProducts} disabled={archived} />
         </Tabs.Panel>
         <Tabs.Panel value="questions" pt="lg">
           <QuestionsEditor eventId={event.id} initialQuestions={initialQuestions} disabled={archived} />
@@ -220,11 +198,18 @@ function EventDetailsForm({
     validate: {
       title: (v) => (v.trim().length === 0 ? "Title is required" : null),
       description: (v) => (v.replace(/<[^>]*>/g, "").trim().length === 0 ? "Description is required" : null),
-      event_category_id: (v) => (!v ? "Category is required" : null),
       currency_code: (v) => (!v ? "Currency is required" : null),
     },
   });
   const category = taxonomies.data?.categories.find((item: EventCategory) => String(item.id) === form.values.event_category_id);
+  const categoryOptions = [...(taxonomies.data?.categories ?? []).map((item: EventCategory) => ({ value: String(item.id), label: item.name }))];
+  if (event.category && !categoryOptions.some((item) => item.value === String(event.category!.id))) {
+    categoryOptions.push({ value: String(event.category.id), label: `${event.category.name} (archived)` });
+  }
+  const subcategoryOptions = [...(category?.subcategories ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))];
+  if (event.subcategory && !subcategoryOptions.some((item) => item.value === String(event.subcategory!.id))) {
+    subcategoryOptions.push({ value: String(event.subcategory.id), label: `${event.subcategory.name} (archived)` });
+  }
 
   // Suggested from the event's already-saved location (not live Location-tab
   // typing — that's a separate form/tab). Dismissible, never auto-applied.
@@ -243,8 +228,9 @@ function EventDetailsForm({
     mutationFn: (values: typeof form.values) => updateEvent(event.id, {
       title: values.title,
       description: values.description,
-      event_category_id: Number(values.event_category_id),
+      event_category_id: values.event_category_id ? Number(values.event_category_id) : null,
       event_subcategory_id: values.event_subcategory_id ? Number(values.event_subcategory_id) : null,
+      classification_version: event.classification_version,
       audience_ids: values.audience_ids.map(Number),
       attribute_ids: values.attribute_ids.map(Number),
       currency_code: values.currency_code,
@@ -282,12 +268,12 @@ function EventDetailsForm({
                 </Button>
               </Alert>
             )}
-            <Select required searchable allowDeselect={false} label="Category"
-              data={(taxonomies.data?.categories ?? []).map((item: EventCategory) => ({ value: String(item.id), label: item.name }))}
+            <Select searchable clearable label="Category (required to publish)"
+              data={categoryOptions}
               {...form.getInputProps("event_category_id")}
               onChange={(value) => { form.setFieldValue("event_category_id", value ?? ""); form.setFieldValue("event_subcategory_id", ""); }} />
             <Select searchable clearable disabled={disabled || !category} label="Subcategory (optional)"
-              data={(category?.subcategories ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))}
+              data={subcategoryOptions}
               {...form.getInputProps("event_subcategory_id")} />
             <MultiSelect searchable clearable label="Audience (optional)" description="Helps attendees discover events intended for them."
               data={(taxonomies.data?.audiences ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))} {...form.getInputProps("audience_ids")} />

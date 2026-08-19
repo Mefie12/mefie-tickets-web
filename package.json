@@ -20,6 +20,8 @@
     "@mantine/modals": "^7.17.8",
     "@mantine/notifications": "^7.17.0",
     "@mantine/tiptap": "^7.17.8",
+    "@stripe/connect-js": "^3.4.6",
+    "@stripe/react-connect-js": "^3.4.4",
     "@stripe/react-stripe-js": "^6.8.0",
     "@stripe/stripe-js": "^9.13.0",
     "@tabler/icons-react": "^3.34.0",

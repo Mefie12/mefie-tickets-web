@@ -22,6 +22,7 @@ import {
   IconUserShield,
   IconUsers,
   IconBuildingStore,
+  IconCategory,
 } from "@tabler/icons-react";
 import { endAdminSession } from "@/lib/adminAuthApi";
 import { logout } from "@/lib/authApi";
@@ -159,6 +160,9 @@ export function PlatformAdminShell({
             leftSection={<IconClipboardList size={16} />}
             active={pathname.startsWith("/admin/audit-log")}
           />
+        )}
+        {has("event_taxonomy.view") && (
+          <NavLink component={Link} href="/admin/event-taxonomy" label="Event Taxonomy" leftSection={<IconCategory size={16} />} active={pathname.startsWith("/admin/event-taxonomy")} />
         )}
       </AppShell.Navbar>
 

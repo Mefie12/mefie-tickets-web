@@ -27,7 +27,6 @@ export default function NewEventPage() {
     validate: {
       title: (v) => (v.trim().length === 0 ? "Title is required" : null),
       description: (v) => (v.replace(/<[^>]*>/g, "").trim().length === 0 ? "Description is required" : null),
-      event_category_id: (v) => (!v ? "Category is required" : null),
     },
   });
 
@@ -39,7 +38,7 @@ export default function NewEventPage() {
       createEvent({
         title: values.title,
         description: values.description,
-        event_category_id: Number(values.event_category_id),
+        event_category_id: values.event_category_id ? Number(values.event_category_id) : null,
         event_subcategory_id: values.event_subcategory_id ? Number(values.event_subcategory_id) : null,
         audience_ids: values.audience_ids.map(Number),
         attribute_ids: values.attribute_ids.map(Number),
@@ -69,7 +68,7 @@ export default function NewEventPage() {
           <Stack>
             <TextInput required label="Event title" placeholder="Summer Music Festival" {...form.getInputProps("title")} />
             <RichTextDescription value={form.values.description} onChange={(value) => form.setFieldValue("description", value)} error={form.errors.description} />
-            <Select required searchable allowDeselect={false} label="Category" placeholder="Select a category"
+            <Select searchable clearable label="Category (optional for drafts)" placeholder="Select a category"
               data={(taxonomies.data?.categories ?? []).map((item: EventCategory) => ({ value: String(item.id), label: item.name }))}
               {...form.getInputProps("event_category_id")}
               onChange={(value) => { form.setFieldValue("event_category_id", value ?? ""); form.setFieldValue("event_subcategory_id", ""); }} />

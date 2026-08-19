@@ -25,7 +25,15 @@ function LoginForm() {
   // here, then land them back where they came from once logged in —
   // see AcceptInvitationForm's "requires_login" branch.
   const next = useSearchParams().get("next");
-  const destination = next && next.startsWith("/") ? next : "/dashboard";
+  // A distributor-only account (created via the complimentary-allocation
+  // invitation flow) never gets an organization membership, so
+  // current_organization_id stays null — /dashboard would otherwise show
+  // them a bare "create your first event" prompt that isn't meant for
+  // them (confirmed live: that's exactly what happened before this).
+  function destinationFor(user: CurrentUser): string {
+    if (next && next.startsWith("/")) return next;
+    return user.current_organization_id === null ? "/distributor" : "/dashboard";
+  }
 
   const form = useForm({
     initialValues: { email: "", password: "", remember: false },
@@ -39,7 +47,7 @@ function LoginForm() {
     mutationFn: login,
     onSuccess: (data: { user: CurrentUser }) => {
       if (data.user.email_verified_at) {
-        router.push(destination);
+        router.push(destinationFor(data.user));
       } else {
         setUnverifiedUser(data.user);
       }
@@ -62,7 +70,7 @@ function LoginForm() {
         subtitle={`Enter the 6-digit code we sent to ${unverifiedUser.email} to continue.`}
       >
         <VerifyEmailPanel
-          onVerified={() => router.push(destination)}
+          onVerified={() => router.push(destinationFor(unverifiedUser))}
           expiresAt={unverifiedUser.email_verification_code_expires_at}
         />
       </AuthLayout>

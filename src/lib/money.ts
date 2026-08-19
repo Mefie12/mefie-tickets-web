@@ -39,6 +39,17 @@ export function formatAmount(amount: string | number, currencyCode: string): str
   }
 }
 
+/**
+ * For `_minor` integer fields (the payments domain's unit — see the
+ * API's Money value object). Assumes a 2-decimal currency, matching
+ * every currency this platform currently routes through; doesn't yet
+ * special-case zero-decimal currencies (JPY etc.) the way the backend's
+ * CurrencyMetadata does.
+ */
+export function formatMinorAmount(amountMinor: number, currencyCode: string): string {
+  return formatAmount(amountMinor / 100, currencyCode);
+}
+
 /** The bare currency symbol (e.g. "£" for GBP) — for use as an input prefix, not for formatted totals. */
 export function currencySymbol(currencyCode: string): string {
   try {

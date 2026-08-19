@@ -1,0 +1,80 @@
+.panel {
+  overflow: hidden;
+  background: var(--mantine-color-body);
+}
+
+.scrollArea {
+  min-height: 260px;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.categoryRow {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  color: var(--mantine-color-text);
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.categoryRow:hover {
+  background: var(--mantine-color-default-hover);
+  border-color: var(--mantine-color-dark-3);
+}
+
+.categoryRow[data-selected] {
+  background: var(--mantine-color-brand-9);
+  border-color: var(--mantine-color-brand-5);
+  box-shadow: inset 3px 0 0 var(--mantine-color-brand-3);
+}
+
+.categoryButton {
+  flex: 1;
+  min-width: 0;
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-xs) var(--mantine-spacing-sm) var(--mantine-spacing-md);
+  color: inherit;
+  border-radius: var(--mantine-radius-md);
+}
+
+.categoryButton:focus-visible {
+  outline: 2px solid var(--mantine-color-brand-3);
+  outline-offset: 2px;
+}
+
+.rowCopy {
+  min-width: 0;
+}
+
+.chevron {
+  color: var(--mantine-color-dimmed);
+  transition: transform 120ms ease, color 120ms ease;
+}
+
+.categoryRow[data-selected] .chevron {
+  color: var(--mantine-color-brand-1);
+  transform: translateX(2px);
+}
+
+.subcategoryRow {
+  background: transparent;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.subcategoryRow:hover {
+  background: var(--mantine-color-default-hover);
+  border-color: var(--mantine-color-dark-3);
+}
+
+.formSurface,
+.impactSurface {
+  background: var(--mantine-color-dark-7);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .categoryRow,
+  .chevron,
+  .subcategoryRow {
+    transition: none;
+  }
+}

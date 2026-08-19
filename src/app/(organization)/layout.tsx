@@ -22,5 +22,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/verify-email");
   }
 
+  // A distributor-only account (created via the complimentary-allocation
+  // invitation flow) never gets an organization membership — every route
+  // in this group assumes one exists, so send them to their own portal
+  // instead of letting them hit a broken organizer experience.
+  if (user.current_organization_id === null) {
+    redirect("/distributor");
+  }
+
   return <AdminShell user={user}>{children}</AdminShell>;
 }

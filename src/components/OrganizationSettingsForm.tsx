@@ -125,8 +125,7 @@ export function OrganizationSettingsForm({
 
               <Divider label="Payment settings" labelPosition="left" mt="sm" />
               <Text size="xs" c="dimmed" mt={-8}>
-                Temporary, MVP-only setting — see the platform payment model notes. Defaults to charging the buyer;
-                switch off to absorb the cost out of your payout instead.
+                Choose who pays Mefie&apos;s service fee. Card-processing fees are separate and are charged to your connected payment account.
               </Text>
               <Switch
                 label="Pass tax on to attendees"
@@ -134,8 +133,8 @@ export function OrganizationSettingsForm({
                 {...form.getInputProps("tax_pass_through", { type: "checkbox" })}
               />
               <Switch
-                label="Pass platform fee on to attendees"
-                description="On: the platform fee is added to the buyer's total. Off: absorbed from your payout."
+                label="Pass Mefie service fee on to attendees"
+                description="On: the Mefie service fee is added to the buyer's total. Off: your organization absorbs it. Mefie service fees are normally non-refundable."
                 {...form.getInputProps("fee_pass_through", { type: "checkbox" })}
               />
 

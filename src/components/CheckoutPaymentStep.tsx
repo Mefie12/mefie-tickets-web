@@ -1,25 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { loadStripe, type StripePaymentElementOptions } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { Alert, Button, Stack, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
-import type { Order } from "@/lib/checkoutApi";
+import { getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import { formatMoney } from "@/lib/money";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
-
 const paymentElementOptions: StripePaymentElementOptions = { layout: "tabs" };
 
 /**
- * The PaymentIntent is created server-side with
- * automatic_payment_methods.allow_redirects = 'never' (single platform
- * Stripe account, card-only MVP checkout — see
- * StripePaymentService::createPaymentIntent), so confirmPayment() below
- * never actually redirects; `redirect: 'if_required'` keeps it that way
- * and resolves in place instead of leaving the page.
+ * Stripe confirms the card interaction, but the browser is not allowed
+ * to complete the order. After provider success we poll Mefie's
+ * webhook-authoritative status before showing a confirmation.
  *
  * No "back" step here on purpose: the order is already RESERVED
  * server-side by this point, and there's no update-order endpoint —
@@ -29,13 +24,23 @@ const paymentElementOptions: StripePaymentElementOptions = { layout: "tabs" };
  */
 export function CheckoutPaymentStep({
   order,
+  eventId,
   clientSecret,
   onPaid,
 }: {
   order: Order;
+  eventId: number;
   clientSecret: string;
   onPaid: () => void;
 }) {
+  // Held-funds policy: the PaymentIntent behind this client_secret is
+  // created on Mefie's own platform Stripe account, not the organizer's
+  // connected account (see StripeGateway::createPayment) — so Stripe.js
+  // must NOT be scoped with `stripeAccount` here. Doing so previously
+  // made Elements unable to resolve the PaymentIntent at all (confirmed
+  // live: the payment step hung with the PaymentElement never usable).
+  const stripePromise = useMemo(() => (publishableKey ? loadStripe(publishableKey) : null), []);
+
   if (!stripePromise) {
     return (
       <Alert color="red" icon={<IconAlertCircle size={18} />} title="Payment unavailable">
@@ -46,12 +51,12 @@ export function CheckoutPaymentStep({
 
   return (
     <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night" } }}>
-      <PaymentForm order={order} onPaid={onPaid} />
+      <PaymentForm eventId={eventId} order={order} onPaid={onPaid} />
     </Elements>
   );
 }
 
-function PaymentForm({ order, onPaid }: { order: Order; onPaid: () => void }) {
+function PaymentForm({ eventId, order, onPaid }: { eventId: number; order: Order; onPaid: () => void }) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -77,7 +82,16 @@ function PaymentForm({ order, onPaid }: { order: Order; onPaid: () => void }) {
     }
 
     if (paymentIntent?.status === "succeeded") {
-      onPaid();
+      for (let attempt = 0; attempt < 15; attempt += 1) {
+        const authoritative = await getOrderPaymentStatus(eventId, order.short_id);
+        if (authoritative.status === "COMPLETED") {
+          onPaid();
+          return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      }
+      setErrorMessage("Your payment was received and is still being confirmed. Please wait a moment before trying again.");
+      setSubmitting(false);
       return;
     }
 

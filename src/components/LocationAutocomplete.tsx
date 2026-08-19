@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Combobox, Loader, Text, TextInput, useCombobox } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { geocodeAddress, type MapboxSuggestion } from "@/lib/mapbox";
@@ -41,10 +41,14 @@ export function LocationAutocomplete({
   const [suggestions, setSuggestions] = useState<MapboxSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [debouncedValue] = useDebouncedValue(value, 300);
+  // Guards the search+auto-open below from firing off a pre-filled
+  // `value` (e.g. an already-saved event address) on mount — only a
+  // real keystroke should trigger a Mapbox lookup and pop the dropdown.
+  const hasTyped = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
-    if (debouncedValue.trim().length < 3) {
+    if (!hasTyped.current || debouncedValue.trim().length < 3) {
       // Clearing stale results the instant the query drops below the
       // search threshold is the point of this effect (synchronizing
       // with the debounced Mapbox fetch below) — not derivable state.
@@ -86,6 +90,7 @@ export function LocationAutocomplete({
           value={value}
           rightSection={loading ? <Loader size={16} /> : null}
           onChange={(event) => {
+            hasTyped.current = true;
             onChange(event.currentTarget.value);
             combobox.updateSelectedOptionIndex();
           }}
