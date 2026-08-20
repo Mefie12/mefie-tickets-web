@@ -27,10 +27,11 @@ export function PaymentsAndPayouts({
     mutationFn: () => provisionPaymentAccount(country.trim().toUpperCase()),
     onSuccess: ({ payment_account }) => setAccount(payment_account),
   });
+  const disconnected = account?.account_status === "DISCONNECTED";
   const connectInstance = useMemo(() => {
-    if (!account || account.provider !== "STRIPE" || !publishableKey) return null;
+    if (!account || account.provider !== "STRIPE" || !publishableKey || disconnected) return null;
     return loadConnectAndInitialize({ publishableKey, fetchClientSecret: createPaymentManagementSession });
-  }, [account]);
+  }, [account, disconnected]);
 
   if (!account) {
     return (
@@ -78,8 +79,15 @@ export function PaymentsAndPayouts({
 
       {initialEarnings && <PendingEarningsCard earnings={initialEarnings} currency={initialEarnings.currency ?? account.default_currency} />}
 
-      {!publishableKey && <Alert color="red">Stripe publishable key is not configured.</Alert>}
-      {connectInstance && (
+      {disconnected && (
+        <Alert color="red" title="Payment account disconnected">
+          Your payment account connection is no longer valid and needs to be reconnected by our team before payouts
+          can continue. Contact support to resolve this — your ticket sales are not affected.
+        </Alert>
+      )}
+
+      {!disconnected && !publishableKey && <Alert color="red">Stripe publishable key is not configured.</Alert>}
+      {!disconnected && connectInstance && (
         <ConnectComponentsProvider connectInstance={connectInstance}>
           {account.account_status === "ONBOARDING" || account.onboarding_status !== "SUBMITTED" ? (
             <ConnectAccountOnboarding onExit={() => window.location.reload()} />
