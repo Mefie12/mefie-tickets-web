@@ -8,6 +8,8 @@ import { ConnectAccountManagement, ConnectAccountOnboarding, ConnectComponentsPr
 import { ApiError } from "@/lib/authApi";
 import { createPaymentManagementSession, provisionPaymentAccount, type PaymentAccount, type PendingEarnings } from "@/lib/paymentAccountApi";
 import { CountrySelector } from "@/components/CountrySelector";
+import { CurrencySelector } from "@/components/CurrencySelector";
+import { COUNTRIES_BY_CODE } from "@/lib/countries";
 import { PendingEarningsCard } from "@/components/PendingEarningsCard";
 import { formatMinorAmount } from "@/lib/money";
 
@@ -16,38 +18,71 @@ const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 export function PaymentsAndPayouts({
   initialAccount,
   initialEarnings,
+  defaultLegalCountry,
 }: {
   initialAccount: PaymentAccount | null;
   initialEarnings: PendingEarnings | null;
+  /** Platform-configured convenience pre-fill (config('organizations.default_legal_country')) — never a claim about provider support. */
+  defaultLegalCountry: string | null;
 }) {
   const [account, setAccount] = useState(initialAccount);
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState(defaultLegalCountry ?? "");
+  const [currency, setCurrency] = useState(() => (defaultLegalCountry ? COUNTRIES_BY_CODE.get(defaultLegalCountry)?.defaultCurrency ?? "" : ""));
   const [countryConfirmed, setCountryConfirmed] = useState(false);
   const setup = useMutation({
-    mutationFn: () => provisionPaymentAccount(country.trim().toUpperCase()),
+    mutationFn: () => provisionPaymentAccount(country.trim().toUpperCase(), currency.trim().toUpperCase()),
     onSuccess: ({ payment_account }) => setAccount(payment_account),
   });
   const disconnected = account?.account_status === "DISCONNECTED";
+  // A HISTORICAL account is a permanently-rejected setup attempt (see
+  // PaymentAccountService::provision()'s InvalidRequestException catch)
+  // — it must never be mistaken for a real, live account, or the
+  // organizer can never see the setup form again after one rejection.
+  const rejected = account?.routing_status === "HISTORICAL";
   const connectInstance = useMemo(() => {
-    if (!account || account.provider !== "STRIPE" || !publishableKey || disconnected) return null;
+    if (!account || account.provider !== "STRIPE" || !publishableKey || disconnected || rejected) return null;
     return loadConnectAndInitialize({ publishableKey, fetchClientSecret: createPaymentManagementSession });
-  }, [account, disconnected]);
+  }, [account, disconnected, rejected]);
 
-  if (!account) {
+  if (!account || rejected) {
+    const rejectionReason = rejected ? account?.provider_metadata?.rejection_reason : undefined;
+
     return (
       <Card withBorder radius="lg" p="xl" maw={720}>
         <Stack>
           <Title order={2}>Payments &amp; Payouts</Title>
           <Text c="dimmed">
-            Add your legal payment country to start selling tickets right away — you can complete full verification
-            later, once you have real sales to withdraw. Your legal payment country is separate from your public
-            organization address.
+            Add your legal payment country and settlement currency to start selling tickets right away — you can
+            complete full verification later, once you have real sales to withdraw. This is separate from your public
+            organization address, and separate from what currency any individual event sells tickets in.
           </Text>
-          <CountrySelector label="Legal entity country" required value={country} onChange={(value) => { setCountry(value ?? ""); setCountryConfirmed(false); }} />
+          {rejectionReason && (
+            <Alert color="red" title="Your last setup attempt was rejected">
+              {rejectionReason} Try a different country or settlement currency below.
+            </Alert>
+          )}
+          <CountrySelector
+            label="Legal entity country"
+            required
+            value={country}
+            onChange={(value) => {
+              setCountry(value ?? "");
+              setCountryConfirmed(false);
+              const suggested = value ? COUNTRIES_BY_CODE.get(value)?.defaultCurrency : undefined;
+              if (suggested) setCurrency(suggested);
+            }}
+          />
+          <CurrencySelector
+            label="Settlement currency"
+            description="The currency your payouts settle in — auto-filled from your country, but you can change it. Your events can still sell tickets in any currency; sales in other currencies are automatically converted at payout time."
+            required
+            value={currency}
+            onChange={(value) => setCurrency(value ?? "")}
+          />
           <Alert color="orange">Choose the country where the entity receiving ticket revenue is legally registered. This is a financial/KYC setting, not your public address, and changing it later requires payment-account replacement.</Alert>
           <Checkbox checked={countryConfirmed} onChange={(event) => setCountryConfirmed(event.currentTarget.checked)} label="I confirm this is the payment account's legal country." />
           {setup.error && <Alert color="red">{setup.error instanceof ApiError ? setup.error.message : "Payment setup failed."}</Alert>}
-          <Button disabled={country.length !== 2 || !countryConfirmed} loading={setup.isPending} onClick={() => setup.mutate()} style={{ alignSelf: "flex-start" }}>Set up payments</Button>
+          <Button disabled={country.length !== 2 || currency.length !== 3 || !countryConfirmed} loading={setup.isPending} onClick={() => setup.mutate()} style={{ alignSelf: "flex-start" }}>Set up payments</Button>
         </Stack>
       </Card>
     );

@@ -10,6 +10,7 @@ import {
   Button,
   Card,
   Group,
+  Modal,
   MultiSelect,
   SegmentedControl,
   Select,
@@ -29,7 +30,7 @@ import { CurrencySelector } from "@/components/CurrencySelector";
 import { LocationAutocomplete } from "@/components/LocationAutocomplete";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { utcIsoToZonedParts } from "@/lib/eventDateTime";
+import { minimumEndTime, utcIsoToZonedParts, wallClockEndIsInvalid } from "@/lib/eventDateTime";
 import { browserTimezone } from "@/lib/timezones";
 import { CURRENCIES_BY_CODE, suggestCurrencyForCountryCode } from "@/lib/currencies";
 import { mapboxTokenConfigured, type MapboxSuggestion } from "@/lib/mapbox";
@@ -62,6 +63,44 @@ const STATUS_COLOR: Record<EventStatus, string> = {
   ARCHIVED: "dark",
 };
 
+type StatusConfirmation = {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  confirmColor?: string;
+};
+
+function statusConfirmation(from: EventStatus, to: EventStatus): StatusConfirmation {
+  if (from === "ARCHIVED" && to === "DRAFT") {
+    return {
+      title: "Unarchive this event?",
+      body: "The event will become editable again, but it will stay private and ticket sales will remain stopped until you publish it.",
+      confirmLabel: "Unarchive as draft",
+    };
+  }
+  if (to === "ARCHIVED") {
+    return {
+      title: "Archive this event?",
+      body: "The event will be hidden and become read-only. Existing orders, attendee records, and tickets remain intact and valid. Archiving does not cancel or refund the event, and you can restore it later as a draft.",
+      confirmLabel: "Archive event",
+      confirmColor: "red",
+    };
+  }
+  if (to === "LIVE") {
+    return {
+      title: "Publish this event?",
+      body: "The event will become public. Ticket sales and registrations will follow the availability and sales windows you configured.",
+      confirmLabel: "Publish event",
+    };
+  }
+  return {
+    title: "Unpublish this event?",
+    body: "The public event page and new sales will stop. Existing orders and tickets remain intact and valid; this does not cancel or refund the event.",
+    confirmLabel: "Unpublish event",
+    confirmColor: "orange",
+  };
+}
+
 export function EventManager({
   initialEvent,
   initialProducts,
@@ -74,6 +113,8 @@ export function EventManager({
   initialComplimentaryProgram: ComplimentaryProgram;
 }) {
   const [event, setEvent] = useState(initialEvent);
+  const [requestedStatus, setRequestedStatus] = useState<EventStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const archived = event.status === "ARCHIVED";
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -82,16 +123,23 @@ export function EventManager({
     mutationFn: (status: EventStatus) => updateEventStatus(event.id, status),
     onSuccess: (data: { event: Event }) => {
       setEvent(data.event);
+      setRequestedStatus(null);
+      setStatusError(null);
       notifications.show({ color: "teal", message: `Event is now ${data.event.status}.` });
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
-      notifications.show({
-        color: "red",
-        message: error instanceof ApiError ? (error.fieldError("status") ?? error.message) : "Something went wrong.",
-      });
+      setStatusError(error instanceof ApiError ? (error.fieldError("status") ?? error.message) : "Something went wrong.");
     },
   });
+
+  const confirmation = requestedStatus ? statusConfirmation(event.status, requestedStatus) : null;
+
+  const requestStatusChange = (status: EventStatus) => {
+    if (status === event.status) return;
+    setStatusError(null);
+    setRequestedStatus(status);
+  };
 
   return (
     <Stack gap="xl">
@@ -106,25 +154,60 @@ export function EventManager({
             </Badge>
           </Group>
         </Group>
-        {archived ? (
+        <Group gap="xs">
           <Text size="sm" c="dimmed">
-            This event is archived. Its status cannot be changed.
+            Status:
           </Text>
-        ) : (
-          <Group gap="xs">
-            <Text size="sm" c="dimmed">
-              Status:
-            </Text>
-            <SegmentedControl
-              size="xs"
-              data={["DRAFT", "LIVE", "ARCHIVED"]}
-              value={event.status}
-              onChange={(value) => statusMutation.mutate(value as EventStatus)}
-              disabled={statusMutation.isPending}
-            />
-          </Group>
+          <SegmentedControl
+            size="xs"
+            data={[
+              { value: "DRAFT", label: "Draft" },
+              { value: "LIVE", label: "Live", disabled: archived },
+              { value: "ARCHIVED", label: "Archived" },
+            ]}
+            value={event.status}
+            onChange={(value) => requestStatusChange(value as EventStatus)}
+            disabled={statusMutation.isPending}
+          />
+        </Group>
+        {archived && (
+          <Text size="sm" c="dimmed">
+            This event is archived and read-only. Restore it as a draft to make changes; it will remain private until republished.
+          </Text>
         )}
       </Stack>
+
+      <Modal
+        opened={confirmation !== null}
+        onClose={() => {
+          if (!statusMutation.isPending) {
+            setRequestedStatus(null);
+            setStatusError(null);
+          }
+        }}
+        title={confirmation?.title}
+        centered
+        closeOnClickOutside={!statusMutation.isPending}
+        closeOnEscape={!statusMutation.isPending}
+        withCloseButton={!statusMutation.isPending}
+      >
+        <Stack gap="md">
+          <Text size="sm">{confirmation?.body}</Text>
+          {statusError && <Alert color="red">{statusError}</Alert>}
+          <Group justify="flex-end">
+            <Button variant="default" disabled={statusMutation.isPending} onClick={() => { setRequestedStatus(null); setStatusError(null); }}>
+              Keep current status
+            </Button>
+            <Button
+              color={confirmation?.confirmColor}
+              loading={statusMutation.isPending}
+              onClick={() => requestedStatus && statusMutation.mutate(requestedStatus)}
+            >
+              {confirmation?.confirmLabel}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Tabs defaultValue={VALID_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "details"}>
         <Tabs.List>
@@ -322,6 +405,16 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const setStartPart = (part: "start_date" | "start_time", value: string) => {
+    const nextStartDate = part === "start_date" ? value : form.values.start_date;
+    const nextStartTime = part === "start_time" ? value : form.values.start_time;
+    form.setFieldValue(part, value);
+    if (wallClockEndIsInvalid(nextStartDate, nextStartTime, form.values.end_date, form.values.end_time)) {
+      form.setFieldValue("end_date", "");
+      form.setFieldValue("end_time", "");
+    }
+  };
+
   const updateMutation = useMutation({
     mutationFn: (values: typeof form.values) =>
       updateEvent(event.id, {
@@ -353,12 +446,19 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
           <Stack>
             <Group grow align="flex-start">
-              <TextInput type="date" label="Start date" {...form.getInputProps("start_date")} />
-              <TextInput type="time" label="Start time" {...form.getInputProps("start_time")} />
+              <TextInput type="date" label="Start date" {...form.getInputProps("start_date")} onChange={(event) => setStartPart("start_date", event.currentTarget.value)} />
+              <TextInput type="time" label="Start time" {...form.getInputProps("start_time")} onChange={(event) => setStartPart("start_time", event.currentTarget.value)} />
             </Group>
             <Group grow align="flex-start">
-              <TextInput type="date" label="End date" {...form.getInputProps("end_date")} />
-              <TextInput type="time" label="End time" {...form.getInputProps("end_time")} />
+              <TextInput type="date" label="End date" min={form.values.start_date || undefined} {...form.getInputProps("end_date")} />
+              <TextInput
+                type="time"
+                label="End time"
+                min={minimumEndTime(form.values.start_date, form.values.start_time, form.values.end_date)}
+                disabled={form.values.start_date === form.values.end_date && form.values.start_time === "23:59"}
+                description={form.values.start_date === form.values.end_date && form.values.start_time === "23:59" ? "Choose a later end date." : undefined}
+                {...form.getInputProps("end_time")}
+              />
             </Group>
             <TimezoneSelector
               label="Event timezone"

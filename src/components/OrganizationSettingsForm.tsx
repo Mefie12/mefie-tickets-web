@@ -34,13 +34,16 @@ import {
   uploadOrganizationCoverImage,
   uploadOrganizationLogo,
 } from "@/lib/organizationApi";
+import { PublicShareCard } from "@/components/PublicShareCard";
 
 export function OrganizationSettingsForm({
   initialOrganization,
   canEdit,
+  appUrl,
 }: {
   initialOrganization: Organization;
   canEdit: boolean;
+  appUrl: string;
 }) {
   const [organization, setOrganization] = useState(initialOrganization);
   const router = useRouter();
@@ -104,6 +107,13 @@ export function OrganizationSettingsForm({
         </Title>
         <Badge variant="light">/{organization.slug}</Badge>
       </Group>
+
+      <PublicShareCard
+        url={`${appUrl}/${organization.slug}`}
+        title={`${organization.name} events`}
+        text={`Discover events from ${organization.name}.`}
+        enabled
+      />
 
       <BrandingCard organization={organization} canEdit={canEdit} onUpdated={setOrganization} />
 
@@ -200,7 +210,7 @@ function AdvancedSlugCard({
     <Card withBorder radius="lg" p="xl">
       <Stack gap="xs">
         <Text fw={600}>Advanced</Text>
-        <Group justify="space-between" align="flex-end">
+        <Group justify="space-between" align="flex-end" wrap="wrap">
           <Stack gap={0}>
             <Text size="sm">Organization URL</Text>
             <Text size="sm" c="dimmed">
@@ -208,6 +218,7 @@ function AdvancedSlugCard({
             </Text>
           </Stack>
           <Button
+            disabled={organization.public_url_locked_at !== null}
             variant="light"
             size="xs"
             onClick={() => {
@@ -219,8 +230,9 @@ function AdvancedSlugCard({
           </Button>
         </Group>
         <Text size="xs" c="dimmed">
-          Changing this changes the public link to every event page under this organization. Existing links using
-          the old URL will stop working.
+          {organization.public_url_locked_at
+            ? "This URL is permanently locked because this organization has published an event."
+            : "Changing this changes the public link to every event page under this organization. Existing links using the old URL will stop working."}
         </Text>
       </Stack>
 

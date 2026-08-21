@@ -14,6 +14,14 @@ export type Country = {
   /** Lowercased common abbreviations/alt names (e.g. "uk", "u.k." for GB) — matched against when searching. */
   aliases: string[];
   flag: string;
+  /**
+   * ISO 4217 code of the country's common currency, straight from
+   * `world-countries`' own data (not a hand-maintained table) — a
+   * convenience default for pre-filling a currency picker, never a
+   * claim about what any payment provider actually supports for that
+   * country. Null for the rare country the package reports none for.
+   */
+  defaultCurrency: string | null;
 };
 
 /** Regional-indicator-symbol trick: no image/SVG asset needed, computed straight from the ISO code. */
@@ -31,6 +39,7 @@ export const COUNTRIES: Country[] = worldCountries
     name: country.name.common,
     aliases: (country.altSpellings ?? []).map((alias) => alias.toLowerCase()),
     flag: flagEmoji(country.cca2),
+    defaultCurrency: Object.keys(country.currencies ?? {})[0] ?? null,
   }))
   .sort((a, b) => a.name.localeCompare(b.name));
 

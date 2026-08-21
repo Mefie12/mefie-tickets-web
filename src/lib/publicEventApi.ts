@@ -21,6 +21,7 @@ export type PublicOrganization = {
   name: string;
   slug: string;
   description: string | null;
+  email: string;
   logo_url: string | null;
   cover_image_url: string | null;
 };

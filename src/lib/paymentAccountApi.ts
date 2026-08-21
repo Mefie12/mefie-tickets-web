@@ -15,6 +15,8 @@ export type PaymentAccount = {
   settlements_enabled: boolean;
   requirements_status: string;
   last_synced_at: string | null;
+  /** Only meaningfully populated when routing_status is HISTORICAL — see PaymentAccountService::provision()'s rejection handling. */
+  provider_metadata: { rejection_reason?: string; rejected_at?: string } | null;
 };
 
 /** GET /api/organization/payments's pending_earnings block — null until a payment account exists. */
@@ -45,9 +47,9 @@ async function request<T>(path: string, options: { method?: "GET" | "POST"; body
   return data as T;
 }
 
-export function provisionPaymentAccount(legalCountry: string) {
+export function provisionPaymentAccount(legalCountry: string, currency: string) {
   return request<{ payment_account: PaymentAccount }>("/api/organization/payments/onboarding", {
-    method: "POST", body: { legal_country: legalCountry },
+    method: "POST", body: { legal_country: legalCountry, currency },
   });
 }
 

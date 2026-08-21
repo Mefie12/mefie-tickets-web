@@ -20,6 +20,33 @@ const LOCALE = "en-GB";
 
 export type ZonedParts = { date: string; time: string };
 
+/** Compare ISO wall-clock input parts without applying the browser timezone. */
+export function wallClockEndIsInvalid(
+  startDate: string,
+  startTime: string,
+  endDate: string,
+  endTime: string,
+): boolean {
+  if (!startDate || !endDate) return false;
+  if (endDate < startDate) return true;
+  return endDate === startDate && Boolean(startTime && endTime) && endTime <= startTime;
+}
+
+/** The first valid minute after startTime, or null when the day is exhausted. */
+export function nextWallClockMinute(startTime: string): string | null {
+  if (!/^\d{2}:\d{2}$/.test(startTime)) return null;
+  const [hours, minutes] = startTime.split(":").map(Number);
+  const next = hours * 60 + minutes + 1;
+  if (next >= 24 * 60) return null;
+  return `${String(Math.floor(next / 60)).padStart(2, "0")}:${String(next % 60).padStart(2, "0")}`;
+}
+
+/** Minimum for a native end-time input on a same-day range. */
+export function minimumEndTime(startDate: string, startTime: string, endDate: string): string | undefined {
+  if (!startDate || startDate !== endDate || !startTime) return undefined;
+  return nextWallClockMinute(startTime) ?? undefined;
+}
+
 /**
  * UTC ISO -> the `YYYY-MM-DD` + `HH:mm` a native date/time input wants,
  * as read in `timeZone`.

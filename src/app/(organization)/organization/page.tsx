@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { Stack } from "@mantine/core";
-import { backendRequest } from "@/lib/backend";
+import { APP_URL, backendRequest } from "@/lib/backend";
 import { getCurrentUser } from "@/lib/session";
 import type { Organization } from "@/lib/organizationApi";
 import { OrganizationSettingsForm } from "@/components/OrganizationSettingsForm";
@@ -28,7 +28,7 @@ export default async function OrganizationPage() {
 
   return (
     <Stack gap="xl" maw={640}>
-      <OrganizationSettingsForm initialOrganization={organization} canEdit={user.role === "ADMIN"} />
+      <OrganizationSettingsForm initialOrganization={organization} canEdit={user.role === "ADMIN"} appUrl={APP_URL} />
     </Stack>
   );
 }
