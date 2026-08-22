@@ -5,6 +5,7 @@ import { IconCalendarOff, IconMail } from "@tabler/icons-react";
 import { APP_URL, backendRequest } from "@/lib/backend";
 import type { PaginationMeta, PublicEventCard, PublicOrganization } from "@/lib/publicEventApi";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
+import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { EventCard } from "@/components/EventCard";
 import { EventPaginationControl } from "@/components/EventPaginationControl";
 import { OrganizationEventTabs } from "@/components/OrganizationEventTabs";
@@ -48,7 +49,7 @@ export default async function OrganizationStorefront({ params, searchParams }: {
   return (
     <Box>
       <PublicSiteHeader />
-      <Box h="clamp(180px, 30vw, 300px)" pos="relative" style={{ backgroundColor: "var(--mantine-color-dark-7)", backgroundImage: organization.cover_image_url ? `linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.54)), url(${organization.cover_image_url})` : "linear-gradient(135deg, var(--mantine-color-dark-5), var(--mantine-color-brand-9))", backgroundSize: "cover", backgroundPosition: "center" }} />
+      <Box h="clamp(180px, 30vw, 300px)" pos="relative" style={{ backgroundColor: "var(--mantine-color-gray-light)", backgroundImage: organization.cover_image_url ? `linear-gradient(rgba(0,0,0,.18), rgba(0,0,0,.54)), url(${organization.cover_image_url})` : "linear-gradient(135deg, var(--mantine-color-brand-light), var(--mantine-primary-color-filled))", backgroundSize: "cover", backgroundPosition: "center" }} />
       <Container size="lg" pb={48}>
         <Stack gap="xl">
           <Group align="flex-end" justify="space-between" wrap="wrap" mt={-48} style={{ position: "relative" }}>
@@ -70,6 +71,7 @@ export default async function OrganizationStorefront({ params, searchParams }: {
           {meta.last_page > 1 && <EventPaginationControl currentPage={meta.current_page} totalPages={meta.last_page} />}
         </Stack>
       </Container>
+      <PublicSiteFooter />
     </Box>
   );
 }

@@ -292,7 +292,7 @@ function BrandingCard({
         pos="relative"
         h={160}
         style={{
-          backgroundColor: "var(--mantine-color-dark-5)",
+          backgroundColor: "var(--mantine-color-gray-light)",
           backgroundImage: organization.cover_image_url ? `url(${organization.cover_image_url})` : undefined,
           backgroundSize: "cover",
           backgroundPosition: "center",

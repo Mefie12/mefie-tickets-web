@@ -1,0 +1,125 @@
+.section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  gap: clamp(3rem, 8vw, 8rem);
+  align-items: start;
+  padding-block: clamp(1rem, 3vw, 2.5rem);
+}
+
+.intro {
+  position: sticky;
+  top: 7rem;
+}
+
+.eyebrow {
+  color: var(--mantine-primary-color-filled);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.heading {
+  max-width: 10ch;
+  font-size: clamp(2.5rem, 5vw, 4.75rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.description {
+  max-width: 32rem;
+  line-height: 1.7;
+}
+
+.accordion {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.item {
+  overflow: hidden;
+  border: 1px solid light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  border-radius: var(--mantine-radius-lg);
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  transition: border-color 250ms ease, background-color 250ms ease;
+}
+
+.item[data-active] {
+  border-color: light-dark(var(--mantine-color-brand-3), var(--mantine-color-brand-7));
+  background: light-dark(var(--mantine-color-brand-0), var(--mantine-color-dark-6));
+}
+
+.control {
+  min-height: 5rem;
+  padding: 1rem 1.25rem;
+}
+
+.control:hover {
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}
+
+.control:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -3px;
+}
+
+.label {
+  padding-block: 0.4rem;
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.chevron {
+  color: var(--mantine-primary-color-filled);
+  transition: transform 250ms ease;
+}
+
+.item[data-active] .chevron {
+  transform: rotate(45deg);
+}
+
+.panel {
+  padding-inline: 3.9rem 1.5rem;
+}
+
+.answer {
+  max-width: 42rem;
+  padding-bottom: 1.4rem;
+  line-height: 1.7;
+}
+
+@media (max-width: 62em) {
+  .section {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+
+  .intro {
+    position: static;
+  }
+
+  .heading {
+    max-width: 13ch;
+  }
+}
+
+@media (max-width: 36em) {
+  .control {
+    min-height: 4.5rem;
+    padding-inline: 1rem;
+  }
+
+  .label {
+    font-size: var(--mantine-font-size-md);
+  }
+
+  .panel {
+    padding-inline: 3.35rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item,
+  .chevron {
+    transition-duration: 0ms;
+  }
+}

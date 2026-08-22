@@ -7,6 +7,7 @@ import { AppShell, Avatar, Group, Menu, Text, UnstyledButton } from "@mantine/co
 import { IconChevronDown, IconLogout, IconTicket, IconUserCircle } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import type { SessionUser } from "@/lib/session";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
  * Minimal shell for distributor-only accounts (no organization
@@ -31,6 +32,8 @@ export function DistributorShell({ user, children }: { user: SessionUser; childr
             <Text fw={700}>Mefie Tickets</Text>
           </Group>
 
+          <Group gap="sm" wrap="nowrap">
+          <ThemeToggle />
           <Menu shadow="md" width={200} position="bottom-end">
             <Menu.Target>
               <UnstyledButton>
@@ -59,6 +62,7 @@ export function DistributorShell({ user, children }: { user: SessionUser; childr
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
+          </Group>
         </Group>
       </AppShell.Header>
 

@@ -23,10 +23,12 @@ import {
   IconUsers,
   IconBuildingStore,
   IconCategory,
+  IconStar,
 } from "@tabler/icons-react";
 import { endAdminSession } from "@/lib/adminAuthApi";
 import { logout } from "@/lib/authApi";
 import type { CurrentUser, PlatformRole } from "@/lib/authApi";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const ROLE_LABEL: Record<PlatformRole, string> = {
   PLATFORM_SUPER_ADMIN: "Super Admin",
@@ -71,7 +73,7 @@ export function PlatformAdminShell({
 
   return (
     <AppShell header={{ height: 60 }} navbar={{ width: 240, breakpoint: "sm" }} padding="md">
-      <AppShell.Header style={{ background: "var(--mantine-color-dark-8)", borderColor: "var(--mantine-color-dark-5)" }}>
+      <AppShell.Header style={{ background: "var(--mantine-primary-color-filled)", borderColor: "var(--mantine-primary-color-filled-hover)" }}>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="xs">
             <IconShieldLock size={20} color="var(--mantine-color-yellow-5)" />
@@ -83,6 +85,8 @@ export function PlatformAdminShell({
             </Badge>
           </Group>
 
+          <Group gap="sm" wrap="nowrap">
+          <ThemeToggle color="white" />
           <Menu shadow="md" width={220} position="bottom-end">
             <Menu.Target>
               <UnstyledButton>
@@ -114,6 +118,7 @@ export function PlatformAdminShell({
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
+          </Group>
         </Group>
       </AppShell.Header>
 
@@ -163,6 +168,9 @@ export function PlatformAdminShell({
         )}
         {has("event_taxonomy.view") && (
           <NavLink component={Link} href="/admin/event-taxonomy" label="Event Taxonomy" leftSection={<IconCategory size={16} />} active={pathname.startsWith("/admin/event-taxonomy")} />
+        )}
+        {has("featured_events.view") && (
+          <NavLink component={Link} href="/admin/featured-events" label="Featured Events" leftSection={<IconStar size={16} />} active={pathname.startsWith("/admin/featured-events")} />
         )}
       </AppShell.Navbar>
 

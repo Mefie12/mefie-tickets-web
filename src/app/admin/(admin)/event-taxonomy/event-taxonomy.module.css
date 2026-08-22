@@ -20,13 +20,13 @@
 
 .categoryRow:hover {
   background: var(--mantine-color-default-hover);
-  border-color: var(--mantine-color-dark-3);
+  border-color: var(--mantine-primary-color-filled);
 }
 
 .categoryRow[data-selected] {
-  background: var(--mantine-color-brand-9);
-  border-color: var(--mantine-color-brand-5);
-  box-shadow: inset 3px 0 0 var(--mantine-color-brand-3);
+  background: var(--mantine-color-brand-light);
+  border-color: var(--mantine-primary-color-filled);
+  box-shadow: inset 3px 0 0 var(--mantine-primary-color-filled);
 }
 
 .categoryButton {
@@ -52,7 +52,7 @@
 }
 
 .categoryRow[data-selected] .chevron {
-  color: var(--mantine-color-brand-1);
+  color: var(--mantine-primary-color-filled);
   transform: translateX(2px);
 }
 
@@ -63,12 +63,12 @@
 
 .subcategoryRow:hover {
   background: var(--mantine-color-default-hover);
-  border-color: var(--mantine-color-dark-3);
+  border-color: var(--mantine-primary-color-filled);
 }
 
 .formSurface,
 .impactSurface {
-  background: var(--mantine-color-dark-7);
+  background: var(--mantine-color-default);
 }
 
 @media (prefers-reduced-motion: reduce) {

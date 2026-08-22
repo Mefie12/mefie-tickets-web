@@ -8,6 +8,7 @@ import type { PublicEvent } from "@/lib/publicEventApi";
 import { Checkout } from "@/components/Checkout";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
+import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { EventGallery } from "@/components/EventGallery";
 
 async function getEvent(organizationSlug: string, eventSlug: string) {
@@ -69,7 +70,7 @@ export default async function PublicEventPage({
       <Box
         h="clamp(190px, 30vw, 300px)"
         style={{
-          backgroundColor: "var(--mantine-color-dark-6)",
+          backgroundColor: "var(--mantine-color-gray-light)",
           // Prefer the event's own cover image (the actual "event detail
           // hero") — the organization's cover is a reasonable fallback for
           // an event that hasn't uploaded media yet.
@@ -84,8 +85,8 @@ export default async function PublicEventPage({
       <Container size="md" py="xl">
         <Stack gap="xl">
           <Breadcrumbs separator="/">
-            <Text component="a" href="/" size="sm" c="dimmed">
-              Browse events
+            <Text component="a" href="/discover" size="sm" c="dimmed">
+              Discover events
             </Text>
             <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" lineClamp={1}>
               {organization.name}
@@ -196,6 +197,7 @@ export default async function PublicEventPage({
           )}
         </Stack>
       </Container>
+      <PublicSiteFooter />
     </Box>
   );
 }

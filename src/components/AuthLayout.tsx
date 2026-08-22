@@ -1,5 +1,6 @@
-import { Container, Group, Paper, Stack, Text } from "@mantine/core";
+import { Box, Container, Group, Paper, Stack, Text } from "@mantine/core";
 import { IconTicket } from "@tabler/icons-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function AuthLayout({
   title,
@@ -11,6 +12,8 @@ export function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
+    <Box pos="relative" mih="100vh">
+      <Box pos="absolute" top={16} right={16}><ThemeToggle /></Box>
     <Container size="xs" py={80}>
       <Stack gap="xl">
         <Group gap="xs" justify="center">
@@ -36,5 +39,6 @@ export function AuthLayout({
         </Paper>
       </Stack>
     </Container>
+    </Box>
   );
 }
