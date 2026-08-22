@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Group, Loader, Stack, Text, Title } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
-import { createPaymentIntent, type Order } from "@/lib/checkoutApi";
+import { createPaymentIntent, getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { formatMoney } from "@/lib/money";
 import { TicketSelector, ticketLineKey } from "@/components/TicketSelector";
@@ -16,12 +16,23 @@ import { OrderConfirmation } from "@/components/OrderConfirmation";
 
 type Step = "cart" | "details" | "payment" | "confirmation";
 
+type PersistedCheckout = { order: Order; clientSecret: string };
+
+function checkoutStorageKey(eventId: number): string {
+  return `mefie-checkout:${eventId}`;
+}
+
 /**
  * Owns the whole checkout wizard's state — cart selection through
  * confirmation, all on one page (no separate /checkout route). Cart
- * data doesn't need to survive a route change since nothing else on
- * this page needs it, so keeping it in one component avoids inventing
- * a cart-passing mechanism between routes for no benefit.
+ * quantities don't need to survive a reload (re-picking tickets is
+ * cheap), but `order`/`clientSecret` do: once an order exists, it's a
+ * real RESERVED (or already-paid) reservation server-side, so those two
+ * are mirrored to sessionStorage and reconciled against the
+ * authoritative order status on mount — a reload during the payment
+ * step must resume it, not silently drop the customer back to the bare
+ * cart while a real charge may already have gone through (confirmed
+ * live: this used to happen).
  *
  * Once `order` is set, CheckoutDetailsForm is never re-rendered: the
  * order is already RESERVED server-side by then, and there's no
@@ -34,6 +45,52 @@ export function Checkout({ event }: { event: PublicEvent }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [order, setOrder] = useState<Order | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const reconciling = useRef(false);
+
+  // Mirror order/clientSecret to sessionStorage whenever both exist —
+  // client_secret is explicitly safe to store/reuse client-side across
+  // a reload (Stripe's own recommended pattern for exactly this case).
+  useEffect(() => {
+    if (!order || !clientSecret) return;
+    sessionStorage.setItem(checkoutStorageKey(event.id), JSON.stringify({ order, clientSecret } satisfies PersistedCheckout));
+  }, [order, clientSecret, event.id]);
+
+  // On mount, don't blindly trust a persisted copy — it could be stale
+  // (e.g. the webhook that completes the order arrived while this tab
+  // was closed/reloaded, exactly as happened during live testing).
+  // Reconcile against the authoritative status before resuming anywhere.
+  useEffect(() => {
+    if (reconciling.current) return;
+    reconciling.current = true;
+
+    const raw = sessionStorage.getItem(checkoutStorageKey(event.id));
+    if (!raw) return;
+
+    let persisted: PersistedCheckout;
+    try {
+      persisted = JSON.parse(raw) as PersistedCheckout;
+    } catch {
+      sessionStorage.removeItem(checkoutStorageKey(event.id));
+      return;
+    }
+
+    getOrderPaymentStatus(event.id, persisted.order.short_id)
+      .then((authoritative) => {
+        if (authoritative.status === "COMPLETED") {
+          sessionStorage.removeItem(checkoutStorageKey(event.id));
+          setOrder({ ...persisted.order, status: "COMPLETED" });
+          setStep("confirmation");
+        } else if (authoritative.status === "RESERVED") {
+          setOrder(persisted.order);
+          setClientSecret(persisted.clientSecret);
+          setStep("payment");
+        } else {
+          sessionStorage.removeItem(checkoutStorageKey(event.id));
+        }
+      })
+      .catch(() => sessionStorage.removeItem(checkoutStorageKey(event.id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.id]);
 
   const cartItems = useMemo(
     () =>
@@ -96,7 +153,18 @@ export function Checkout({ event }: { event: PublicEvent }) {
     }
 
     if (clientSecret) {
-      return <CheckoutPaymentStep eventId={event.id} order={order} clientSecret={clientSecret} onPaid={() => setStep("confirmation")} />;
+      return (
+        <CheckoutPaymentStep
+          eventId={event.id}
+          order={order}
+          clientSecret={clientSecret}
+          defaultBillingCountry={event.location?.country}
+          onPaid={() => {
+            sessionStorage.removeItem(checkoutStorageKey(event.id));
+            setStep("confirmation");
+          }}
+        />
+      );
     }
 
     // Reservation was created but the payment-intent call failed —
