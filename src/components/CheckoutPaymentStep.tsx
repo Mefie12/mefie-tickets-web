@@ -1,15 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { loadStripe, type StripePaymentElementOptions } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { Alert, Button, Stack, Text } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, Button, Loader, Stack, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import { formatMoney } from "@/lib/money";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const paymentElementOptions: StripePaymentElementOptions = { layout: "tabs" };
+
+// How long we keep actively polling our own webhook-driven confirmation
+// after Stripe itself already confirmed the charge, before switching to
+// a "this is taking a while" message. Generous on purpose — the charge
+// has already happened by this point (a delayed webhook is the only
+// thing left to wait on), so there's no reason to rush the customer or
+// ever invite them to pay again.
+const CONFIRMATION_POLL_INTERVAL_MS = 2000;
+const CONFIRMATION_POLL_CEILING_MS = 3 * 60 * 1000;
+
+function paymentElementOptionsFor(defaultBillingCountry?: string | null): StripePaymentElementOptions {
+  return {
+    layout: "tabs",
+    // Stripe's own default-guessing for this field is opaque (observed
+    // live: it defaulted to an unrelated country) — so it's overridden
+    // explicitly with the event's own venue country whenever one exists,
+    // rather than leaving it to a guess. Left unset for an online event
+    // (no venue country to guess from), which is correct there anyway.
+    ...(defaultBillingCountry
+      ? { defaultValues: { billingDetails: { address: { country: defaultBillingCountry } } } }
+      : {}),
+  };
+}
 
 /**
  * Stripe confirms the card interaction, but the browser is not allowed
@@ -26,11 +49,14 @@ export function CheckoutPaymentStep({
   order,
   eventId,
   clientSecret,
+  defaultBillingCountry,
   onPaid,
 }: {
   order: Order;
   eventId: number;
   clientSecret: string;
+  /** The event's own venue country (location.country) — see paymentElementOptionsFor. */
+  defaultBillingCountry?: string | null;
   onPaid: () => void;
 }) {
   // Held-funds policy: the PaymentIntent behind this client_secret is
@@ -51,16 +77,86 @@ export function CheckoutPaymentStep({
 
   return (
     <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night" } }}>
-      <PaymentForm eventId={eventId} order={order} onPaid={onPaid} />
+      <PaymentForm
+        eventId={eventId}
+        order={order}
+        clientSecret={clientSecret}
+        defaultBillingCountry={defaultBillingCountry}
+        onPaid={onPaid}
+      />
     </Elements>
   );
 }
 
-function PaymentForm({ eventId, order, onPaid }: { eventId: number; order: Order; onPaid: () => void }) {
+function PaymentForm({
+  eventId,
+  order,
+  clientSecret,
+  defaultBillingCountry,
+  onPaid,
+}: {
+  eventId: number;
+  order: Order;
+  clientSecret: string;
+  defaultBillingCountry?: string | null;
+  onPaid: () => void;
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Once Stripe itself confirms the charge, the payment is done — the
+  // form must never become resubmittable again, no matter how long our
+  // own webhook-driven confirmation takes. Re-confirming an
+  // already-succeeded PaymentIntent produces a confusing Stripe-side
+  // error for a payment that already went through fine (confirmed live:
+  // the previous version left the Pay button enabled through this wait).
+  const [paymentConfirmedByStripe, setPaymentConfirmedByStripe] = useState(false);
+  const [checkingExistingStatus, setCheckingExistingStatus] = useState(true);
+  const pollStartedAtRef = useRef<number | null>(null);
+
+  // A reload (see Checkout.tsx's sessionStorage resume) re-mounts this
+  // form fresh, with no memory of whether the underlying PaymentIntent
+  // was already confirmed before the reload — confirmed live: without
+  // this check, a resumed page shows a fresh, clickable Pay button even
+  // when Stripe already marked the charge succeeded, risking exactly
+  // the double-confirm error this component otherwise prevents.
+  useEffect(() => {
+    if (!stripe) return;
+    let cancelled = false;
+    stripe.retrievePaymentIntent(clientSecret).then(({ paymentIntent }) => {
+      if (cancelled) return;
+      if (paymentIntent?.status === "succeeded") {
+        pollStartedAtRef.current = Date.now();
+        setPaymentConfirmedByStripe(true);
+      }
+      setCheckingExistingStatus(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stripe, clientSecret]);
+
+  const paymentElementOptions = useMemo(() => paymentElementOptionsFor(defaultBillingCountry), [defaultBillingCountry]);
+
+  const statusQuery = useQuery({
+    queryKey: ["order-payment-status", eventId, order.short_id],
+    queryFn: () => getOrderPaymentStatus(eventId, order.short_id),
+    enabled: paymentConfirmedByStripe,
+    // Mirrors the conditional-refetchInterval pattern already used in
+    // ComplimentaryTicketsManager.tsx — poll steadily while unresolved,
+    // stop once COMPLETED or once the generous ceiling above is hit,
+    // rather than a hard-coded number of attempts.
+    refetchInterval: (query) => {
+      if (query.state.data?.status === "COMPLETED") return false;
+      if (pollStartedAtRef.current !== null && Date.now() - pollStartedAtRef.current >= CONFIRMATION_POLL_CEILING_MS) return false;
+      return CONFIRMATION_POLL_INTERVAL_MS;
+    },
+  });
+
+  useEffect(() => {
+    if (statusQuery.data?.status === "COMPLETED") onPaid();
+  }, [statusQuery.data?.status, onPaid]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -82,21 +178,37 @@ function PaymentForm({ eventId, order, onPaid }: { eventId: number; order: Order
     }
 
     if (paymentIntent?.status === "succeeded") {
-      for (let attempt = 0; attempt < 15; attempt += 1) {
-        const authoritative = await getOrderPaymentStatus(eventId, order.short_id);
-        if (authoritative.status === "COMPLETED") {
-          onPaid();
-          return;
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 1000));
-      }
-      setErrorMessage("Your payment was received and is still being confirmed. Please wait a moment before trying again.");
-      setSubmitting(false);
+      pollStartedAtRef.current = Date.now();
+      setPaymentConfirmedByStripe(true);
       return;
     }
 
     setErrorMessage("Payment did not complete. Please try again.");
     setSubmitting(false);
+  }
+
+  if (checkingExistingStatus) {
+    return (
+      <Stack align="center" py="xl">
+        <Loader size="sm" />
+      </Stack>
+    );
+  }
+
+  if (paymentConfirmedByStripe) {
+    const withinCeiling =
+      pollStartedAtRef.current === null || Date.now() - pollStartedAtRef.current < CONFIRMATION_POLL_CEILING_MS;
+
+    return (
+      <Stack gap="md" align="center" py="xl">
+        <Loader size="sm" />
+        <Text ta="center" fw={500}>
+          {withinCeiling
+            ? "Payment received — confirming your order…"
+            : `Your payment was received. We're finalizing your order — this can take a few minutes. Reference: ${order.short_id}.`}
+        </Text>
+      </Stack>
+    );
   }
 
   return (

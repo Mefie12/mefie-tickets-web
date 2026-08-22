@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
@@ -13,17 +13,18 @@ import {
   Group,
   Modal,
   NumberInput,
+  Popover,
   Select,
   Stack,
   Switch,
   Text,
   TextInput,
 } from "@mantine/core";
-import { IconChevronDown, IconChevronUp, IconPlus, IconTicket, IconTrash } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronUp, IconInfoCircle, IconPlus, IconTicket, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
+import { minimumEndTime, utcIsoToZonedPartsOrEmpty, wallClockEndIsInvalid } from "@/lib/eventDateTime";
 import { createProduct, type PricingType, type Product, type TicketOptionInput, updateProduct } from "@/lib/productApi";
 import { currencySymbol, formatMoney } from "@/lib/money";
 
@@ -105,6 +106,46 @@ function emptyTier(): TierFormValue {
     is_enabled: true,
     max_attendees_per_registration: "",
   };
+}
+
+function HelpFieldLabel({ htmlFor, children, help }: { htmlFor: string; children: ReactNode; help: ReactNode }) {
+  const [opened, setOpened] = useState(false);
+
+  return (
+    <Group gap={4} wrap="nowrap">
+      <Text component="label" htmlFor={htmlFor} size="sm" fw={500}>
+        {children}
+      </Text>
+      <Popover
+        opened={opened}
+        onChange={setOpened}
+        position="bottom-start"
+        width="min(320px, calc(100vw - 32px))"
+        withinPortal
+        closeOnClickOutside
+        closeOnEscape
+        middlewares={{ flip: true, shift: true }}
+      >
+        <Popover.Target>
+          <ActionIcon
+            type="button"
+            variant="subtle"
+            color="gray"
+            size="xs"
+            aria-label={`More information about ${String(children).toLowerCase()}`}
+            aria-expanded={opened}
+            aria-haspopup="dialog"
+            onClick={() => setOpened((current) => !current)}
+          >
+            <IconInfoCircle size={15} aria-hidden="true" />
+          </ActionIcon>
+        </Popover.Target>
+        <Popover.Dropdown>
+          <Text size="sm">{help}</Text>
+        </Popover.Dropdown>
+      </Popover>
+    </Group>
+  );
 }
 
 function productToFormValues(product: Product | undefined, eventTimezone: string): ProductFormValues {
@@ -307,6 +348,7 @@ function ProductFormModal({
         return null;
       },
       quantity_available: (v, values) => {
+        if (v !== "" && v < 0) return "Capacity cannot be negative.";
         if (values.type !== "TIERED") return null;
         if (v === "") return "Ticket group capacity is required.";
         const enabledTiers = values.tiers.filter((t) => t.is_enabled);
@@ -318,7 +360,10 @@ function ProductFormModal({
         name: (v, values, path) =>
           values.type === "TIERED" && path.startsWith("tiers") && v.trim().length === 0 ? "Name is required" : null,
         price: (v, values) => (values.type === "TIERED" && v === "" ? "Price is required" : null),
-        quantity_available: (v, values) => (values.type === "TIERED" && v === "" ? "Capacity is required" : null),
+        quantity_available: (v, values) => {
+          if (v !== "" && v < 0) return "Capacity cannot be negative.";
+          return values.type === "TIERED" && v === "" ? "Capacity is required" : null;
+        },
         // A date without its time is meaningless — the server rejects it,
         // so catch it here rather than round-tripping a 422.
         starts_at_time: (v, values, path) => {
@@ -337,6 +382,27 @@ function ProductFormModal({
       },
     },
   });
+
+  const setProductStartPart = (part: "starts_at_date" | "starts_at_time", value: string) => {
+    const nextStartDate = part === "starts_at_date" ? value : form.values.starts_at_date;
+    const nextStartTime = part === "starts_at_time" ? value : form.values.starts_at_time;
+    form.setFieldValue(part, value);
+    if (wallClockEndIsInvalid(nextStartDate, nextStartTime, form.values.ends_at_date, form.values.ends_at_time)) {
+      form.setFieldValue("ends_at_date", "");
+      form.setFieldValue("ends_at_time", "");
+    }
+  };
+
+  const setTierStartPart = (index: number, part: "starts_at_date" | "starts_at_time", value: string) => {
+    const tier = form.values.tiers[index];
+    const nextStartDate = part === "starts_at_date" ? value : tier.starts_at_date;
+    const nextStartTime = part === "starts_at_time" ? value : tier.starts_at_time;
+    form.setFieldValue(`tiers.${index}.${part}`, value);
+    if (wallClockEndIsInvalid(nextStartDate, nextStartTime, tier.ends_at_date, tier.ends_at_time)) {
+      form.setFieldValue(`tiers.${index}.ends_at_date`, "");
+      form.setFieldValue(`tiers.${index}.ends_at_time`, "");
+    }
+  };
 
   const saveMutation = useMutation({
     mutationFn: (values: ProductFormValues) => {
@@ -412,7 +478,23 @@ function ProductFormModal({
             allowDeselect={false}
             {...form.getInputProps("type")}
           />
-          <TextInput label="Title" placeholder="General Admission" {...form.getInputProps("title")} />
+          {form.values.type === "TIERED" ? (
+            <Stack gap={4}>
+              <HelpFieldLabel
+                htmlFor="ticket-group-title"
+                help="The group title describes the sales phase or ticket collection. Examples include Early Bird Ticket, Late Admission, Door Sales, and Weekend Pass. Buyers will see it together with their selected option, such as Early Bird Ticket — Standard."
+              >
+                Ticket group title
+              </HelpFieldLabel>
+              <TextInput
+                id="ticket-group-title"
+                placeholder="Early Bird Ticket"
+                {...form.getInputProps("title")}
+              />
+            </Stack>
+          ) : (
+            <TextInput label="Ticket title" placeholder="General Admission" {...form.getInputProps("title")} />
+          )}
 
           {form.values.type === "REGISTRATION" && (
             <Group gap="xs">
@@ -439,11 +521,12 @@ function ProductFormModal({
             label="Total quantity available"
             description="Leave blank for unlimited"
             min={0}
+            clampBehavior="blur"
             {...form.getInputProps("quantity_available")}
           />
           {form.values.type === "TIERED" && enabledTierQuantitySum(tiers) !== null && (
             <Text size="xs" c="dimmed">
-              Enabled tiers currently add up to {enabledTierQuantitySum(tiers)} tickets.
+              Enabled ticket options currently add up to {enabledTierQuantitySum(tiers)} tickets.
             </Text>
           )}
 
@@ -459,27 +542,27 @@ function ProductFormModal({
           <Divider label="Sale window & availability" labelPosition="left" mt="sm" />
           <Text size="xs" c="dimmed">
             Times are in {eventTimezone}, this event&apos;s timezone.
-            {form.values.type === "TIERED" && " Applies on top of each tier's own window below."}
+            {form.values.type === "TIERED" && " Applies on top of each ticket option's own window below."}
           </Text>
           <Group grow align="flex-start">
-            <TextInput type="date" label="Starts (optional)" {...form.getInputProps("starts_at_date")} />
-            <TextInput type="time" label="At" {...form.getInputProps("starts_at_time")} />
+            <TextInput type="date" label="Starts (optional)" {...form.getInputProps("starts_at_date")} onChange={(event) => setProductStartPart("starts_at_date", event.currentTarget.value)} />
+            <TextInput type="time" label="At" {...form.getInputProps("starts_at_time")} onChange={(event) => setProductStartPart("starts_at_time", event.currentTarget.value)} />
           </Group>
           <Group grow align="flex-start">
-            <TextInput type="date" label="Ends (optional)" {...form.getInputProps("ends_at_date")} />
-            <TextInput type="time" label="At" {...form.getInputProps("ends_at_time")} />
+            <TextInput type="date" label="Ends (optional)" min={form.values.starts_at_date || undefined} {...form.getInputProps("ends_at_date")} />
+            <TextInput type="time" label="At" min={minimumEndTime(form.values.starts_at_date, form.values.starts_at_time, form.values.ends_at_date)} disabled={form.values.starts_at_date === form.values.ends_at_date && form.values.starts_at_time === "23:59"} {...form.getInputProps("ends_at_time")} />
           </Group>
           <Switch label="Enabled" {...form.getInputProps("is_enabled", { type: "checkbox" })} />
 
           {form.values.type === "TIERED" && (
             <>
-              <Divider label="Tiers" labelPosition="left" mt="sm" />
+              <Divider label="Ticket options" labelPosition="left" mt="sm" />
               {tiers.map((tier, index) => (
                 <Card key={index} withBorder radius="md" p="sm">
                   <Stack gap="xs">
                     <Group justify="space-between">
                       <Text size="sm" fw={600}>
-                        Tier {index + 1}
+                        Ticket option {index + 1}
                       </Text>
                       <Group gap={4}>
                         <ActionIcon
@@ -509,11 +592,19 @@ function ProductFormModal({
                         </ActionIcon>
                       </Group>
                     </Group>
-                    <TextInput
-                      label="Name"
-                      placeholder="Early Bird"
-                      {...form.getInputProps(`tiers.${index}.name`)}
-                    />
+                    <Stack gap={4}>
+                      <HelpFieldLabel
+                        htmlFor={`ticket-option-name-${index}`}
+                        help="The option describes what the buyer receives within this ticket group. Examples include General Admission, Standard, Standard+, VIP, Student, and Balcony."
+                      >
+                        Ticket option name
+                      </HelpFieldLabel>
+                      <TextInput
+                        id={`ticket-option-name-${index}`}
+                        placeholder="Enter ticket option name"
+                        {...form.getInputProps(`tiers.${index}.name`)}
+                      />
+                    </Stack>
                     <NumberInput
                       label="Price"
                       prefix={currencySymbol(eventCurrency)}
@@ -529,26 +620,29 @@ function ProductFormModal({
                         type="date"
                         label="Starts (optional)"
                         {...form.getInputProps(`tiers.${index}.starts_at_date`)}
+                        onChange={(event) => setTierStartPart(index, "starts_at_date", event.currentTarget.value)}
                       />
-                      <TextInput type="time" label="At" {...form.getInputProps(`tiers.${index}.starts_at_time`)} />
+                      <TextInput type="time" label="At" {...form.getInputProps(`tiers.${index}.starts_at_time`)} onChange={(event) => setTierStartPart(index, "starts_at_time", event.currentTarget.value)} />
                     </Group>
                     <Group grow align="flex-start">
                       <TextInput
                         type="date"
                         label="Ends (optional)"
+                        min={tier.starts_at_date || undefined}
                         {...form.getInputProps(`tiers.${index}.ends_at_date`)}
                       />
-                      <TextInput type="time" label="At" {...form.getInputProps(`tiers.${index}.ends_at_time`)} />
+                      <TextInput type="time" label="At" min={minimumEndTime(tier.starts_at_date, tier.starts_at_time, tier.ends_at_date)} disabled={tier.starts_at_date === tier.ends_at_date && tier.starts_at_time === "23:59"} {...form.getInputProps(`tiers.${index}.ends_at_time`)} />
                     </Group>
                     <NumberInput
                       label="Option capacity"
                       description="Required. You can increase it later within the ticket group capacity."
                       min={0}
+                      clampBehavior="blur"
                       {...form.getInputProps(`tiers.${index}.quantity_available`)}
                     />
                     <NumberInput
                       label="Max attendees per registration"
-                      description="Leave blank for unlimited — e.g. cap Early Bird at 1 per order, leave Regular uncapped"
+                      description="Leave blank for unlimited — each ticket option can have its own per-order limit."
                       min={1}
                       {...form.getInputProps(`tiers.${index}.max_attendees_per_registration`)}
                     />

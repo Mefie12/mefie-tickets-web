@@ -15,6 +15,8 @@ export type AdminOrganization = {
   name: string;
   display_name: string | null;
   email: string;
+  timezone: string;
+  currency: string;
   status: OrganizationStatus;
   payout_restricted_at: string | null;
   payout_restricted_reason: string | null;
@@ -106,4 +108,17 @@ export function createOrganizationNote(organizationId: string, body: string) {
     method: "POST",
     body: { body },
   });
+}
+
+export type MoneySummary = { currency: string; orders: number; gross_sales: string; platform_fees: string; organizer_entitlement: string; refunded: string; released: string; outstanding: string };
+export type WorkspacePage<T> = { meta: PageMeta & { per_page: number } } & T;
+
+export function fetchOrganizationWorkspace<T>(id: string, path: string, params: Record<string, string | number | undefined> = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => { if (value !== undefined && value !== '') query.set(key, String(value)); });
+  return request<T>(`/api/admin/organizations/${id}/workspace/${path}${query.size ? `?${query}` : ''}`);
+}
+
+export function revealOrganizationOrder(id: string, orderId: number, reason: string) {
+  return request<{ order: Record<string, unknown> }>(`/api/admin/organizations/${id}/workspace/orders/${orderId}/reveal`, { method: 'POST', body: { reason } });
 }

@@ -1,13 +1,33 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Alert, Avatar, Box, Breadcrumbs, Container, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import { IconCalendar, IconMapPin, IconWorld } from "@tabler/icons-react";
-import { backendRequest } from "@/lib/backend";
+import { APP_URL, backendRequest } from "@/lib/backend";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { Checkout } from "@/components/Checkout";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { EventGallery } from "@/components/EventGallery";
+
+async function getEvent(organizationSlug: string, eventSlug: string) {
+  return backendRequest<{ event: PublicEvent }>(`/api/public/organizations/${encodeURIComponent(organizationSlug)}/events/${encodeURIComponent(eventSlug)}`);
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ organizationSlug: string; eventSlug: string }> }): Promise<Metadata> {
+  const { organizationSlug, eventSlug } = await params;
+  const result = await getEvent(organizationSlug, eventSlug);
+  if (result.status !== 200) return {};
+  const { event } = result.data;
+  const description = event.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${event.title}.`;
+  const canonical = `${APP_URL}/${event.organization.slug}/${event.slug}`;
+  const image = event.cover_image_url ?? event.organization.cover_image_url;
+  return {
+    title: `${event.title} | Mefie Tickets`, description, alternates: { canonical },
+    openGraph: { title: event.title, description, url: canonical, type: "website", ...(image ? { images: [image] } : {}) },
+    twitter: { card: "summary_large_image", title: event.title, description, ...(image ? { images: [image] } : {}) },
+  };
+}
 
 export default async function PublicEventPage({
   params,
@@ -16,9 +36,7 @@ export default async function PublicEventPage({
 }) {
   const { organizationSlug, eventSlug } = await params;
 
-  const result = await backendRequest<{ event: PublicEvent }>(
-    `/api/public/organizations/${organizationSlug}/events/${eventSlug}`,
-  );
+  const result = await getEvent(organizationSlug, eventSlug);
 
   if (result.status !== 200) {
     notFound();
@@ -49,7 +67,7 @@ export default async function PublicEventPage({
     <Box>
       <PublicSiteHeader />
       <Box
-        h={260}
+        h="clamp(190px, 30vw, 300px)"
         style={{
           backgroundColor: "var(--mantine-color-dark-6)",
           // Prefer the event's own cover image (the actual "event detail
@@ -69,6 +87,9 @@ export default async function PublicEventPage({
             <Text component="a" href="/" size="sm" c="dimmed">
               Browse events
             </Text>
+            <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" lineClamp={1}>
+              {organization.name}
+            </Text>
             <Text size="sm" c="dimmed" lineClamp={1}>
               {event.title}
             </Text>
@@ -79,7 +100,7 @@ export default async function PublicEventPage({
               {organization.name[0]}
             </Avatar>
             <Stack gap={4}>
-              <Text size="sm" c="dimmed" fw={500}>
+              <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" fw={500}>
                 {organization.name}
               </Text>
               <Title order={1} fz={34}>

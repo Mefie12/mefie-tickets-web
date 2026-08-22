@@ -9,7 +9,6 @@ import {
   Card,
   Group,
   Stack,
-  Tabs,
   Text,
   Textarea,
   Title,
@@ -18,7 +17,7 @@ import { notifications } from "@mantine/notifications";
 import { IconBan, IconCheck, IconLock, IconLockOpen } from "@tabler/icons-react";
 import { redirectOnAdminAuthError } from "@/lib/adminAuthErrorRedirect";
 import { AdminReasonModal } from "@/components/AdminReasonModal";
-import { AuditLogFeed } from "@/components/AuditLogFeed";
+import { OrganizationWorkspaceTabs } from "@/components/OrganizationWorkspaceTabs";
 import {
   clearPayoutRestriction,
   createOrganizationNote,
@@ -117,7 +116,7 @@ export function OrganizationDetail({
   const isArchived = organization.status === "ARCHIVED";
 
   return (
-    <Stack gap="xl" maw={880}>
+    <Stack gap="xl" maw={1280}>
       <Group justify="space-between" align="flex-start">
         <Stack gap={4}>
           <Title order={2} fz={28}>
@@ -125,6 +124,9 @@ export function OrganizationDetail({
           </Title>
           <Text c="dimmed" size="sm">
             {organization.slug} · {organization.email}
+          </Text>
+          <Text c="dimmed" size="xs">
+            Created {new Date(organization.created_at).toLocaleDateString()} · {organization.timezone} · {organization.currency}
           </Text>
         </Stack>
         <Badge color={STATUS_COLOR[organization.status] ?? "gray"} variant="light" size="lg">
@@ -176,13 +178,7 @@ export function OrganizationDetail({
         </Card>
       )}
 
-      <Tabs defaultValue="notes">
-        <Tabs.List>
-          <Tabs.Tab value="notes">Notes</Tabs.Tab>
-          <Tabs.Tab value="activity">Activity</Tabs.Tab>
-        </Tabs.List>
-
-        <Tabs.Panel value="notes" pt="md">
+      <OrganizationWorkspaceTabs organizationId={organization.id} permissions={permissions} notesPanel={
           <Stack>
             {has("organizations.notes.create") && (
               <Card withBorder radius="lg" p="md">
@@ -224,12 +220,7 @@ export function OrganizationDetail({
               </Text>
             )}
           </Stack>
-        </Tabs.Panel>
-
-        <Tabs.Panel value="activity" pt="md">
-          <AuditLogFeed organizationId={organization.id} />
-        </Tabs.Panel>
-      </Tabs>
+      } />
 
       <AdminReasonModal
         opened={suspendModalOpen}

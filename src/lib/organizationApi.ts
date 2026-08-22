@@ -12,6 +12,7 @@ export type OrganizationAddress = {
 export type Organization = {
   id: string;
   slug: string;
+  public_url_locked_at: string | null;
   name: string;
   email: string;
   phone: string | null;
