@@ -37,7 +37,7 @@ export function EventFilterBar({ taxonomies }: { taxonomies: PublicEventTaxonomi
     }
     params.delete("page");
     const query = params.toString();
-    router.push(query ? `/?${query}` : "/");
+    router.push(query ? `/discover?${query}` : "/discover");
   }
 
   useEffect(() => {
@@ -103,7 +103,7 @@ export function EventFilterBar({ taxonomies }: { taxonomies: PublicEventTaxonomi
             c="dimmed"
             onClick={() => {
               setQ("");
-              router.push("/");
+              router.push("/discover");
             }}
           >
             Clear filters

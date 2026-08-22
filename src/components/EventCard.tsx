@@ -34,7 +34,7 @@ export function EventCard({ event }: { event: PublicEventCardData }) {
       {event.cover_image_url ? (
         <Image src={event.cover_image_url} alt={event.title} h={160} radius="md" />
       ) : (
-        <Box h={160} style={{ backgroundColor: "var(--mantine-color-dark-6)", borderRadius: "var(--mantine-radius-md)" }} />
+        <Box h={160} style={{ backgroundColor: "var(--mantine-color-gray-light)", borderRadius: "var(--mantine-radius-md)" }} />
       )}
 
       <Stack gap="xs" pt="md">

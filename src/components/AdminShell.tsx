@@ -25,6 +25,7 @@ import {
 } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import type { SessionUser } from "@/lib/session";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
  * The organization admin portal shell (nav + auth guard) called for by
@@ -50,6 +51,8 @@ export function AdminShell({ user, children }: { user: SessionUser; children: Re
             <Text fw={700}>Mefie Tickets</Text>
           </Group>
 
+          <Group gap="sm" wrap="nowrap">
+          <ThemeToggle />
           <Menu shadow="md" width={200} position="bottom-end">
             <Menu.Target>
               <UnstyledButton>
@@ -78,6 +81,7 @@ export function AdminShell({ user, children }: { user: SessionUser; children: Re
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
+          </Group>
         </Group>
       </AppShell.Header>
 

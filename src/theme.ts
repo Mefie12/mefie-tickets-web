@@ -4,9 +4,8 @@ import { createTheme, type MantineColorsTuple } from "@mantine/core";
  * Mefie Tickets brand palette.
  *
  * No formal design system exists yet (that comes later, per the MVP roadmap).
- * This is a deliberately confident placeholder direction — dark-first,
- * high-contrast, a single vivid accent — so early screens look intentional
- * rather than default-Bootstrap while the real UI design work is pending.
+ * A high-contrast violet accent shared by the supported light and dark
+ * color schemes. Mantine selects the appropriate primary shade per scheme.
  */
 const brand: MantineColorsTuple = [
   "#f1edff",
