@@ -1,18 +1,23 @@
 "use client";
 
+import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Button, Card, MultiSelect, Select, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Anchor, Button, Card, Group, MultiSelect, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { RichTextDescription } from "@/components/RichTextDescription";
 import { CurrencySelector } from "@/components/CurrencySelector";
+import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
+import { EventDetailsFields } from "@/components/EventDetailsFields";
+import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { createEvent, getEventTaxonomies, type Event, type EventCategory, type EventTaxonomies, type EventTaxonomyItem } from "@/lib/eventApi";
+import { createEvent, getEventTaxonomies, type Event, type EventTaxonomies, type EventTaxonomyItem } from "@/lib/eventApi";
 
 export default function NewEventPage() {
   const router = useRouter();
+  const paymentCurrency = useQuery({ queryKey: ["organization-payment-currency"], queryFn: getOrganizationPaymentCurrency });
 
   const form = useForm({
     initialValues: {
@@ -31,7 +36,14 @@ export default function NewEventPage() {
   });
 
   const taxonomies = useQuery<EventTaxonomies>({ queryKey: ["event-taxonomies"], queryFn: getEventTaxonomies });
-  const category = taxonomies.data?.categories.find((item: EventCategory) => String(item.id) === form.values.event_category_id);
+
+  // Once a payment account exists, currency is derived server-side —
+  // see EventService::resolveCurrencyCode() — so it's sent along
+  // automatically rather than left for the organizer to pick.
+  useEffect(() => {
+    if (paymentCurrency.data) form.setFieldValue("currency_code", paymentCurrency.data);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentCurrency.data]);
 
   const createMutation = useMutation({
     mutationFn: (values: typeof form.values) =>
@@ -59,27 +71,45 @@ export default function NewEventPage() {
 
   return (
     <Stack gap="xl" maw={560}>
-      <Title order={2} fz={28}>
-        Create an event
-      </Title>
+      <Group justify="space-between" align="flex-end">
+        <Title order={2} fz={28}>
+          Create an event
+        </Title>
+        <Anchor component={Link} href="/events/new/recurring" size="sm">
+          Create a recurring event instead
+        </Anchor>
+      </Group>
 
       <Card withBorder radius="lg" p="xl">
         <form onSubmit={form.onSubmit((values) => createMutation.mutate(values))}>
           <Stack>
-            <TextInput required label="Event title" placeholder="Summer Music Festival" {...form.getInputProps("title")} />
-            <RichTextDescription value={form.values.description} onChange={(value) => form.setFieldValue("description", value)} error={form.errors.description} />
-            <Select searchable clearable label="Category (optional for drafts)" placeholder="Select a category"
-              data={(taxonomies.data?.categories ?? []).map((item: EventCategory) => ({ value: String(item.id), label: item.name }))}
-              {...form.getInputProps("event_category_id")}
-              onChange={(value) => { form.setFieldValue("event_category_id", value ?? ""); form.setFieldValue("event_subcategory_id", ""); }} />
-            <Select searchable clearable disabled={!category} label="Subcategory (optional)" placeholder="Select a subcategory"
-              data={(category?.subcategories ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))}
-              {...form.getInputProps("event_subcategory_id")} />
-            <CurrencySelector
-              label="Currency (optional)"
-              description="Leave blank to use your organization's existing currency, or the account default."
-              {...form.getInputProps("currency_code")}
+            <EventDetailsFields
+              values={form.values}
+              onChange={(field, value) => form.setFieldValue(field, value as never)}
+              errors={form.errors}
+              categories={taxonomies.data?.categories ?? []}
+              currentCategory={null}
+              currentSubcategory={null}
+              categoryLabel="Category (optional for drafts)"
             />
+            {paymentCurrency.data ? (
+              <TextInput
+                label="Currency"
+                value={`${paymentCurrency.data} — set by your payment setup`}
+                disabled
+                description={
+                  <>
+                    Every event settles in your organization&apos;s payment currency. <PaymentCurrencyExplainer />
+                  </>
+                }
+              />
+            ) : (
+              <CurrencySelector
+                label="Currency (optional)"
+                description="No payment setup yet — this is provisional and will be locked to whatever currency you eventually set up payments in."
+                {...form.getInputProps("currency_code")}
+              />
+            )}
             <MultiSelect searchable clearable label="Audience (optional)" description="Helps attendees discover events intended for them."
               data={(taxonomies.data?.audiences ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))}
               {...form.getInputProps("audience_ids")} />

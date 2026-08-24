@@ -11,11 +11,48 @@
  * renamed alongside the single-event resource). Both are read verbatim
  * from the backend's actual field names, not a naming choice made here.
  */
+import { formatMoney } from "@/lib/money";
+
 export type QuestionType = "TEXT" | "PARAGRAPH" | "SINGLE_SELECT" | "MULTI_SELECT" | "RADIO" | "ADDRESS" | "AGREEMENT";
 export type QuestionScope = "ORDER" | "ATTENDEE";
 
 /** Product.type — a pricing model, not the TICKET/GENERAL product_type (not exposed publicly). */
 export type PricingType = "FREE" | "PAID" | "DONATION" | "TIERED" | "REGISTRATION";
+
+export type PublicLineupItem = {
+  id: number;
+  display_name: string;
+  role: string;
+  custom_role: string | null;
+  tagline: string | null;
+  biography: string | null;
+  profile_image_url: string | null;
+  social_links: { provider: string; url: string }[] | null;
+  description: string | null;
+  is_featured: boolean;
+  sort_order: number;
+  set_time_label: string | null;
+};
+
+export type PublicCustomSectionCard = {
+  id: number;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  link_url: string | null;
+  link_label: string | null;
+  sort_order: number;
+};
+
+export type PublicContentSection = {
+  id: number;
+  type: "LINEUP" | "CUSTOM";
+  title: string;
+  intro: string | null;
+  sort_order: number;
+  lineup_items: PublicLineupItem[];
+  custom_cards: PublicCustomSectionCard[];
+};
 
 export type PublicOrganization = {
   name: string;
@@ -54,6 +91,31 @@ export type PublicProduct = {
   max_attendees_per_registration?: number | null;
   options?: PublicTicketOption[];
 };
+
+/**
+ * The lowest currently-purchasable price across an event's products
+ * (tiered options counted individually), for the mobile sticky "Buy
+ * tickets from $X" bar — not shown anywhere a full price breakdown
+ * already exists (TicketSelector shows real per-tier prices).
+ */
+export function cheapestPriceLabel(event: { products: PublicProduct[]; currency_code: string }): string | null {
+  const prices: number[] = [];
+  for (const product of event.products) {
+    if (product.type === "TIERED") {
+      for (const option of product.options ?? []) {
+        if (option.is_available) prices.push(Number(option.price));
+      }
+    } else if (!product.is_sold_out && product.is_on_sale) {
+      // A FREE product's current_price is null, not "0" — still a real
+      // purchasable option, so it counts as 0 here rather than being
+      // skipped (which would wrongly hide a free ticket behind a paid
+      // "from" price).
+      prices.push(product.current_price !== null ? Number(product.current_price) : 0);
+    }
+  }
+  if (prices.length === 0) return null;
+  return formatMoney(Math.min(...prices), event.currency_code);
+}
 
 export type PublicQuestion = {
   id: number;
@@ -144,4 +206,6 @@ export type PublicEvent = {
   questions: PublicQuestion[];
   /** null when the organizer hasn't enabled a published version — no acceptance is required at checkout. */
   terms: PublicEventTerms | null;
+  /** Hidden sections are already filtered out server-side — see PublicContentSectionResource. */
+  content_sections: PublicContentSection[];
 };

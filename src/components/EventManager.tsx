@@ -13,31 +13,29 @@ import {
   Modal,
   MultiSelect,
   SegmentedControl,
-  Select,
   Stack,
   Tabs,
   Text,
-  Textarea,
   TextInput,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { TimezoneSelector } from "@/components/TimezoneSelector";
-import { RichTextDescription } from "@/components/RichTextDescription";
-import { CountrySelector } from "@/components/CountrySelector";
 import { COUNTRIES_BY_CODE } from "@/lib/countries";
 import { CurrencySelector } from "@/components/CurrencySelector";
-import { LocationAutocomplete } from "@/components/LocationAutocomplete";
+import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
+import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
+import { LocationFields, needsOnline, needsVenue } from "@/components/LocationFields";
+import { EventDetailsFields } from "@/components/EventDetailsFields";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { minimumEndTime, utcIsoToZonedParts, wallClockEndIsInvalid } from "@/lib/eventDateTime";
 import { browserTimezone } from "@/lib/timezones";
 import { CURRENCIES_BY_CODE, suggestCurrencyForCountryCode } from "@/lib/currencies";
-import { mapboxTokenConfigured, type MapboxSuggestion } from "@/lib/mapbox";
+import type { MapboxSuggestion } from "@/lib/mapbox";
 import {
   getEventTaxonomies,
   type Event,
-  type EventCategory,
   type EventLocationInput,
   type EventStatus,
   type EventTaxonomies,
@@ -50,12 +48,13 @@ import type { Product } from "@/lib/productApi";
 import type { Question } from "@/lib/questionApi";
 import { ProductsEditor } from "@/components/ProductsEditor";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
+import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
 import { ComplimentarySettings } from "@/components/ComplimentarySettings";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "terms"];
+const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms"];
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -218,6 +217,7 @@ export function EventManager({
           <Tabs.Tab value="ticket-setup">Ticket Setup</Tabs.Tab>
           <Tabs.Tab value="complimentary">Complimentary</Tabs.Tab>
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
+          <Tabs.Tab value="content">Event page content</Tabs.Tab>
           <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
         </Tabs.List>
 
@@ -248,6 +248,9 @@ export function EventManager({
         <Tabs.Panel value="questions" pt="lg">
           <QuestionsEditor eventId={event.id} initialQuestions={initialQuestions} disabled={archived} />
         </Tabs.Panel>
+        <Tabs.Panel value="content" pt="lg">
+          <ContentSectionsEditor eventId={event.id} disabled={archived} />
+        </Tabs.Panel>
         <Tabs.Panel value="terms" pt="lg">
           <EventTermsEditor eventId={event.id} disabled={archived} />
         </Tabs.Panel>
@@ -267,6 +270,7 @@ function EventDetailsForm({
 }) {
   const router = useRouter();
   const taxonomies = useQuery<EventTaxonomies>({ queryKey: ["event-taxonomies"], queryFn: getEventTaxonomies });
+  const paymentCurrency = useQuery({ queryKey: ["organization-payment-currency"], queryFn: getOrganizationPaymentCurrency });
 
   const form = useForm({
     initialValues: {
@@ -284,16 +288,6 @@ function EventDetailsForm({
       currency_code: (v) => (!v ? "Currency is required" : null),
     },
   });
-  const category = taxonomies.data?.categories.find((item: EventCategory) => String(item.id) === form.values.event_category_id);
-  const categoryOptions = [...(taxonomies.data?.categories ?? []).map((item: EventCategory) => ({ value: String(item.id), label: item.name }))];
-  if (event.category && !categoryOptions.some((item) => item.value === String(event.category!.id))) {
-    categoryOptions.push({ value: String(event.category.id), label: `${event.category.name} (archived)` });
-  }
-  const subcategoryOptions = [...(category?.subcategories ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))];
-  if (event.subcategory && !subcategoryOptions.some((item) => item.value === String(event.subcategory!.id))) {
-    subcategoryOptions.push({ value: String(event.subcategory.id), label: `${event.subcategory.name} (archived)` });
-  }
-
   // Suggested from the event's already-saved location (not live Location-tab
   // typing — that's a separate form/tab). Dismissible, never auto-applied.
   const suggestedCurrency = suggestCurrencyForCountryCode(event.location_details?.country);
@@ -302,7 +296,10 @@ function EventDetailsForm({
   // silently suppressed by an earlier, unrelated dismissal.
   const [dismissedCurrency, setDismissedCurrency] = useState<string | null>(null);
   const showCurrencySuggestion =
-    !!suggestedCurrency && suggestedCurrency !== form.values.currency_code && suggestedCurrency !== dismissedCurrency;
+    !paymentCurrency.data &&
+    !!suggestedCurrency &&
+    suggestedCurrency !== form.values.currency_code &&
+    suggestedCurrency !== dismissedCurrency;
   const suggestedCountryName = event.location_details?.country
     ? (COUNTRIES_BY_CODE.get(event.location_details.country)?.name ?? event.location_details.country)
     : "";
@@ -327,14 +324,36 @@ function EventDetailsForm({
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
           <Stack>
-            <TextInput required label="Event title" {...form.getInputProps("title")} />
-            <RichTextDescription disabled={disabled} value={form.values.description} onChange={(value) => form.setFieldValue("description", value)} error={form.errors.description} />
-            <CurrencySelector
-              label="Currency"
-              required
-              description="Every price on this event — tickets, tiers, checkout — is quoted in this currency."
-              {...form.getInputProps("currency_code")}
+            <EventDetailsFields
+              values={form.values}
+              onChange={(field, value) => form.setFieldValue(field, value as never)}
+              errors={form.errors}
+              disabled={disabled}
+              categories={taxonomies.data?.categories ?? []}
+              currentCategory={event.category}
+              currentSubcategory={event.subcategory}
+              categoryLabel="Category (required to publish)"
             />
+            {paymentCurrency.data ? (
+              <TextInput
+                label="Currency"
+                value={`${event.currency_code} — set by your payment setup`}
+                disabled
+                description={
+                  <>
+                    Every price on this event — tickets, tiers, checkout — is quoted in this currency, set by your
+                    organization&apos;s payment setup. <PaymentCurrencyExplainer />
+                  </>
+                }
+              />
+            ) : (
+              <CurrencySelector
+                label="Currency"
+                required
+                description="Every price on this event — tickets, tiers, checkout — is quoted in this currency. This is provisional until you set up payments."
+                {...form.getInputProps("currency_code")}
+              />
+            )}
             {showCurrencySuggestion && (
               <Alert color="blue" variant="light">
                 This event is in {suggestedCountryName} — switch currency to{" "}
@@ -351,13 +370,6 @@ function EventDetailsForm({
                 </Button>
               </Alert>
             )}
-            <Select searchable clearable label="Category (required to publish)"
-              data={categoryOptions}
-              {...form.getInputProps("event_category_id")}
-              onChange={(value) => { form.setFieldValue("event_category_id", value ?? ""); form.setFieldValue("event_subcategory_id", ""); }} />
-            <Select searchable clearable disabled={disabled || !category} label="Subcategory (optional)"
-              data={subcategoryOptions}
-              {...form.getInputProps("event_subcategory_id")} />
             <MultiSelect searchable clearable label="Audience (optional)" description="Helps attendees discover events intended for them."
               data={(taxonomies.data?.audiences ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))} {...form.getInputProps("audience_ids")} />
             <MultiSelect searchable clearable label="Accessibility & event attributes (optional)" description="Highlight accessibility, facilities, format, and special access."
@@ -488,19 +500,6 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
   );
 }
 
-const LOCATION_TYPE_OPTIONS: { label: string; value: LocationType }[] = [
-  { label: "In-person", value: "IN_PERSON" },
-  { label: "Online", value: "ONLINE" },
-  { label: "Hybrid", value: "HYBRID" },
-];
-
-function needsVenue(locationType: LocationType) {
-  return locationType === "IN_PERSON" || locationType === "HYBRID";
-}
-function needsOnline(locationType: LocationType) {
-  return locationType === "ONLINE" || locationType === "HYBRID";
-}
-
 function EventLocationForm({
   event,
   onUpdated,
@@ -512,7 +511,6 @@ function EventLocationForm({
 }) {
   const router = useRouter();
   const loc = event.location_details;
-  const hasMapbox = mapboxTokenConfigured();
 
   const form = useForm({
     initialValues: {
@@ -573,59 +571,18 @@ function EventLocationForm({
     form.setFieldValue("longitude", suggestion.longitude);
   };
 
-  const showVenue = needsVenue(form.values.location_type);
-  const showOnline = needsOnline(form.values.location_type);
-
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
           <Stack>
-            <SegmentedControl
-              data={LOCATION_TYPE_OPTIONS}
-              {...form.getInputProps("location_type")}
+            <LocationFields
+              values={form.values}
+              onChange={(field, value) => form.setFieldValue(field, value as never)}
+              errors={form.errors}
+              disabled={disabled}
+              onAddressSelect={handleSuggestionSelect}
             />
-
-            {showVenue && (
-              <>
-                <CountrySelector label="Country" required {...form.getInputProps("country")} />
-                <TextInput label="Venue name" required {...form.getInputProps("venue_name")} />
-                {hasMapbox ? (
-                  <LocationAutocomplete
-                    label="Address"
-                    required
-                    error={form.errors.address_line1}
-                    disabled={disabled}
-                    value={form.values.address_line1}
-                    onChange={(value) => form.setFieldValue("address_line1", value)}
-                    onSelect={handleSuggestionSelect}
-                    countryIso2={form.values.country || null}
-                  />
-                ) : (
-                  <TextInput label="Address" required {...form.getInputProps("address_line1")} />
-                )}
-                <Group grow>
-                  <TextInput label="City" required {...form.getInputProps("city")} />
-                  <TextInput label="State / Region" {...form.getInputProps("state")} />
-                </Group>
-                <TextInput label="Postal code" {...form.getInputProps("postal_code")} />
-                <TextInput label="Address line 2" {...form.getInputProps("address_line2")} />
-              </>
-            )}
-
-            {showOnline && (
-              <>
-                <TextInput label="Join link / URL" placeholder="https://zoom.us/j/..." {...form.getInputProps("online_url")} />
-                <TextInput label="Platform" placeholder="Zoom" {...form.getInputProps("platform_name")} />
-                <Textarea
-                  label="Access instructions"
-                  placeholder="Meeting ID, passcode, or other notes for attendees"
-                  autosize
-                  minRows={2}
-                  {...form.getInputProps("access_instructions")}
-                />
-              </>
-            )}
 
             {!disabled ? (
               <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>

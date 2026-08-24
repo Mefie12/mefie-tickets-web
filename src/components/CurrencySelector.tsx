@@ -25,6 +25,7 @@ export function CurrencySelector({
   required,
   disabled,
   "aria-label": ariaLabel,
+  allowedCodes,
 }: {
   value?: string | null;
   onChange: (value: string | null) => void;
@@ -35,8 +36,12 @@ export function CurrencySelector({
   required?: boolean;
   disabled?: boolean;
   "aria-label"?: string;
+  /** Restricts the list to these ISO codes (e.g. what a chosen legal country's payment provider actually supports) — omit for the full global list. */
+  allowedCodes?: string[];
 }) {
   const selected = value ? CURRENCIES_BY_CODE.get(value) : undefined;
+  const allowedSet = allowedCodes ? new Set(allowedCodes) : null;
+  const data = allowedSet ? SELECT_DATA.filter((item) => allowedSet.has(item.value)) : SELECT_DATA;
 
   return (
     <Select
@@ -49,7 +54,7 @@ export function CurrencySelector({
       error={error}
       value={value}
       onChange={onChange}
-      data={SELECT_DATA}
+      data={data}
       searchable
       // Mantine seeds the search box with the selected label and only
       // resets it on blur, so typing would APPEND to it. Selecting the

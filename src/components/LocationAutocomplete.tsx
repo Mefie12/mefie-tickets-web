@@ -52,7 +52,6 @@ export function LocationAutocomplete({
       // Clearing stale results the instant the query drops below the
       // search threshold is the point of this effect (synchronizing
       // with the debounced Mapbox fetch below) — not derivable state.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSuggestions([]);
       return;
     }

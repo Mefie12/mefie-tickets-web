@@ -113,7 +113,19 @@ function PaymentForm({
   // the previous version left the Pay button enabled through this wait).
   const [paymentConfirmedByStripe, setPaymentConfirmedByStripe] = useState(false);
   const [checkingExistingStatus, setCheckingExistingStatus] = useState(true);
+  // Flips from the "confirming" to the "taking a while" message once
+  // CONFIRMATION_POLL_CEILING_MS has passed since Stripe confirmed the
+  // charge — driven by its own timer rather than recomputed from
+  // Date.now() on render, since ref/Date.now() reads aren't allowed
+  // during render (see pollStartedAtRef below).
+  const [showConfirmingMessage, setShowConfirmingMessage] = useState(true);
   const pollStartedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!paymentConfirmedByStripe) return;
+    const timer = setTimeout(() => setShowConfirmingMessage(false), CONFIRMATION_POLL_CEILING_MS);
+    return () => clearTimeout(timer);
+  }, [paymentConfirmedByStripe]);
 
   // A reload (see Checkout.tsx's sessionStorage resume) re-mounts this
   // form fresh, with no memory of whether the underlying PaymentIntent
@@ -196,14 +208,11 @@ function PaymentForm({
   }
 
   if (paymentConfirmedByStripe) {
-    const withinCeiling =
-      pollStartedAtRef.current === null || Date.now() - pollStartedAtRef.current < CONFIRMATION_POLL_CEILING_MS;
-
     return (
       <Stack gap="md" align="center" py="xl">
         <Loader size="sm" />
         <Text ta="center" fw={500}>
-          {withinCeiling
+          {showConfirmingMessage
             ? "Payment received — confirming your order…"
             : `Your payment was received. We're finalizing your order — this can take a few minutes. Reference: ${order.short_id}.`}
         </Text>

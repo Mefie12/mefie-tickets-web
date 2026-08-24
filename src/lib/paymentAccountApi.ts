@@ -53,6 +53,23 @@ export function provisionPaymentAccount(legalCountry: string, currency: string) 
   });
 }
 
+/**
+ * The one payment fact an ORGANIZER-role teammate (not just ADMIN) can
+ * read — see ShowOrganizationPaymentCurrencyAction. Used by the event
+ * creation/edit screens to show currency as a read-only, account-derived
+ * field once a payment account exists — see EventService::resolveCurrencyCode.
+ */
+export async function getOrganizationPaymentCurrency(): Promise<string | null> {
+  const result = await request<{ currency: string | null }>("/api/organization/payment-currency");
+  return result.currency;
+}
+
+/** Filters the settlement-currency picker on the payment setup form to combinations PaymentProviderRoutingService::resolve() will actually accept. */
+export async function getSupportedCurrencies(country: string): Promise<string[]> {
+  const result = await request<{ currencies: string[] }>(`/api/organization/payments/supported-currencies?country=${encodeURIComponent(country)}`);
+  return result.currencies;
+}
+
 export async function createPaymentManagementSession(): Promise<string> {
   const result = await request<{ client_secret: string }>("/api/organization/payments/management-session", { method: "POST" });
   return result.client_secret;

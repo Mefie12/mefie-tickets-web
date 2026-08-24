@@ -50,6 +50,30 @@ export function mapboxTokenConfigured(): boolean {
 }
 
 /**
+ * A static preview image of the venue location — no `mapbox-gl`
+ * dependency, just an `<img src>` built from the Static Images API,
+ * using the same public token as the geocoder above (no new vendor).
+ * Purely a visual preview: the actual "Get directions" action is a
+ * separate Google Maps deep link (see the public event pages), which
+ * this does not replace.
+ */
+export function staticMapImageUrl(
+  latitude: number,
+  longitude: number,
+  options?: { width?: number; height?: number; zoom?: number },
+): string | null {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  if (!token) return null;
+
+  const width = options?.width ?? 600;
+  const height = options?.height ?? 300;
+  const zoom = options?.zoom ?? 14;
+  const marker = `pin-l+552efd(${longitude},${latitude})`;
+
+  return `https://api.mapbox.com/styles/v1/mapbox/streets-v12/static/${marker}/${longitude},${latitude},${zoom}/${width}x${height}@2x?access_token=${token}`;
+}
+
+/**
  * Returns [] on any error (network failure, no token, empty query) —
  * callers treat an empty suggestion list as "nothing to show" rather
  * than a hard failure, since this is a convenience feature layered over

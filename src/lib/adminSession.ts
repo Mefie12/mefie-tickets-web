@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { backendRequest } from "@/lib/backend";
 import type { CurrentUser, PlatformRole } from "@/lib/authApi";
+import type { AdminAuthReason, AdminChallenge, AdminDeviceSession } from "@/lib/adminAuthApi";
 
 /**
  * Four distinct states a visitor to /admin/* can be in, resolved from a
@@ -25,8 +26,9 @@ export type AdminAuthState =
   | { status: "unauthenticated" }
   | { status: "unverified"; user: CurrentUser }
   | { status: "unauthorized"; user: CurrentUser }
-  | { status: "unprivileged"; user: CurrentUser }
-  | { status: "privileged"; user: CurrentUser; role: PlatformRole; permissions: string[] };
+  | { status: "unprivileged"; user: CurrentUser; reason: AdminAuthReason; challenge: AdminChallenge | null }
+  | { status: "service_error"; user: CurrentUser }
+  | { status: "privileged"; user: CurrentUser; role: PlatformRole; permissions: string[]; session?: AdminDeviceSession };
 
 export const getAdminAuthState = cache(async (): Promise<AdminAuthState> => {
   const userResult = await backendRequest<{ user: CurrentUser }>("/api/users/me");
@@ -35,21 +37,23 @@ export const getAdminAuthState = cache(async (): Promise<AdminAuthState> => {
   }
   const user = userResult.data.user;
 
-  const sessionResult = await backendRequest<{ role: PlatformRole; permissions: string[]; code?: string }>(
-    "/api/admin/session",
+  const sessionResult = await backendRequest<{ status: AdminAuthReason; role?: PlatformRole; permissions?: string[];
+    session?: AdminDeviceSession; challenge?: AdminChallenge | null; code?: string }>(
+    "/api/admin/auth-state",
   );
 
-  if (sessionResult.status === 200) {
-    return { status: "privileged", user, role: sessionResult.data.role, permissions: sessionResult.data.permissions };
+  if (sessionResult.status === 200 && sessionResult.data.status === "active" && sessionResult.data.role && sessionResult.data.permissions) {
+    return { status: "privileged", user, role: sessionResult.data.role, permissions: sessionResult.data.permissions, session: sessionResult.data.session };
   }
 
   if (sessionResult.data?.code === "EMAIL_NOT_VERIFIED") {
     return { status: "unverified", user };
   }
 
-  if (sessionResult.status === 403) {
+  if (sessionResult.status === 403 || sessionResult.data.status === "unauthorized") {
     return { status: "unauthorized", user };
   }
 
-  return { status: "unprivileged", user };
+  if (sessionResult.status !== 200) return { status: "service_error", user };
+  return { status: "unprivileged", user, reason: sessionResult.data.status, challenge: sessionResult.data.challenge ?? null };
 });

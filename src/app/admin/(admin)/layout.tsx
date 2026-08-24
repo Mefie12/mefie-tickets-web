@@ -23,6 +23,9 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
   if (state.status === "unprivileged") {
     redirect("/admin/mfa");
   }
+  if (state.status === "service_error") {
+    return <Container size="xs" py={80}><Alert color="red" title="Admin Console unavailable">We could not verify your privileged session. Retry in a moment. No verification code was sent.</Alert></Container>;
+  }
 
   if (state.status === "unauthorized") {
     return (
@@ -35,7 +38,7 @@ export default async function PlatformAdminLayout({ children }: { children: Reac
   }
 
   return (
-    <PlatformAdminShell user={state.user} role={state.role} permissions={state.permissions}>
+    <PlatformAdminShell user={state.user} role={state.role} permissions={state.permissions} session={state.session}>
       {children}
     </PlatformAdminShell>
   );

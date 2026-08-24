@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import {
   AppShell,
+  Alert,
   Avatar,
   Badge,
   Group,
@@ -24,8 +26,9 @@ import {
   IconBuildingStore,
   IconCategory,
   IconStar,
+  IconDevices,
 } from "@tabler/icons-react";
-import { endAdminSession } from "@/lib/adminAuthApi";
+import { endAdminSession, type AdminDeviceSession } from "@/lib/adminAuthApi";
 import { logout } from "@/lib/authApi";
 import type { CurrentUser, PlatformRole } from "@/lib/authApi";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -50,14 +53,19 @@ export function PlatformAdminShell({
   role,
   permissions,
   children,
+  session,
 }: {
   user: CurrentUser;
   role: PlatformRole;
   permissions: string[];
   children: React.ReactNode;
+  session?: AdminDeviceSession;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [now, setNow] = useState(0);
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
+  const minutesLeft = session && now > 0 ? Math.max(0, Math.ceil((Math.min(new Date(session.expires_at).getTime(), new Date(session.idle_expires_at).getTime()) - now) / 60_000)) : null;
 
   const stepDownMutation = useMutation({
     mutationFn: endAdminSession,
@@ -103,6 +111,7 @@ export function PlatformAdminShell({
               </UnstyledButton>
             </Menu.Target>
             <Menu.Dropdown>
+              <Menu.Item component={Link} href="/admin/security" leftSection={<IconDevices size={16} />}>Security sessions</Menu.Item>
               <Menu.Item
                 leftSection={<IconShieldLock size={16} />}
                 onClick={() => stepDownMutation.mutate()}
@@ -130,6 +139,7 @@ export function PlatformAdminShell({
           leftSection={<IconLayoutDashboard size={16} />}
           active={pathname === "/admin/dashboard"}
         />
+        <NavLink component={Link} href="/admin/security" label="Security sessions" leftSection={<IconDevices size={16} />} active={pathname.startsWith("/admin/security")} />
         {has("organizations.view") && (
           <NavLink
             component={Link}
@@ -174,7 +184,7 @@ export function PlatformAdminShell({
         )}
       </AppShell.Navbar>
 
-      <AppShell.Main>{children}</AppShell.Main>
+      <AppShell.Main>{minutesLeft !== null && minutesLeft <= 5 && <Alert color="yellow" mb="md">Your privileged admin session will end in about {minutesLeft} minute{minutesLeft === 1 ? "" : "s"}. Save your work.</Alert>}{children}</AppShell.Main>
     </AppShell>
   );
 }
