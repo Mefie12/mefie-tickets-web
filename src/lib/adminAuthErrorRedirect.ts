@@ -12,7 +12,13 @@ export function redirectOnAdminAuthError(error: unknown, router: { push: (href: 
   if (redirectOnAuthError(error, router)) return true;
 
   if (error instanceof ApiError && error.code === "ADMIN_MFA_REQUIRED") {
-    router.push("/admin/mfa");
+    const returnTo = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/admin/dashboard";
+    router.push(`/admin/mfa?returnTo=${encodeURIComponent(returnTo)}`);
+    return true;
+  }
+  if (error instanceof ApiError && error.code === "ADMIN_RECENT_AUTH_REQUIRED") {
+    const returnTo = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/admin/dashboard";
+    router.push(`/admin/reauthenticate?returnTo=${encodeURIComponent(returnTo)}`);
     return true;
   }
 

@@ -2,13 +2,20 @@
 
 import { useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Checkbox, Group, Stack, Text, Title } from "@mantine/core";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { loadConnectAndInitialize } from "@stripe/connect-js";
 import { ConnectAccountManagement, ConnectAccountOnboarding, ConnectComponentsProvider } from "@stripe/react-connect-js";
 import { ApiError } from "@/lib/authApi";
-import { createPaymentManagementSession, provisionPaymentAccount, type PaymentAccount, type PendingEarnings } from "@/lib/paymentAccountApi";
+import {
+  createPaymentManagementSession,
+  getSupportedCurrencies,
+  provisionPaymentAccount,
+  type PaymentAccount,
+  type PendingEarnings,
+} from "@/lib/paymentAccountApi";
 import { CountrySelector } from "@/components/CountrySelector";
 import { CurrencySelector } from "@/components/CurrencySelector";
+import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
 import { COUNTRIES_BY_CODE } from "@/lib/countries";
 import { PendingEarningsCard } from "@/components/PendingEarningsCard";
 import { formatMinorAmount } from "@/lib/money";
@@ -33,6 +40,14 @@ export function PaymentsAndPayouts({
     mutationFn: () => provisionPaymentAccount(country.trim().toUpperCase(), currency.trim().toUpperCase()),
     onSuccess: ({ payment_account }) => setAccount(payment_account),
   });
+  // Filters the currency picker to combinations the backend will
+  // actually accept (config/payment_provider_currency_matrix.php) —
+  // catches an unsupported pairing before submitting, not just after.
+  const supportedCurrencies = useQuery({
+    queryKey: ["supported-currencies", country],
+    queryFn: () => getSupportedCurrencies(country),
+    enabled: country.length === 2,
+  });
   const disconnected = account?.account_status === "DISCONNECTED";
   // A HISTORICAL account is a permanently-rejected setup attempt (see
   // PaymentAccountService::provision()'s InvalidRequestException catch)
@@ -54,7 +69,8 @@ export function PaymentsAndPayouts({
           <Text c="dimmed">
             Add your legal payment country and settlement currency to start selling tickets right away — you can
             complete full verification later, once you have real sales to withdraw. This is separate from your public
-            organization address, and separate from what currency any individual event sells tickets in.
+            organization address, but it does determine the currency every event you create sells tickets in.{" "}
+            <PaymentCurrencyExplainer />
           </Text>
           {rejectionReason && (
             <Alert color="red" title="Your last setup attempt was rejected">
@@ -74,10 +90,16 @@ export function PaymentsAndPayouts({
           />
           <CurrencySelector
             label="Settlement currency"
-            description="The currency your payouts settle in — auto-filled from your country, but you can change it. Your events can still sell tickets in any currency; sales in other currencies are automatically converted at payout time."
+            description={
+              <>
+                Every event your organization creates sells tickets in this currency — it can&apos;t be mixed across
+                events. <PaymentCurrencyExplainer />
+              </>
+            }
             required
             value={currency}
             onChange={(value) => setCurrency(value ?? "")}
+            allowedCodes={supportedCurrencies.data}
           />
           <Alert color="orange">Choose the country where the entity receiving ticket revenue is legally registered. This is a financial/KYC setting, not your public address, and changing it later requires payment-account replacement.</Alert>
           <Checkbox checked={countryConfirmed} onChange={(event) => setCountryConfirmed(event.currentTarget.checked)} label="I confirm this is the payment account's legal country." />

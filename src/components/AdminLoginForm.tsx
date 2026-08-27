@@ -5,7 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { ApiError, login, type CurrentUser } from "@/lib/authApi";
+import { ApiError } from "@/lib/authApi";
+import { adminLogin } from "@/lib/adminAuthApi";
 
 /**
  * Platform staff sign in through the exact same /api/auth/login endpoint
@@ -15,11 +16,11 @@ import { ApiError, login, type CurrentUser } from "@/lib/authApi";
  * afterward: /admin/mfa, to establish the privileged session, instead of
  * straight to /dashboard.
  */
-export function AdminLoginForm() {
+export function AdminLoginForm({ defaultEmail = "", returnTo = "/admin/dashboard" }: { defaultEmail?: string; returnTo?: string }) {
   const router = useRouter();
 
   const form = useForm({
-    initialValues: { email: "", password: "" },
+    initialValues: { email: defaultEmail, password: "" },
     validate: {
       email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? null : "Enter a valid email"),
       password: (v) => (v.length === 0 ? "Password is required" : null),
@@ -27,14 +28,8 @@ export function AdminLoginForm() {
   });
 
   const loginMutation = useMutation({
-    mutationFn: (values: { email: string; password: string }) => login(values),
-    onSuccess: (data: { user: CurrentUser }) => {
-      if (!data.user.email_verified_at) {
-        router.push("/verify-email");
-        return;
-      }
-      router.push("/admin/mfa");
-    },
+    mutationFn: (values: { email: string; password: string }) => adminLogin(values),
+    onSuccess: () => router.push(`/admin/mfa?returnTo=${encodeURIComponent(returnTo)}`),
     onError: (error: Error) => {
       if (error instanceof ApiError && error.errors) {
         form.setErrors(

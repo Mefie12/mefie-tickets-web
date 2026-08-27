@@ -33,13 +33,23 @@ function flagEmoji(alpha2: string): string {
     .join("");
 }
 
+/**
+ * `world-countries`' own currency-key ordering is wrong for one real
+ * case: Cuba (CU) lists CUC first, a currency discontinued in January
+ * 2021 — see the same correction (and rationale) applied to the
+ * backend's independently-generated country map in
+ * config/payment_provider_currency_matrix.php on the API. Keep both
+ * in sync if this ever needs another entry.
+ */
+const DEFAULT_CURRENCY_OVERRIDES: Record<string, string> = { CU: "CUP" };
+
 export const COUNTRIES: Country[] = worldCountries
   .map((country) => ({
     code: country.cca2,
     name: country.name.common,
     aliases: (country.altSpellings ?? []).map((alias) => alias.toLowerCase()),
     flag: flagEmoji(country.cca2),
-    defaultCurrency: Object.keys(country.currencies ?? {})[0] ?? null,
+    defaultCurrency: DEFAULT_CURRENCY_OVERRIDES[country.cca2] ?? Object.keys(country.currencies ?? {})[0] ?? null,
   }))
   .sort((a, b) => a.name.localeCompare(b.name));
 

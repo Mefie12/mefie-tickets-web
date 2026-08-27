@@ -89,7 +89,6 @@ export function Checkout({ event }: { event: PublicEvent }) {
         }
       })
       .catch(() => sessionStorage.removeItem(checkoutStorageKey(event.id)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.id]);
 
   const cartItems = useMemo(

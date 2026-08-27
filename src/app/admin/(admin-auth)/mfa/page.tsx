@@ -4,8 +4,10 @@ import { getAdminAuthState } from "@/lib/adminSession";
 import { AuthLayout } from "@/components/AuthLayout";
 import { AdminMfaStep } from "@/components/AdminMfaStep";
 
-export default async function AdminMfaPage() {
+export default async function AdminMfaPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
   const state = await getAdminAuthState();
+  const requested = (await searchParams).returnTo;
+  const returnTo = requested?.startsWith("/admin/") && !requested.startsWith("//") ? requested : "/admin/dashboard";
 
   if (state.status === "unauthenticated") {
     redirect("/admin/login");
@@ -14,8 +16,10 @@ export default async function AdminMfaPage() {
     redirect("/verify-email");
   }
   if (state.status === "privileged") {
-    redirect("/admin/dashboard");
+    redirect(returnTo);
   }
+
+  if (state.status === "service_error") return <AuthLayout title="Admin Console unavailable"><Alert color="red">We could not check your admin session. Retry in a moment. No verification code was sent.</Alert></AuthLayout>;
 
   if (state.status === "unauthorized") {
     return (
@@ -30,7 +34,7 @@ export default async function AdminMfaPage() {
 
   return (
     <AuthLayout title="Verify it's you" subtitle="One more step before you can enter the console.">
-      <AdminMfaStep email={state.user.email} />
+      <AdminMfaStep initialChallenge={state.challenge} reason={state.reason} returnTo={returnTo} />
     </AuthLayout>
   );
 }

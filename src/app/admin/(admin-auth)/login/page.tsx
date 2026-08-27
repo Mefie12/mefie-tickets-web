@@ -12,18 +12,19 @@ import { AdminLoginForm } from "@/components/AdminLoginForm";
  * a single shared layout guard can't express that without page-specific
  * overrides anyway.
  */
-export default async function AdminLoginPage() {
+export default async function AdminLoginPage({ searchParams }: { searchParams: Promise<{ returnTo?: string }> }) {
   const state = await getAdminAuthState();
+  const requested = (await searchParams).returnTo;
+  const returnTo = requested?.startsWith("/admin/") && !requested.startsWith("//") ? requested : "/admin/dashboard";
 
   if (state.status === "unverified") {
     redirect("/verify-email");
   }
-  if (state.status === "unprivileged") {
-    redirect("/admin/mfa");
-  }
   if (state.status === "privileged") {
-    redirect("/admin/dashboard");
+    redirect(returnTo);
   }
+
+  if (state.status === "service_error") return <AuthLayout title="Admin Console unavailable"><Alert color="red">We could not check your admin session. Retry in a moment. No verification code was sent.</Alert></AuthLayout>;
 
   if (state.status === "unauthorized") {
     return (
@@ -38,7 +39,7 @@ export default async function AdminLoginPage() {
 
   return (
     <AuthLayout title="Mefie Admin Console" subtitle="Sign in with your staff account to continue.">
-      <AdminLoginForm />
+      <AdminLoginForm defaultEmail={state.status === "unprivileged" ? state.user.email : ""} returnTo={returnTo} />
     </AuthLayout>
   );
 }

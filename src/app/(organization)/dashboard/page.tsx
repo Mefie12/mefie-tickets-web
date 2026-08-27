@@ -1,8 +1,9 @@
 import { Badge, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
-import { IconConfetti, IconPlus } from "@tabler/icons-react";
+import { IconConfetti } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import { formatEventDate } from "@/lib/eventDateTime";
 import type { Event, EventStatus } from "@/lib/eventApi";
+import { CreateEventMenu } from "@/components/CreateEventMenu";
 import { LinkButton } from "@/components/LinkButton";
 import { LinkCard } from "@/components/LinkCard";
 
@@ -31,9 +32,7 @@ export default async function DashboardPage() {
             <Text c="dimmed" ta="center" maw={420}>
               Your organization is set up. The next step is creating an event so you can start selling tickets.
             </Text>
-            <LinkButton href="/events/new" leftSection={<IconPlus size={16} />} mt="sm" size="md">
-              Create your first event
-            </LinkButton>
+            <CreateEventMenu label="Create your first event" mt="sm" size="md" />
           </Stack>
         </Card>
       </Stack>
@@ -52,9 +51,7 @@ export default async function DashboardPage() {
         <Title order={2} fz={28}>
           Dashboard
         </Title>
-        <LinkButton href="/events/new" leftSection={<IconPlus size={16} />}>
-          Create event
-        </LinkButton>
+        <CreateEventMenu />
       </Group>
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
