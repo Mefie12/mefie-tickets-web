@@ -9,7 +9,6 @@ import {
   Button,
   Card,
   Group,
-  Progress,
   Stack,
   Text,
   Title,
@@ -22,35 +21,83 @@ import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { updateOrganization, uploadOrganizationLogo } from "@/lib/organizationApi";
 import { InviteOrganizerForm } from "@/components/InviteOrganizerForm";
 import { PhoneInput } from "@/components/PhoneInput";
+import { OnboardingJourney } from "@/components/OnboardingJourney";
+import { PaymentAccountSetupForm } from "@/components/PaymentAccountSetupForm";
+import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
 
-const STEPS = ["profile", "team"] as const;
-type Step = (typeof STEPS)[number];
+type Step = "welcome" | "financials" | "profile" | "team";
 
 /**
- * Two-step post-registration wizard for the founding admin: enrich the
- * org profile, then optionally invite the first teammate. Deliberately
- * narrow scope — description/website/social are out of scope for step 1
- * (see the brief), and step 2 is a thin wrapper around the same
- * InviteOrganizerForm used on the standalone Team page. Both steps are
- * skippable; either path ends on the dashboard.
+ * Post-registration wizard for the founding admin. It leads with payment
+ * setup — legal country + settlement currency — so every event the
+ * organization later creates inherits that currency from creation (see
+ * EventService::resolveCurrencyCode()), rather than being drafted in a
+ * provisional USD that only collides with the real currency at publish
+ * time. The payment step is skippable ("Skip this step if your event is
+ * free"); anyone who skips and later sells paid tickets is still caught
+ * at publish by EventPaymentBindingService::bindForPaidSales()
+ * (PAYMENT_SETUP_REQUIRED), and the dashboard shows a reminder until
+ * payments are set up. The profile and team steps that follow are
+ * unchanged and also skippable. No onboarding progress is persisted
+ * server-side; every path ends on the dashboard.
  */
 export default function OnboardingPage() {
-  const [step, setStep] = useState<Step>("profile");
+  const [step, setStep] = useState<Step>("welcome");
   const router = useRouter();
 
-  const stepIndex = STEPS.indexOf(step);
-
   return (
-    <Stack gap="xl" maw={520}>
-      <Stack gap={4}>
-        <Text size="sm" c="dimmed">
-          Step {stepIndex + 1} of {STEPS.length}
-        </Text>
-        <Progress value={((stepIndex + 1) / STEPS.length) * 100} size="sm" radius="xl" />
-      </Stack>
+    <Stack gap="xl" maw={620}>
+      <OnboardingJourney activeKey={step === "financials" ? "financials" : undefined} />
 
+      {step === "welcome" && <WelcomeStep onNext={() => setStep("financials")} />}
+      {step === "financials" && <FinancialsStep onDone={() => setStep("profile")} />}
       {step === "profile" && <ProfileStep onDone={() => setStep("team")} />}
       {step === "team" && <TeamStep onDone={() => router.push("/dashboard")} />}
+    </Stack>
+  );
+}
+
+function WelcomeStep({ onNext }: { onNext: () => void }) {
+  return (
+    <Stack gap="xl" align="center" mt="md">
+      <Stack gap={4} align="center">
+        <Title order={2} fz={26} ta="center">
+          Welcome to Mefie Tickets
+        </Title>
+        <Text c="dimmed" size="sm" ta="center">
+          Here&apos;s what happens now:
+        </Text>
+      </Stack>
+      <Button size="md" onClick={onNext}>
+        Next
+      </Button>
+    </Stack>
+  );
+}
+
+function FinancialsStep({ onDone }: { onDone: () => void }) {
+  return (
+    <Stack gap="xl">
+      <Stack gap={4}>
+        <Title order={2} fz={26}>
+          Add your financial details
+        </Title>
+        <Text c="dimmed" size="sm">
+          Connect your account to get paid. Pick your legal payment country and settlement currency now — every
+          event your organization creates sells tickets in that currency. You can finish full verification later.{" "}
+          <PaymentCurrencyExplainer />
+        </Text>
+      </Stack>
+
+      <Card withBorder radius="lg" p="xl">
+        <PaymentAccountSetupForm hideHeading defaultLegalCountry={null} onProvisioned={onDone} />
+      </Card>
+
+      <Group justify="center">
+        <Button variant="subtle" color="gray" onClick={onDone}>
+          Skip this step if your event is free
+        </Button>
+      </Group>
     </Stack>
   );
 }
