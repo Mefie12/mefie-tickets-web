@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { loadStripe, type StripePaymentElementOptions } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Loader, Stack, Text } from "@mantine/core";
+import { Alert, Button, Card, Loader, Stack, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import { formatMoney } from "@/lib/money";
@@ -224,19 +224,21 @@ function PaymentForm({
   return (
     <form onSubmit={handleSubmit}>
       <Stack gap="md">
-        <OrderCostBreakdown order={order} />
-        <Text size="xs" c="dimmed">
-          Order {order.short_id}
-        </Text>
+        <Card withBorder radius="md" p="md">
+          <OrderCostBreakdown order={order} />
+        </Card>
         <PaymentElement options={paymentElementOptions} />
         {errorMessage && (
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
             {errorMessage}
           </Alert>
         )}
-        <Button type="submit" loading={submitting} disabled={!stripe || !elements} size="md">
+        <Button type="submit" loading={submitting} disabled={!stripe || !elements} size="md" fullWidth>
           Pay {formatMoney(order.total_amount, order.currency)}
         </Button>
+        <Text size="xs" c="dimmed" ta="center">
+          Order {order.short_id}
+        </Text>
       </Stack>
     </form>
   );

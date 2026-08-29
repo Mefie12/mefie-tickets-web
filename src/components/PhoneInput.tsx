@@ -42,6 +42,7 @@ export function PhoneInput({
   placeholder,
   required,
   disabled,
+  size,
 }: {
   value?: string | null;
   onChange: (value: string) => void;
@@ -50,6 +51,7 @@ export function PhoneInput({
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
+  size?: string;
 }) {
   const initial = value ? parsePhoneNumberFromString(value) : undefined;
   const [country, setCountry] = useState<CountryCode | null>(initial?.country ?? null);
@@ -87,18 +89,29 @@ export function PhoneInput({
   }
 
   return (
-    <Input.Wrapper label={label} required={required} error={error}>
-      <Group gap={6} wrap="nowrap" align="flex-start">
+    <Input.Wrapper label={label} required={required} error={error} size={size}>
+      <Group gap={6} wrap="nowrap" align="flex-start" w="100%">
         <Select
           aria-label="Country code"
-          placeholder="Country"
+          placeholder="Code"
           data={COUNTRY_SELECT_DATA}
           value={country}
           onChange={handleCountryChange}
           disabled={disabled}
           error={!!error}
+          size={size}
           searchable
-          w={112}
+          autoComplete="tel-country-code"
+          comboboxProps={{ width: 260, position: "bottom-start" }}
+          // Fits a flag + a 4-digit dial code (e.g. "+233", "+1876")
+          // without truncation. Tightened section widths keep it compact
+          // even so; the full country name lives in the dropdown.
+          // flex:0 0 auto so it never grows at the number field's expense
+          // (the number field gets the whole rest of its own row).
+          flex="0 0 auto"
+          w={116}
+          leftSectionWidth={26}
+          rightSectionWidth={26}
           onFocus={(event) => event.currentTarget.select()}
           nothingFoundMessage="No matching country"
           leftSection={country ? <span aria-hidden="true">{DIAL_COUNTRIES_BY_CODE.get(country)?.flag}</span> : undefined}
@@ -130,11 +143,19 @@ export function PhoneInput({
         <TextInput
           aria-label={typeof label === "string" ? label : "Phone number"}
           placeholder={placeholder ?? "Phone number"}
+          type="tel"
+          inputMode="tel"
+          size={size}
+          autoComplete="tel-national"
           value={national}
           onChange={(event) => handleNationalChange(event.currentTarget.value)}
           disabled={disabled}
           error={!!error}
-          style={{ flex: 1 }}
+          // flex:1 + miw:0 so the number field takes all remaining room
+          // and can still shrink on a very narrow container instead of
+          // pushing the country selector out or overflowing the row.
+          flex="1 1 auto"
+          miw={0}
         />
       </Group>
     </Input.Wrapper>

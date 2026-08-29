@@ -7,6 +7,7 @@ import { staticMapImageUrl } from "@/lib/mapbox";
 import { Checkout } from "@/components/Checkout";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { EventGallery } from "@/components/EventGallery";
+import { ExpandableHtml } from "@/components/ExpandableHtml";
 import { PublicContentSections } from "@/components/PublicContentSections";
 import { MobileBuyBar } from "@/components/MobileBuyBar";
 
@@ -80,15 +81,15 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
                 </Text>
               </Breadcrumbs>
 
-              <Group gap="md" align="flex-start">
-                <Avatar src={organization.logo_url} size={56} radius="lg" color="brand" mt={-48}>
+              <Group gap="md" align="flex-start" wrap="nowrap">
+                <Avatar src={organization.logo_url} size={56} radius="lg" color="brand" style={{ flexShrink: 0 }}>
                   {organization.name[0]}
                 </Avatar>
                 <Stack gap={4}>
                   <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" fw={500}>
                     {organization.name}
                   </Text>
-                  <Title order={1} fz={34}>
+                  <Title order={1} fz={{ base: 26, sm: 34 }} style={{ overflowWrap: "anywhere" }}>
                     {series.title}
                   </Title>
                 </Stack>
@@ -169,7 +170,7 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
                 </Text>
               )}
 
-              {series.description && <Box maw={700} dangerouslySetInnerHTML={{ __html: series.description }} />}
+              {series.description && <ExpandableHtml html={series.description} maw={700} />}
 
               {series.gallery.length > 0 && <EventGallery gallery={series.gallery} />}
 
@@ -227,7 +228,7 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
                   Tickets are no longer available for this date{upcoming.length > 0 ? " — see the upcoming dates above." : "."}
                 </Alert>
               ) : (
-                <Paper withBorder radius="lg" p="lg">
+                <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
                   <Checkout event={occurrence} />
                 </Paper>
               )}

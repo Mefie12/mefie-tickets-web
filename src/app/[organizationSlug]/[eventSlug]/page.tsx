@@ -12,6 +12,7 @@ import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { EventGallery } from "@/components/EventGallery";
+import { ExpandableHtml } from "@/components/ExpandableHtml";
 import { PublicContentSections } from "@/components/PublicContentSections";
 import { PublicEventSeriesView } from "@/components/PublicEventSeriesView";
 import { MobileBuyBar } from "@/components/MobileBuyBar";
@@ -139,15 +140,15 @@ export default async function PublicEventPage({
                 </Text>
               </Breadcrumbs>
 
-              <Group gap="md" align="flex-start">
-                <Avatar src={organization.logo_url} size={56} radius="lg" color="brand" mt={-48}>
+              <Group gap="md" align="flex-start" wrap="nowrap">
+                <Avatar src={organization.logo_url} size={56} radius="lg" color="brand" style={{ flexShrink: 0 }}>
                   {organization.name[0]}
                 </Avatar>
                 <Stack gap={4}>
                   <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" fw={500}>
                     {organization.name}
                   </Text>
-                  <Title order={1} fz={34}>
+                  <Title order={1} fz={{ base: 26, sm: 34 }} style={{ overflowWrap: "anywhere" }}>
                     {event.title}
                   </Title>
                 </Stack>
@@ -195,7 +196,7 @@ export default async function PublicEventPage({
                 </Text>
               )}
 
-              {event.description && <Box maw={700} dangerouslySetInnerHTML={{ __html: event.description }} />}
+              {event.description && <ExpandableHtml html={event.description} maw={700} />}
 
               {event.gallery.length > 0 && <EventGallery gallery={event.gallery} />}
 
@@ -256,7 +257,7 @@ export default async function PublicEventPage({
                   Tickets are no longer available for this event.
                 </Alert>
               ) : (
-                <Paper withBorder radius="lg" p="lg">
+                <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
                   <Checkout event={event} />
                 </Paper>
               )}

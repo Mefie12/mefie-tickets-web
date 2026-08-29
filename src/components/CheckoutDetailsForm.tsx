@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Button, Card, Checkbox, Divider, Group, SegmentedControl, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, Card, Checkbox, Divider, Group, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { ApiError } from "@/lib/authApi";
@@ -210,14 +210,25 @@ export function CheckoutDetailsForm({
         <Title order={2} fz={22}>
           Your details
         </Title>
-        <Group grow>
-          <TextInput label="First name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
-          <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
-        </Group>
-        <Group grow>
-          <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-          <PhoneInput label="Phone" required value={phone} onChange={setPhone} />
-        </Group>
+        {/* Container query, not a viewport breakpoint: the checkout is a
+            ~340px sticky sidebar on desktop and full-width on mobile, so
+            first/last only pair up when the column itself has the room —
+            otherwise everything stacks, which keeps every field a
+            comfortable tap target. Email and phone always get their own
+            row (phone needs the width for its country-code selector). */}
+        <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
+          <TextInput label="First name" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
+          <TextInput label="Last name" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
+        </SimpleGrid>
+        <TextInput
+          label="Email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.currentTarget.value)}
+        />
+        <PhoneInput label="Phone" required value={phone} onChange={setPhone} />
       </Stack>
 
       {orderQuestions.length > 0 && (
@@ -265,42 +276,45 @@ export function CheckoutDetailsForm({
                 </Stack>
 
                 {isBuyerSlot && (
-                  <Text size="sm" c="dimmed">
+                  <Text size="sm" c="dimmed" style={{ overflowWrap: "anywhere" }}>
                     Using your details above: {firstName} {lastName} · {email} · {phone}
                   </Text>
                 )}
 
                 {attendee.assignment === "other" && (
                   <>
-                    <Group grow>
+                    <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
                       <TextInput
                         label="First name"
                         size="sm"
+                        autoComplete="off"
                         value={attendee.first_name}
                         onChange={(e) => updateAttendee(index, { first_name: e.currentTarget.value })}
                       />
                       <TextInput
                         label="Last name"
                         size="sm"
+                        autoComplete="off"
                         value={attendee.last_name}
                         onChange={(e) => updateAttendee(index, { last_name: e.currentTarget.value })}
                       />
-                    </Group>
-                    <Group grow align="flex-start">
-                      <TextInput
-                        label="Email (optional)"
-                        description="We'll send them their ticket if provided"
-                        size="sm"
-                        type="email"
-                        value={attendee.email}
-                        onChange={(e) => updateAttendee(index, { email: e.currentTarget.value })}
-                      />
-                      <PhoneInput
-                        label="Phone (optional)"
-                        value={attendee.phone}
-                        onChange={(value) => updateAttendee(index, { phone: value })}
-                      />
-                    </Group>
+                    </SimpleGrid>
+                    <TextInput
+                      label="Email (optional)"
+                      description="We'll send them their ticket if provided"
+                      size="sm"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="off"
+                      value={attendee.email}
+                      onChange={(e) => updateAttendee(index, { email: e.currentTarget.value })}
+                    />
+                    <PhoneInput
+                      label="Phone (optional)"
+                      size="sm"
+                      value={attendee.phone}
+                      onChange={(value) => updateAttendee(index, { phone: value })}
+                    />
                   </>
                 )}
 
@@ -372,12 +386,20 @@ export function CheckoutDetailsForm({
         </Card>
       )}
 
-      <Group justify="space-between">
-        <Button variant="subtle" onClick={onBack} disabled={mutation.isPending}>
+      {/* wrap-reverse: if the two don't fit on one line, the primary
+          action stays on top and "Back" drops below it. */}
+      <Group justify="space-between" wrap="wrap-reverse" gap="sm">
+        <Button variant="subtle" color="gray" onClick={onBack} disabled={mutation.isPending}>
           Back to tickets
         </Button>
-        <Button onClick={handleSubmit} loading={mutation.isPending} disabled={termsVersionChanged}>
-          {totalDue === 0 ? "Register for free" : "Continue"}
+        <Button
+          size="md"
+          onClick={handleSubmit}
+          loading={mutation.isPending}
+          disabled={termsVersionChanged}
+          style={{ flex: "1 1 auto" }}
+        >
+          {totalDue === 0 ? "Register for free" : "Continue to payment"}
         </Button>
       </Group>
     </Stack>
