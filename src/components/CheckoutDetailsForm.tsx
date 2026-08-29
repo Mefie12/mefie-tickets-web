@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Checkbox, Divider, Group, SegmentedControl, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -8,7 +8,9 @@ import { isValidPhoneNumber } from "libphonenumber-js";
 import { ApiError } from "@/lib/authApi";
 import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
+import { computeBuyerCosts } from "@/lib/fees";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
+import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { PhoneInput } from "@/components/PhoneInput";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 
@@ -90,6 +92,11 @@ export function CheckoutDetailsForm({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsVersionChanged, setTermsVersionChanged] = useState(false);
   const checkoutIdempotencyKey = useRef(crypto.randomUUID());
+
+  const costs = useMemo(
+    () => computeBuyerCosts(Math.round(totalDue * 100), event.pricing),
+    [totalDue, event.pricing],
+  );
 
   const orderQuestions = event.questions.filter((q) => q.scope === "ORDER").sort((a, b) => a.sort_order - b.sort_order);
   const attendeeQuestions = event.questions
@@ -349,6 +356,20 @@ export function CheckoutDetailsForm({
             </Button>
           </Stack>
         </Alert>
+      )}
+
+      {totalDue > 0 && (
+        <Card withBorder radius="md" p="md">
+          <OrderCostBreakdown
+            amounts={{
+              currency: event.currency_code,
+              subtotalMinor: costs.subtotalMinor,
+              serviceFeeMinor: costs.serviceFeeMinor,
+              taxMinor: costs.taxMinor,
+              totalMinor: costs.totalMinor,
+            }}
+          />
+        </Card>
       )}
 
       <Group justify="space-between">

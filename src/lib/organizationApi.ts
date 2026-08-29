@@ -23,9 +23,10 @@ export type Organization = {
   logo_url: string | null;
   cover_image_url: string | null;
   address: OrganizationAddress | null;
-  /** Whether tax/the platform fee are charged to the buyer (true, default) or absorbed from this organization's payout. */
+  /** Whether tax / the platform fee / the card processing fee are charged to the buyer (true, default) or absorbed from this organization's payout. */
   tax_pass_through: boolean;
   fee_pass_through: boolean;
+  processing_fee_pass_through: boolean;
 };
 
 async function request<T>(
@@ -51,6 +52,23 @@ export function getOrganization() {
   return request<{ organization: Organization }>("/api/organization");
 }
 
+export type FeeSchedule = {
+  currency: string;
+  tax_basis_points: number;
+  platform_fee_basis_points: number;
+  processing_fee_basis_points: number;
+  processing_fee_flat_minor: number;
+};
+
+/**
+ * The current platform fee/tax/processing rates for this org's currency —
+ * powers the "what this costs" figures next to the pass-through toggles.
+ * These are the current rates; each event freezes its own copy at publish.
+ */
+export function getOrganizationFeeSchedule() {
+  return request<{ fee_schedule: FeeSchedule }>("/api/organization/fee-schedule");
+}
+
 export function updateOrganization(input: {
   name?: string;
   email?: string;
@@ -59,6 +77,7 @@ export function updateOrganization(input: {
   address?: Partial<OrganizationAddress>;
   tax_pass_through?: boolean;
   fee_pass_through?: boolean;
+  processing_fee_pass_through?: boolean;
 }) {
   return request<{ organization: Organization }>("/api/organization", { method: "PATCH", body: input });
 }

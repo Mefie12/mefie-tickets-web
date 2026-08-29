@@ -11,6 +11,7 @@
  * renamed alongside the single-event resource). Both are read verbatim
  * from the backend's actual field names, not a naming choice made here.
  */
+import type { EventPricing } from "@/lib/fees";
 import { formatMoney } from "@/lib/money";
 
 export type QuestionType = "TEXT" | "PARAGRAPH" | "SINGLE_SELECT" | "MULTI_SELECT" | "RADIO" | "ADDRESS" | "AGREEMENT";
@@ -196,6 +197,8 @@ export type PublicEvent = {
   timezone: string;
   /** ISO 4217 code, e.g. "GBP" — every price on this event/its products is in this currency. */
   currency_code: string;
+  /** Fee/tax rates + bearers frozen onto this event at publish — used to show the all-in price before an order exists (see src/lib/fees.ts). */
+  pricing: EventPricing;
   cover_image_url: string | null;
   gallery: { id: number; url: string; thumbnail_url: string; alt_text: string | null; sort_order: number | null }[];
   /** Server-computed so it can't disagree with the server render (hydration) or with the order endpoint's guard. */

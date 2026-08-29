@@ -13,6 +13,39 @@ import { formatEventDate } from "@/lib/eventDateTime";
 import { formatAmount } from "@/lib/money";
 import type { Event } from "@/lib/eventApi";
 
+/**
+ * One fee line on the organizer's order breakdown. Unlike the buyer
+ * receipt, the organizer sees every fee whether it was passed on or
+ * absorbed — the bearer tag says which, and an absorbed fee is what
+ * separates the buyer total from the payout.
+ */
+function FeeRow({
+  label,
+  amount,
+  bearer,
+  currency,
+}: {
+  label: string;
+  amount: string;
+  bearer: "ATTENDEE" | "ORGANIZER" | null;
+  currency: string;
+}) {
+  if (Number(amount) <= 0) return null;
+  return (
+    <Group justify="space-between">
+      <Group gap={6}>
+        <Text size="sm" c="dimmed">
+          {label}
+        </Text>
+        <Badge size="xs" variant="light" color={bearer === "ATTENDEE" ? "blue" : "gray"}>
+          {bearer === "ATTENDEE" ? "buyer pays" : "you absorb"}
+        </Badge>
+      </Group>
+      <Text size="sm">{formatAmount(amount, currency)}</Text>
+    </Group>
+  );
+}
+
 const STATUS_COLOR: Record<OrderStatus, string> = {
   RESERVED: "yellow",
   COMPLETED: "teal",
@@ -191,8 +224,20 @@ export function OrderDetail({
           ))}
           <Divider />
           <Group justify="space-between">
-            <Text fw={600}>Total</Text>
+            <Text size="sm" c="dimmed">Subtotal</Text>
+            <Text size="sm">{formatAmount(order.subtotal, order.currency)}</Text>
+          </Group>
+          <FeeRow label="Tax" amount={order.tax_amount} bearer={order.tax_bearer} currency={order.currency} />
+          <FeeRow label="Service fee" amount={order.platform_fee} bearer={order.platform_fee_bearer} currency={order.currency} />
+          <FeeRow label="Processing fee" amount={order.processing_fee} bearer={order.processing_fee_bearer} currency={order.currency} />
+          <Divider />
+          <Group justify="space-between">
+            <Text fw={600}>Buyer total</Text>
             <Text fw={600}>{formatAmount(order.total_amount, order.currency)}</Text>
+          </Group>
+          <Group justify="space-between">
+            <Text size="sm" c="dimmed">Your payout (before Stripe transfer)</Text>
+            <Text size="sm">{formatAmount(order.organizer_payout_amount, order.currency)}</Text>
           </Group>
         </Stack>
       </Card>

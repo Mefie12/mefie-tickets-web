@@ -5,6 +5,7 @@ import { Badge, Box, Card, Divider, Group, Modal, Stack, Text, ThemeIcon, Title 
 import { IconCircleCheck } from "@tabler/icons-react";
 import type { Order } from "@/lib/checkoutApi";
 import { formatMoney } from "@/lib/money";
+import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 
 /**
  * Shown either immediately (a FREE order completes synchronously with
@@ -48,10 +49,7 @@ export function OrderConfirmation({ eventId, order }: { eventId: number; order: 
 
           <Divider />
 
-          <Group justify="space-between">
-            <Text fw={600}>Total paid</Text>
-            <Text fw={600}>{formatMoney(order.total_amount, order.currency)}</Text>
-          </Group>
+          <OrderCostBreakdown order={order} />
         </Stack>
       </Card>
 

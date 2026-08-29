@@ -43,7 +43,10 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: 
   return <Group justify="space-between" align="center" wrap="nowrap">
     <Stack gap={2} style={{ flex: 1 }}>
       {option && <Text fw={600} size="sm">{option.name}</Text>}
-      <Text size="sm" c="dimmed">{formatMoney(option?.price ?? product.current_price, currencyCode)}</Text>
+      <Text size="sm" c="dimmed">
+        {formatMoney(option?.price ?? product.current_price, currencyCode)}
+        {Number(option?.price ?? product.current_price ?? 0) > 0 && " + fees"}
+      </Text>
       {remaining !== null && <Text size="xs" c="dimmed">{remaining} remaining</Text>}
       {!available && <Badge color={status === "SOLD_OUT" ? "red" : "gray"} variant="light" size="sm">{status.replaceAll("_", " ")}</Badge>}
     </Stack>

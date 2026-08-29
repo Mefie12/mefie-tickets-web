@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import {
   Avatar,
@@ -29,11 +29,13 @@ import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import {
   changeOrganizationSlug,
+  getOrganizationFeeSchedule,
   type Organization,
   updateOrganization,
   uploadOrganizationCoverImage,
   uploadOrganizationLogo,
 } from "@/lib/organizationApi";
+import { formatMinorAmount } from "@/lib/money";
 import { PublicShareCard } from "@/components/PublicShareCard";
 
 export function OrganizationSettingsForm({
@@ -47,6 +49,7 @@ export function OrganizationSettingsForm({
 }) {
   const [organization, setOrganization] = useState(initialOrganization);
   const router = useRouter();
+  const feeSchedule = useQuery({ queryKey: ["organization-fee-schedule"], queryFn: getOrganizationFeeSchedule });
 
   const form = useForm({
     initialValues: {
@@ -61,6 +64,7 @@ export function OrganizationSettingsForm({
       country: organization.address?.country ?? "",
       tax_pass_through: organization.tax_pass_through,
       fee_pass_through: organization.fee_pass_through,
+      processing_fee_pass_through: organization.processing_fee_pass_through,
     },
     validate: {
       name: (v) => (v.trim().length === 0 ? "Name is required" : null),
@@ -85,6 +89,7 @@ export function OrganizationSettingsForm({
         },
         tax_pass_through: values.tax_pass_through,
         fee_pass_through: values.fee_pass_through,
+        processing_fee_pass_through: values.processing_fee_pass_through,
       }),
     onSuccess: (data: { organization: Organization }) => {
       setOrganization(data.organization);
@@ -135,8 +140,9 @@ export function OrganizationSettingsForm({
 
               <Divider label="Payment settings" labelPosition="left" mt="sm" />
               <Text size="xs" c="dimmed" mt={-8}>
-                Choose who pays Mefie&apos;s service fee. Card-processing fees are separate and are charged to your connected payment account.
+                Choose who pays each cost on a paid ticket: pass it on to the buyer, or absorb it from your payout.
               </Text>
+              {feeSchedule.data && <FeeScheduleNote schedule={feeSchedule.data.fee_schedule} />}
               <Switch
                 label="Pass tax on to attendees"
                 description="On: tax is added to the buyer's total. Off: absorbed from your payout."
@@ -146,6 +152,11 @@ export function OrganizationSettingsForm({
                 label="Pass Mefie service fee on to attendees"
                 description="On: the Mefie service fee is added to the buyer's total. Off: your organization absorbs it. Mefie service fees are normally non-refundable."
                 {...form.getInputProps("fee_pass_through", { type: "checkbox" })}
+              />
+              <Switch
+                label="Pass payment processing costs on to attendees"
+                description="On: a processing fee is included in the buyer's service fee. Off: your organization absorbs it from your payout."
+                {...form.getInputProps("processing_fee_pass_through", { type: "checkbox" })}
               />
 
               {canEdit && (
@@ -160,6 +171,40 @@ export function OrganizationSettingsForm({
 
       {canEdit && <AdvancedSlugCard organization={organization} onUpdated={setOrganization} />}
     </Stack>
+  );
+}
+
+/**
+ * Shows what the pass-through toggles actually cost, in money, using a
+ * per-100 reference so it reads like a rate but is concrete. The
+ * platform fee + card-processing fee are shown together as one "service
+ * fee" — same as the buyer sees. These are the *current* platform rates;
+ * each event freezes its own copy at publish.
+ */
+function FeeScheduleNote({
+  schedule,
+}: {
+  schedule: {
+    currency: string;
+    tax_basis_points: number;
+    platform_fee_basis_points: number;
+    processing_fee_basis_points: number;
+    processing_fee_flat_minor: number;
+  };
+}) {
+  const per100 = 10_000;
+  const halfUp = (bps: number) => Math.floor((per100 * bps + 5000) / 10000);
+  const serviceFee = halfUp(schedule.platform_fee_basis_points) + halfUp(schedule.processing_fee_basis_points) + schedule.processing_fee_flat_minor;
+  const tax = halfUp(schedule.tax_basis_points);
+
+  return (
+    <Text size="xs" c="dimmed" mt={-8}>
+      Current rates, per {formatMinorAmount(per100, schedule.currency)} of tickets sold: service fee{" "}
+      {formatMinorAmount(serviceFee, schedule.currency)}
+      {tax > 0 && <> · tax {formatMinorAmount(tax, schedule.currency)}</>}. Toggled on, the buyer pays it; off,
+      it comes off your payout. A change here applies to events you publish from now on — already-published
+      events keep the rates frozen at their publish.
+    </Text>
   );
 }
 

@@ -8,6 +8,7 @@ import { Alert, Button, Loader, Stack, Text } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import { formatMoney } from "@/lib/money";
+import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 
@@ -223,8 +224,9 @@ function PaymentForm({
   return (
     <form onSubmit={handleSubmit}>
       <Stack gap="md">
-        <Text size="sm" c="dimmed">
-          Paying {formatMoney(order.total_amount, order.currency)} for order {order.short_id}
+        <OrderCostBreakdown order={order} />
+        <Text size="xs" c="dimmed">
+          Order {order.short_id}
         </Text>
         <PaymentElement options={paymentElementOptions} />
         {errorMessage && (
