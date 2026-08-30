@@ -12,6 +12,7 @@ import { AssignEntitlementModal } from "@/components/AssignEntitlementModal";
 import { BulkAssignModal } from "@/components/BulkAssignModal";
 import { ClaimLinkModal } from "@/components/ClaimLinkModal";
 import { BatchClaimLinksModal } from "@/components/BatchClaimLinksModal";
+import { RevokeReassignModal } from "@/components/RevokeReassignModal";
 
 /**
  * Consumer order-detail: one row per purchased admission unit with its
@@ -33,6 +34,7 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
 
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [claimTarget, setClaimTarget] = useState<EntitlementRow | null>(null);
+  const [danger, setDanger] = useState<{ mode: "revoke" | "reassign"; row: EntitlementRow } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [batchLinksOpen, setBatchLinksOpen] = useState(false);
@@ -97,6 +99,8 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
             onToggle={() => toggle(e.public_id)}
             onAssign={() => setAssignTarget(e.public_id)}
             onShareLink={() => setClaimTarget(e)}
+            onReassign={() => setDanger({ mode: "reassign", row: e })}
+            onRevoke={() => setDanger({ mode: "revoke", row: e })}
           />
         ))}
       </Stack>
@@ -168,6 +172,14 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
           invalidate();
         }}
       />
+
+      <RevokeReassignModal
+        mode={danger?.mode ?? "revoke"}
+        entitlement={danger?.row ?? null}
+        opened={danger !== null}
+        onClose={() => setDanger(null)}
+        onDone={invalidate}
+      />
     </Stack>
   );
 }
@@ -179,6 +191,8 @@ function EntitlementCard({
   onToggle,
   onAssign,
   onShareLink,
+  onReassign,
+  onRevoke,
 }: {
   e: EntitlementRow;
   selectable: boolean;
@@ -186,6 +200,8 @@ function EntitlementCard({
   onToggle: () => void;
   onAssign: () => void;
   onShareLink: () => void;
+  onReassign: () => void;
+  onRevoke: () => void;
 }) {
   const meta = assignmentStatusMeta(e.assignment_status);
 
@@ -240,6 +256,16 @@ function EntitlementCard({
             <Button size="xs" variant="light" onClick={onShareLink}>
               Manage link
             </Button>
+          )}
+          {e.assignment_status === "ISSUED" && (
+            <Group gap={6} justify="flex-end">
+              <Button size="xs" variant="subtle" onClick={onReassign}>
+                Reassign
+              </Button>
+              <Button size="xs" variant="subtle" color="red" onClick={onRevoke}>
+                Unassign
+              </Button>
+            </Group>
           )}
         </Stack>
       </Group>
