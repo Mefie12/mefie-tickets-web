@@ -37,6 +37,10 @@ const MESSAGES: Record<string, string> = {
   NO_REACCEPTANCE_PENDING: "There's nothing to confirm — you're all set.",
   PAST_ADMISSION_CUTOFF: "Assignment for this event has closed.",
 
+  // organizer config
+  DEFERRED_REQUIRES_PAID: "Buy-now-assign-later is only available on events that sell paid tickets.",
+  DEFERRED_HAS_UNASSIGNED: "Some buyers still have tickets to assign — you can't turn this off until every ticket on this event is assigned.",
+
   // refunds
   REFUND_REQUEST_ALREADY_PENDING: "You already have a refund request in review for this order.",
   COMMERCIAL_INVALIDATION_BLOCKED_PENDING_REFUND: "A refund is already being processed for this order.",
