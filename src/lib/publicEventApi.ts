@@ -211,4 +211,8 @@ export type PublicEvent = {
   terms: PublicEventTerms | null;
   /** Hidden sections are already filtered out server-side — see PublicContentSectionResource. */
   content_sections: PublicContentSection[];
+  /** Effective buy-now-assign-later gate (per-event flag AND the platform feature flag). When true, checkout may offer "assign later" and send an attendee-less order. */
+  deferred_assignment_enabled: boolean;
+  /** PURCHASER_GROUP | ATTENDEE_PERSONAL | ATTENDEE_SELF — how admission-terms acceptance is collected. null when the event has no acceptance step. */
+  acceptance_policy: string | null;
 };

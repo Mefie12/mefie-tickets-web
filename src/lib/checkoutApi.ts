@@ -108,6 +108,8 @@ export type Order = {
   items: OrderItemSummary[];
   attendees: OrderAttendeeSummary[];
   terms_acceptance: OrderTermsAcceptance | null;
+  /** Purchased admission units still BUYER_HELD (buy-now-assign-later, docs/17 §7.4). 0 for a non-deferred or RESERVED order. */
+  unassigned_count: number;
 };
 
 async function request<T>(path: string, options: { method?: "GET" | "POST"; body?: unknown } = {}): Promise<T> {
