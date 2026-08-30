@@ -1,11 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Anchor, Badge, Button, Card, Checkbox, Group, Paper, Stack, Text, Title } from "@mantine/core";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Alert, Anchor, Badge, Button, Card, Checkbox, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import { IconArrowLeft, IconLink } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
 import Link from "next/link";
-import { getOrder, type EntitlementRow, type OrderDetailPayload } from "@/lib/portalApi";
+import { confirmUpdatedTerms, getOrder, type EntitlementRow, type OrderDetailPayload } from "@/lib/portalApi";
+import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
 import { assignmentStatusMeta, ticketLabel } from "@/lib/portalStatus";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import { AssignEntitlementModal } from "@/components/AssignEntitlementModal";
@@ -14,6 +16,7 @@ import { ClaimLinkModal } from "@/components/ClaimLinkModal";
 import { BatchClaimLinksModal } from "@/components/BatchClaimLinksModal";
 import { RevokeReassignModal } from "@/components/RevokeReassignModal";
 import { DeliveriesPanel } from "@/components/DeliveriesPanel";
+import { CorrectAttendeeModal } from "@/components/CorrectAttendeeModal";
 
 /**
  * Consumer order-detail: one row per purchased admission unit with its
@@ -36,7 +39,20 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [claimTarget, setClaimTarget] = useState<EntitlementRow | null>(null);
   const [danger, setDanger] = useState<{ mode: "revoke" | "reassign"; row: EntitlementRow } | null>(null);
+  const [correctTarget, setCorrectTarget] = useState<EntitlementRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const confirmTerms = useMutation({
+    mutationFn: (publicId: string) => confirmUpdatedTerms(publicId),
+    onSuccess: () => {
+      notifications.show({ color: "teal", message: "Thanks — you're confirmed for the updated details." });
+      invalidate();
+    },
+    onError: (e) => {
+      notifications.show({ color: "yellow", message: resolveApiErrorMessage(e) });
+      invalidate();
+    },
+  });
   const [bulkOpen, setBulkOpen] = useState(false);
   const [batchLinksOpen, setBatchLinksOpen] = useState(false);
 
@@ -102,6 +118,9 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
             onShareLink={() => setClaimTarget(e)}
             onReassign={() => setDanger({ mode: "reassign", row: e })}
             onRevoke={() => setDanger({ mode: "revoke", row: e })}
+            onCorrect={() => setCorrectTarget(e)}
+            onConfirmTerms={() => confirmTerms.mutate(e.public_id)}
+            confirmingTerms={confirmTerms.isPending}
           />
         ))}
       </Stack>
@@ -183,6 +202,14 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
         onClose={() => setDanger(null)}
         onDone={invalidate}
       />
+
+      <CorrectAttendeeModal
+        key={correctTarget?.public_id ?? "none"}
+        entitlement={correctTarget}
+        opened={correctTarget !== null}
+        onClose={() => setCorrectTarget(null)}
+        onDone={invalidate}
+      />
     </Stack>
   );
 }
@@ -196,6 +223,9 @@ function EntitlementCard({
   onShareLink,
   onReassign,
   onRevoke,
+  onCorrect,
+  onConfirmTerms,
+  confirmingTerms,
 }: {
   e: EntitlementRow;
   selectable: boolean;
@@ -205,8 +235,12 @@ function EntitlementCard({
   onShareLink: () => void;
   onReassign: () => void;
   onRevoke: () => void;
+  onCorrect: () => void;
+  onConfirmTerms: () => void;
+  confirmingTerms: boolean;
 }) {
   const meta = assignmentStatusMeta(e.assignment_status);
+  const issued = e.assignment_status === "ISSUED" || e.assignment_status === "CHECKED_IN";
 
   return (
     <Card withBorder radius="lg" p="md">
@@ -234,11 +268,6 @@ function EntitlementCard({
                 Ticket delivery failed
               </Text>
             )}
-            {e.reacceptance_required && (
-              <Text size="xs" c="orange">
-                Updated terms need confirming
-              </Text>
-            )}
           </Stack>
         </Group>
         <Stack gap="xs" align="flex-end" style={{ flexShrink: 0 }}>
@@ -260,18 +289,36 @@ function EntitlementCard({
               Manage link
             </Button>
           )}
-          {e.assignment_status === "ISSUED" && (
+          {issued && (
             <Group gap={6} justify="flex-end">
-              <Button size="xs" variant="subtle" onClick={onReassign}>
-                Reassign
+              <Button size="xs" variant="subtle" onClick={onCorrect}>
+                Edit details
               </Button>
-              <Button size="xs" variant="subtle" color="red" onClick={onRevoke}>
-                Unassign
-              </Button>
+              {e.assignment_status === "ISSUED" && (
+                <>
+                  <Button size="xs" variant="subtle" onClick={onReassign}>
+                    Reassign
+                  </Button>
+                  <Button size="xs" variant="subtle" color="red" onClick={onRevoke}>
+                    Unassign
+                  </Button>
+                </>
+              )}
             </Group>
           )}
         </Stack>
       </Group>
+
+      {e.reacceptance_required && (
+        <Alert color="orange" variant="light" mt="sm">
+          <Group justify="space-between" wrap="nowrap">
+            <Text size="sm">The event details changed — confirm you&apos;re still ok with the updated terms.</Text>
+            <Button size="xs" onClick={onConfirmTerms} loading={confirmingTerms}>
+              Confirm
+            </Button>
+          </Group>
+        </Alert>
+      )}
     </Card>
   );
 }
