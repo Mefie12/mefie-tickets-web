@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Card, Group, Select, Stack, Switch, Text, TextInput, Title } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { updateDeferredAssignment, type AcceptancePolicy, type Event } from "@/lib/eventApi";
 import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
@@ -26,18 +27,31 @@ const POLICY_OPTIONS: { value: AcceptancePolicy; label: string; description: str
 ];
 
 /**
- * Organizer opt-in for buy-now-assign-later (docs/17 §7.1, §19).
- * Backed by PATCH /events/{id}/deferred-assignment — a dedicated
- * endpoint with its own guards (paid tickets only; can't disable while
- * buyers have unassigned tickets).
+ * Organizer control for buy-now-assign-later (docs/17 §7.1, §19).
+ * On by default for every new event; only actually engages once the
+ * event sells a paid ticket type. Backed by
+ * PATCH /events/{id}/deferred-assignment (its own guards: paid tickets
+ * only; can't disable while buyers still have unassigned tickets).
+ *
+ * The on/off switch is guarded by a confirm dialog in both directions
+ * so it can't be flipped by accident — the acceptance-policy select and
+ * the cutoff date still save instantly.
  */
-export function DeferredAssignmentCard({ eventId, event }: { eventId: number; event: Event }) {
+export function DeferredAssignmentCard({
+  eventId,
+  event,
+  sellsPaidTickets,
+}: {
+  eventId: number;
+  event: Event;
+  sellsPaidTickets: boolean;
+}) {
   const [enabled, setEnabled] = useState(event.deferred_assignment_enabled);
   const [policy, setPolicy] = useState<AcceptancePolicy>(
     (event.acceptance_policy as AcceptancePolicy | null) ?? "PURCHASER_GROUP",
   );
   const [closesAt, setClosesAt] = useState(event.admission_closes_at?.slice(0, 10) ?? "");
-  const [effective, setEffective] = useState<boolean>(event.deferred_assignment_enabled);
+  const [effective, setEffective] = useState<boolean>(event.deferred_assignment_enabled && sellsPaidTickets);
   const [error, setError] = useState<string | null>(null);
 
   const save = useMutation({
@@ -73,6 +87,37 @@ export function DeferredAssignmentCard({ eventId, event }: { eventId: number; ev
     );
   }
 
+  function confirmToggle(nextEnabled: boolean) {
+    if (nextEnabled) {
+      modals.openConfirmModal({
+        title: "Turn on buy now, assign later?",
+        centered: true,
+        children: (
+          <Text size="sm">
+            Buyers will be able to pay without naming attendees, then assign each ticket — or send an invite link — from
+            their account. This changes the checkout flow for this event.
+          </Text>
+        ),
+        labels: { confirm: "Turn on", cancel: "Keep off" },
+        onConfirm: () => toggle(true),
+      });
+      return;
+    }
+    modals.openConfirmModal({
+      title: "Turn off buy now, assign later?",
+      centered: true,
+      children: (
+        <Text size="sm">
+          Checkout will require every attendee&apos;s details up front again. This is only possible while no tickets are
+          still waiting to be assigned.
+        </Text>
+      ),
+      labels: { confirm: "Turn off", cancel: "Keep on" },
+      confirmProps: { color: "orange" },
+      onConfirm: () => toggle(false),
+    });
+  }
+
   function saveDetails(nextPolicy: AcceptancePolicy, nextClosesAt: string) {
     save.mutate({
       enabled: true,
@@ -96,7 +141,7 @@ export function DeferredAssignmentCard({ eventId, event }: { eventId: number; ev
           </Stack>
           <Switch
             checked={enabled}
-            onChange={(e) => toggle(e.currentTarget.checked)}
+            onChange={(e) => confirmToggle(e.currentTarget.checked)}
             disabled={save.isPending}
             aria-label="Enable buy now, assign later"
           />
@@ -109,9 +154,10 @@ export function DeferredAssignmentCard({ eventId, event }: { eventId: number; ev
         )}
 
         {enabled && !effective && !error && (
-          <Alert color="yellow" variant="light">
-            Saved — but this feature isn&apos;t switched on across the platform yet, so checkout still asks for attendee
-            details for now.
+          <Alert color={sellsPaidTickets ? "yellow" : "blue"} variant="light">
+            {sellsPaidTickets
+              ? "Saved — this isn't active for your account yet, so checkout still asks for attendee details for now."
+              : "This starts working once the event has a paid ticket type. Free events always collect attendee details at checkout."}
           </Alert>
         )}
 

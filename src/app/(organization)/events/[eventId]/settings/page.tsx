@@ -17,12 +17,18 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
     backendRequest<{ program: ComplimentaryProgram }>(`/api/events/${eventId}/complimentary-program`),
   ]);
   if (eventResult.status !== 200) notFound();
+  const products = productsResult.status === 200 ? productsResult.data.products : [];
+  const sellsPaidTickets = products.some((p) => ["PAID", "TIERED", "DONATION"].includes(p.type));
   return (
     <Stack gap="xl" maw={1000}>
-      <DeferredAssignmentCard eventId={Number(eventId)} event={eventResult.data.event} />
+      <DeferredAssignmentCard
+        eventId={Number(eventId)}
+        event={eventResult.data.event}
+        sellsPaidTickets={sellsPaidTickets}
+      />
       <EventManager
         initialEvent={eventResult.data.event}
-        initialProducts={productsResult.status === 200 ? productsResult.data.products : []}
+        initialProducts={products}
         initialQuestions={questionsResult.status === 200 ? questionsResult.data.questions : []}
         initialComplimentaryProgram={complimentaryResult.data.program}
       />
