@@ -2,7 +2,7 @@
 
 import { Button, Card, Group, Stack, Text } from "@mantine/core";
 import { formatEventTime } from "@/lib/eventDateTime";
-import type { RecentCheckIn } from "@/lib/publicCheckInApi";
+import type { GateRecentCheckIn } from "@/lib/gateApi";
 
 export function CheckInActivityFeed({
   checkIns,
@@ -10,9 +10,9 @@ export function CheckInActivityFeed({
   onUndo,
   isBusy,
 }: {
-  checkIns: RecentCheckIn[];
+  checkIns: GateRecentCheckIn[];
   timezone: string;
-  onUndo: (checkInShortId: string) => void;
+  onUndo?: (checkInShortId: string) => void;
   isBusy: boolean;
 }) {
   if (checkIns.length === 0) {
@@ -36,9 +36,11 @@ export function CheckInActivityFeed({
                 {formatEventTime(checkIn.created_at, timezone)}
               </Text>
             </Stack>
-            <Button size="xs" variant="subtle" color="red" disabled={isBusy} onClick={() => onUndo(checkIn.short_id)}>
-              Undo
-            </Button>
+            {onUndo && (
+              <Button size="xs" variant="subtle" color="red" disabled={isBusy} onClick={() => onUndo(checkIn.short_id)}>
+                Undo
+              </Button>
+            )}
           </Group>
         </Card>
       ))}
