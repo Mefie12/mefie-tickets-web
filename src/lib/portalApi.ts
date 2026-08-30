@@ -67,6 +67,7 @@ export type EntitlementRow = {
   attendee: { first_name: string; last_name: string } | null;
   credential: { short_id: string; is_checked_in: boolean; credential_generation: number } | null;
   claim_link: {
+    id: number;
     status: string;
     delivery_locked: boolean;
     expires_at: string | null;
@@ -230,41 +231,43 @@ export const correctAttendee = (
 
 // --- claim links ------------------------------------------------------
 
-export type ClaimLinkResult = {
-  claim_link: {
-    id: number;
-    url: string;
-    status: string;
-    expires_at: string | null;
-    delivery_locked: boolean;
-    hide_inviter_name: boolean;
-  };
+export type ClaimLinkDetail = {
+  id: number;
+  entitlement_public_id: string;
+  generation: number;
+  status: string;
+  url: string;
+  delivery_locked: boolean;
+  expires_at: string | null;
+  hide_inviter_name: boolean;
 };
 
-export const createClaimLink = (
-  entitlementPublicId: string,
-  body: { expires_at?: string | null; hide_inviter_name?: boolean; delivery_lock_email?: string | null },
-) =>
-  request<ClaimLinkResult>(`/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/claim-links`, {
-    method: "POST",
-    body,
-  });
-
-export const batchClaimLinks = (body: {
-  entitlement_public_ids: string[];
-  hide_inviter_name?: boolean;
+export type ClaimLinkOptions = {
+  delivery_lock_email?: string | null;
   expires_at?: string | null;
-}) =>
-  request<{ claim_links: Array<ClaimLinkResult["claim_link"] & { entitlement_public_id: string }> }>(
-    "/api/portal/entitlements/claim-links/batch",
-    { method: "POST", body },
+  hide_inviter_name?: boolean;
+};
+
+export const createClaimLink = (entitlementPublicId: string, options: ClaimLinkOptions) =>
+  request<{ link: ClaimLinkDetail }>(
+    `/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/claim-links`,
+    { method: "POST", body: options },
   );
 
+export const batchClaimLinks = (body: { entitlement_public_ids: string[] } & ClaimLinkOptions) =>
+  request<{
+    results: Array<
+      | { entitlement_public_id: string; status: "created"; link: ClaimLinkDetail }
+      | { entitlement_public_id: string; status: "not_found" }
+      | { entitlement_public_id: string; status: "skipped"; code: string }
+    >;
+  }>("/api/portal/entitlements/claim-links/batch", { method: "POST", body });
+
 export const rotateClaimLink = (claimLinkId: number) =>
-  request<ClaimLinkResult>(`/api/portal/claim-links/${claimLinkId}/rotate`, { method: "POST" });
+  request<{ link: ClaimLinkDetail }>(`/api/portal/claim-links/${claimLinkId}/rotate`, { method: "POST" });
 
 export const revokeClaimLink = (claimLinkId: number) =>
-  request(`/api/portal/claim-links/${claimLinkId}`, { method: "DELETE" });
+  request<{ status: "revoked" }>(`/api/portal/claim-links/${claimLinkId}`, { method: "DELETE" });
 
 // --- deliveries -----------------------------------------------------
 

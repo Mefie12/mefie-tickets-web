@@ -10,6 +10,8 @@ import { assignmentStatusMeta, ticketLabel } from "@/lib/portalStatus";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import { AssignEntitlementModal } from "@/components/AssignEntitlementModal";
 import { BulkAssignModal } from "@/components/BulkAssignModal";
+import { ClaimLinkModal } from "@/components/ClaimLinkModal";
+import { BatchClaimLinksModal } from "@/components/BatchClaimLinksModal";
 
 /**
  * Consumer order-detail: one row per purchased admission unit with its
@@ -30,8 +32,10 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
   const invalidate = () => qc.invalidateQueries({ queryKey: ["portal-order", shortId] });
 
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
+  const [claimTarget, setClaimTarget] = useState<EntitlementRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [batchLinksOpen, setBatchLinksOpen] = useState(false);
 
   const assignable = useMemo(
     () => entitlements.filter((e) => e.assignment_status === "BUYER_HELD" && !e.claim_link),
@@ -92,6 +96,7 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
             selected={selected.has(e.public_id)}
             onToggle={() => toggle(e.public_id)}
             onAssign={() => setAssignTarget(e.public_id)}
+            onShareLink={() => setClaimTarget(e)}
           />
         ))}
       </Stack>
@@ -114,6 +119,9 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
             <Group gap="xs">
               <Button size="xs" variant="subtle" onClick={() => setSelected(new Set())}>
                 Clear
+              </Button>
+              <Button size="xs" variant="light" onClick={() => setBatchLinksOpen(true)}>
+                Invite links
               </Button>
               <Button size="xs" onClick={() => setBulkOpen(true)}>
                 Assign {selected.size}
@@ -143,6 +151,23 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
           invalidate();
         }}
       />
+
+      <ClaimLinkModal
+        entitlement={claimTarget}
+        opened={claimTarget !== null}
+        onClose={() => setClaimTarget(null)}
+        onDone={invalidate}
+      />
+
+      <BatchClaimLinksModal
+        entitlements={selectedRows}
+        opened={batchLinksOpen}
+        onClose={() => setBatchLinksOpen(false)}
+        onDone={() => {
+          setSelected(new Set());
+          invalidate();
+        }}
+      />
     </Stack>
   );
 }
@@ -153,12 +178,14 @@ function EntitlementCard({
   selected,
   onToggle,
   onAssign,
+  onShareLink,
 }: {
   e: EntitlementRow;
   selectable: boolean;
   selected: boolean;
   onToggle: () => void;
   onAssign: () => void;
+  onShareLink: () => void;
 }) {
   const meta = assignmentStatusMeta(e.assignment_status);
 
@@ -200,8 +227,18 @@ function EntitlementCard({
             {meta.label}
           </Badge>
           {e.assignment_status === "BUYER_HELD" && !e.claim_link && (
-            <Button size="xs" variant="light" onClick={onAssign}>
-              Assign
+            <Group gap={6} justify="flex-end">
+              <Button size="xs" variant="subtle" onClick={onShareLink}>
+                Share link
+              </Button>
+              <Button size="xs" variant="light" onClick={onAssign}>
+                Assign
+              </Button>
+            </Group>
+          )}
+          {e.assignment_status === "BUYER_HELD" && e.claim_link && (
+            <Button size="xs" variant="light" onClick={onShareLink}>
+              Manage link
             </Button>
           )}
         </Stack>
