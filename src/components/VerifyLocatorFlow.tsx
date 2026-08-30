@@ -65,7 +65,7 @@ export function VerifyLocatorFlow({ entryState }: { entryState?: string }) {
   return (
     <Stack gap="lg">
       {error && (
-        <Alert color="red" icon={<IconAlertTriangle size={18} />} variant="light">
+        <Alert color="red" icon={<IconAlertTriangle size={18} />} variant="light" role="alert">
           {error}
         </Alert>
       )}

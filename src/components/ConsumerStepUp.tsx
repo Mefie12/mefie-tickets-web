@@ -46,7 +46,7 @@ export function ConsumerStepUp({ onVerified }: { onVerified: () => void }) {
         For your security, confirm it&apos;s you. We&apos;ve emailed a 6-digit code.
       </Alert>
       {error && (
-        <Alert color="red" variant="light">
+        <Alert color="red" variant="light" role="alert">
           {error}
         </Alert>
       )}
