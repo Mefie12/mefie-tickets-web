@@ -271,8 +271,14 @@ export const revokeClaimLink = (claimLinkId: number) =>
 
 // --- deliveries -----------------------------------------------------
 
-export const correctAndResendDelivery = (deliveryId: number, body: { email: string }) =>
-  request(`/api/portal/deliveries/${deliveryId}/correct-and-resend`, { method: "POST", body });
+export const correctAndResendDelivery = (
+  deliveryId: number,
+  body: { recipient_email: string; recipient_name?: string },
+) =>
+  request<{ deliveries: DeliveryRow[] }>(`/api/portal/deliveries/${deliveryId}/correct-and-resend`, {
+    method: "POST",
+    body,
+  });
 
 // --- refund requests (step-up) ------------------------------------
 

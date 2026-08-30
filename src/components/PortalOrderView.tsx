@@ -13,6 +13,7 @@ import { BulkAssignModal } from "@/components/BulkAssignModal";
 import { ClaimLinkModal } from "@/components/ClaimLinkModal";
 import { BatchClaimLinksModal } from "@/components/BatchClaimLinksModal";
 import { RevokeReassignModal } from "@/components/RevokeReassignModal";
+import { DeliveriesPanel } from "@/components/DeliveriesPanel";
 
 /**
  * Consumer order-detail: one row per purchased admission unit with its
@@ -104,6 +105,8 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
           />
         ))}
       </Stack>
+
+      <DeliveriesPanel orderShortId={shortId} />
 
       {selected.size > 0 && (
         <Paper
