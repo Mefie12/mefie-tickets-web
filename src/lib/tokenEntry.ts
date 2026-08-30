@@ -32,8 +32,22 @@ export async function handleTokenEntry(
 
   const response = NextResponse.redirect(new URL(destination, request.url), { status: 303 });
 
-  for (const cookie of result.setCookieHeaders) {
-    response.headers.append("Set-Cookie", cookie);
+  // Re-set each backend cookie through NextResponse.cookies (rather than
+  // a raw headers.append) — on a redirect response Next only reliably
+  // emits Set-Cookie written this way.
+  for (const raw of result.setCookieHeaders) {
+    const [pair] = raw.split(";");
+    const eq = pair.indexOf("=");
+    if (eq === -1) continue;
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    const lower = raw.toLowerCase();
+    response.cookies.set(name, value, {
+      httpOnly: lower.includes("httponly"),
+      sameSite: lower.includes("samesite=strict") ? "strict" : lower.includes("samesite=none") ? "none" : "lax",
+      secure: lower.includes("secure"),
+      path: "/",
+    });
   }
 
   if (previewCookie && result.ok) {

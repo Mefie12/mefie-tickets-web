@@ -7,10 +7,21 @@
 import { ApiError } from "@/lib/authApi";
 import type { AnswerInput } from "@/lib/checkoutApi";
 
+export type ClaimPreviewQuestion = {
+  id: number;
+  title: string;
+  description: string | null;
+  type: string;
+  options: string[] | null;
+  is_required: boolean;
+};
+
 export type ClaimPreview = {
   inviter_first_name: string | null;
   event: { title: string | null; start_date: string | null; timezone: string | null };
   ticket: { name: string | null; option: string | null };
+  requires_personal_acceptance: boolean;
+  attendee_questions: ClaimPreviewQuestion[];
   delivery_locked: boolean;
   masked_delivery_email: string | null;
 };
