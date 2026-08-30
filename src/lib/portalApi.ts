@@ -129,13 +129,20 @@ export type DeliveriesPayload = {
   has_failures: boolean;
 };
 
-export type AttendeeInputPayload = {
+export type DeliveryRelationship = "SELF" | "BUYER" | "GUARDIAN" | "COORDINATOR";
+
+/** One attendee registration — matches App\...\AssignEntitlementData. */
+export type AttendeeRegistration = {
   first_name: string;
   last_name: string;
   email?: string | null;
   phone?: string | null;
   answers?: AnswerInput[];
-  delivery_contact_relationship?: string | null;
+  delivery_relationship?: DeliveryRelationship;
+  delivery_name?: string | null;
+  delivery_email?: string | null;
+  delivery_phone?: string | null;
+  guardian_attestation?: string | null;
 };
 
 // --- reads ---------------------------------------------------------------
@@ -159,28 +166,53 @@ export const getRegistrationSchema = (entitlementPublicId: string) =>
 
 // --- assignment --------------------------------------------------------
 
-export const assignEntitlement = (
+export const assignSelf = (entitlementPublicId: string, requestKey: string) =>
+  request<{ entitlement: EntitlementRow }>(
+    `/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/assign`,
+    { method: "POST", body: { self: true, request_key: requestKey } },
+  );
+
+export const assignAttendee = (
   entitlementPublicId: string,
-  body:
-    | { mode: "self"; idempotency_key: string }
-    | ({ mode: "attendee"; idempotency_key: string } & AttendeeInputPayload),
-) => request(`/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/assign`, { method: "POST", body });
+  attendee: AttendeeRegistration,
+  requestKey: string,
+) =>
+  request<{ entitlement: EntitlementRow }>(
+    `/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/assign`,
+    { method: "POST", body: { self: false, request_key: requestKey, ...attendee } },
+  );
+
+export type BulkAssignResult = {
+  results: Array<
+    | { entitlement_public_id: string; status: "assigned"; entitlement: EntitlementRow }
+    | { entitlement_public_id: string; status: "rejected"; code: string; message: string }
+    | { entitlement_public_id: string; status: "not_found" }
+  >;
+};
 
 export const assignBulk = (body: {
-  entitlement_public_ids: string[];
-  attendee: AttendeeInputPayload;
-  idempotency_key: string;
-}) => request("/api/portal/entitlements/assign-bulk", { method: "POST", body });
+  items: Array<{ entitlement_public_id: string } & Partial<AttendeeRegistration> & { self?: boolean }>;
+  shared_answers?: AnswerInput[];
+  request_key: string;
+}) => request<BulkAssignResult>("/api/portal/entitlements/assign-bulk", { method: "POST", body });
 
 // --- revoke / reassign (step-up) -------------------------------------
 
 export const revokeEntitlement = (entitlementPublicId: string, body: { reason?: string }) =>
-  request(`/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/revoke`, { method: "POST", body });
+  request<{ entitlement: EntitlementRow }>(
+    `/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/revoke`,
+    { method: "POST", body },
+  );
 
 export const reassignEntitlement = (
   entitlementPublicId: string,
-  body: AttendeeInputPayload & { idempotency_key: string },
-) => request(`/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/reassign`, { method: "POST", body });
+  attendee: AttendeeRegistration,
+  requestKey: string,
+) =>
+  request<{ entitlement: EntitlementRow }>(
+    `/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/reassign`,
+    { method: "POST", body: { self: false, request_key: requestKey, ...attendee } },
+  );
 
 // --- reschedule / correction ---------------------------------------
 
@@ -191,7 +223,7 @@ export const confirmUpdatedTerms = (entitlementPublicId: string) =>
 
 export const correctAttendee = (
   entitlementPublicId: string,
-  body: Partial<Pick<AttendeeInputPayload, "first_name" | "last_name" | "email" | "phone">> & {
+  body: Partial<Pick<AttendeeRegistration, "first_name" | "last_name" | "email" | "phone">> & {
     answers?: AnswerInput[];
   },
 ) => request(`/api/portal/entitlements/${encodeURIComponent(entitlementPublicId)}/attendee`, { method: "POST", body });
