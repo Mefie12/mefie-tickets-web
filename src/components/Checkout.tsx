@@ -2,17 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Button, Group, Loader, Stack, Text, Title } from "@mantine/core";
+import { Alert, Button, Loader, Stack, Text, Title } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { createPaymentIntent, getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
-import { formatMoney } from "@/lib/money";
+import { computeBuyerCosts } from "@/lib/fees";
 import { TicketSelector, ticketLineKey } from "@/components/TicketSelector";
 import { CheckoutDetailsForm } from "@/components/CheckoutDetailsForm";
 import { CheckoutPaymentStep } from "@/components/CheckoutPaymentStep";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
+import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 
 type Step = "cart" | "details" | "payment" | "confirmation";
 
@@ -112,6 +113,15 @@ export function Checkout({ event }: { event: PublicEvent }) {
     }, 0);
   }, [event.products, quantities]);
 
+  // All-in figures shown up front (mandatory fees + tax included), so the
+  // "Total" the buyer sees before Continue is the amount they'll actually
+  // pay — matches the server order to the penny (frozen rates + identical
+  // integer maths, see src/lib/fees.ts).
+  const costs = useMemo(
+    () => computeBuyerCosts(Math.round(total * 100), event.pricing),
+    [total, event.pricing],
+  );
+
   const paymentIntentMutation = useMutation({
     mutationFn: (o: Order) => createPaymentIntent(event.id, o.short_id),
     onSuccess: (data: { client_secret: string; provider: "STRIPE"; provider_account_id: string }) => {
@@ -202,10 +212,19 @@ export function Checkout({ event }: { event: PublicEvent }) {
         currencyCode={event.currency_code}
       />
 
-      <Group justify="space-between" pt="sm">
-        <Text fw={600}>Total</Text>
-        <Text fw={600}>{formatMoney(total, event.currency_code)}</Text>
-      </Group>
+      {cartItems.length > 0 && (
+        <Stack gap="xs" pt="sm">
+          <OrderCostBreakdown
+            amounts={{
+              currency: event.currency_code,
+              subtotalMinor: costs.subtotalMinor,
+              serviceFeeMinor: costs.serviceFeeMinor,
+              taxMinor: costs.taxMinor,
+              totalMinor: costs.totalMinor,
+            }}
+          />
+        </Stack>
+      )}
 
       <Button size="md" fullWidth disabled={cartItems.length === 0} onClick={() => setStep("details")}>
         {cartItems.length === 0 ? "Select at least one ticket" : "Continue"}

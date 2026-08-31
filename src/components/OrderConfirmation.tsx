@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Box, Card, Divider, Group, Modal, Stack, Text, ThemeIcon, Title } from "@mantine/core";
-import { IconCircleCheck } from "@tabler/icons-react";
+import { Alert, Badge, Box, Card, Divider, Group, Modal, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { IconCircleCheck, IconTicket } from "@tabler/icons-react";
 import type { Order } from "@/lib/checkoutApi";
 import { formatMoney } from "@/lib/money";
+import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 
 /**
  * Shown either immediately (a FREE order completes synchronously with
@@ -14,6 +15,7 @@ import { formatMoney } from "@/lib/money";
  */
 export function OrderConfirmation({ eventId, order }: { eventId: number; order: Order }) {
   const [viewingTerms, setViewingTerms] = useState(false);
+  const ticketsTotal = order.items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <Stack gap="lg" align="center" ta="center">
@@ -29,6 +31,24 @@ export function OrderConfirmation({ eventId, order }: { eventId: number; order: 
           Order <Text span fw={600}>{order.short_id}</Text> confirmed. A confirmation was sent to {order.email}.
         </Text>
       </Stack>
+
+      {order.unassigned_count > 0 && (
+        <Alert
+          icon={<IconTicket size={18} />}
+          color="brand"
+          variant="light"
+          radius="lg"
+          w="100%"
+          maw={480}
+          ta="left"
+          title={`${order.unassigned_count} of ${ticketsTotal} ${ticketsTotal === 1 ? "ticket" : "tickets"} still to assign`}
+        >
+          <Text size="sm">
+            We&apos;ve emailed <Text span fw={600}>{order.email}</Text> a secure link to assign the rest — open it
+            anytime to add each attendee, send an invite, or take a ticket yourself.
+          </Text>
+        </Alert>
+      )}
 
       <Card withBorder radius="lg" p="lg" w="100%" maw={480} ta="left">
         <Stack gap="sm">
@@ -48,10 +68,7 @@ export function OrderConfirmation({ eventId, order }: { eventId: number; order: 
 
           <Divider />
 
-          <Group justify="space-between">
-            <Text fw={600}>Total paid</Text>
-            <Text fw={600}>{formatMoney(order.total_amount, order.currency)}</Text>
-          </Group>
+          <OrderCostBreakdown order={order} />
         </Stack>
       </Card>
 

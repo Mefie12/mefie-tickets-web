@@ -72,6 +72,14 @@ export type OrderTermsAcceptance = {
 };
 
 export type OrderDetail = OrderListItem & {
+  tax_amount: string;
+  platform_fee: string;
+  processing_fee: string;
+  organizer_payout_amount: string;
+  /** Who each fee was charged to on this order. */
+  tax_bearer: "ATTENDEE" | "ORGANIZER" | null;
+  platform_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
+  processing_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
   items: OrderItemDetail[];
   attendees: OrderAttendee[];
   answers: OrderQuestionAnswer[];

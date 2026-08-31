@@ -5,6 +5,7 @@ import type { Event } from "@/lib/eventApi";
 import type { Product } from "@/lib/productApi";
 import type { Question } from "@/lib/questionApi";
 import { EventManager } from "@/components/EventManager";
+import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
 export default async function EventSettingsPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -16,5 +17,21 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
     backendRequest<{ program: ComplimentaryProgram }>(`/api/events/${eventId}/complimentary-program`),
   ]);
   if (eventResult.status !== 200) notFound();
-  return <Stack gap="xl" maw={1000}><EventManager initialEvent={eventResult.data.event} initialProducts={productsResult.status === 200 ? productsResult.data.products : []} initialQuestions={questionsResult.status === 200 ? questionsResult.data.questions : []} initialComplimentaryProgram={complimentaryResult.data.program} /></Stack>;
+  const products = productsResult.status === 200 ? productsResult.data.products : [];
+  const sellsPaidTickets = products.some((p) => ["PAID", "TIERED", "DONATION"].includes(p.type));
+  return (
+    <Stack gap="xl" maw={1000}>
+      <DeferredAssignmentCard
+        eventId={Number(eventId)}
+        event={eventResult.data.event}
+        sellsPaidTickets={sellsPaidTickets}
+      />
+      <EventManager
+        initialEvent={eventResult.data.event}
+        initialProducts={products}
+        initialQuestions={questionsResult.status === 200 ? questionsResult.data.questions : []}
+        initialComplimentaryProgram={complimentaryResult.data.program}
+      />
+    </Stack>
+  );
 }

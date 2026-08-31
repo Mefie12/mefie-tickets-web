@@ -65,7 +65,15 @@ export type Event = {
   gallery: GalleryImage[];
   created_at: string;
   updated_at: string;
+  /** Buy-now-assign-later opt-in (docs/17 §7.1). Raw column — the effective runtime gate also needs the platform feature flag. */
+  deferred_assignment_enabled: boolean;
+  /** PURCHASER_GROUP | GUARDIAN_MINOR | ATTENDEE_PERSONAL — admission-terms acceptance mode for deferred events. null when unset. */
+  acceptance_policy: string | null;
+  /** After this instant, buyers can no longer assign tickets from the portal. null = no cutoff. */
+  admission_closes_at: string | null;
 };
+
+export type AcceptancePolicy = "PURCHASER_GROUP" | "GUARDIAN_MINOR" | "ATTENDEE_PERSONAL";
 
 /**
  * Note the asymmetry with `Event` above, and it's deliberate: responses
@@ -145,4 +153,14 @@ export function updateEvent(
 
 export function updateEventStatus(id: number, status: EventStatus) {
   return request<{ event: Event }>(`/api/events/${id}/status`, { method: "PATCH", body: { status } });
+}
+
+export function updateDeferredAssignment(
+  id: number,
+  input: { enabled: boolean; acceptance_policy?: AcceptancePolicy; admission_closes_at?: string | null },
+) {
+  return request<{ event: Event; deferred_assignment_effective: boolean }>(
+    `/api/events/${id}/deferred-assignment`,
+    { method: "PATCH", body: input },
+  );
 }

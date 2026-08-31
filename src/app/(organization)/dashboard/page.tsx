@@ -1,4 +1,4 @@
-import { Badge, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
+import { Alert, Badge, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { IconConfetti } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import { formatEventDate } from "@/lib/eventDateTime";
@@ -14,8 +14,29 @@ const STATUS_COLOR: Record<EventStatus, string> = {
 };
 
 export default async function DashboardPage() {
-  const result = await backendRequest<{ events: Event[] }>("/api/events");
-  const events = result.status === 200 ? result.data.events : [];
+  const [eventsResult, currencyResult] = await Promise.all([
+    backendRequest<{ events: Event[] }>("/api/events"),
+    // ORGANIZER-visible; returns null until the org provisions a payment
+    // account. Null => paid events can't be published yet
+    // (EventPaymentBindingService::bindForPaidSales), so nudge setup.
+    backendRequest<{ currency: string | null }>("/api/organization/payment-currency"),
+  ]);
+  const events = eventsResult.status === 200 ? eventsResult.data.events : [];
+  const needsPaymentSetup = currencyResult.status === 200 && currencyResult.data.currency === null;
+
+  const paymentBanner = needsPaymentSetup ? (
+    <Alert color="orange" radius="lg" title="Set up payments to sell paid tickets">
+      <Stack gap="sm" align="flex-start">
+        <Text size="sm">
+          Your events can&apos;t go live with paid tickets until you add your payment country and settlement
+          currency. Free events aren&apos;t affected.
+        </Text>
+        <LinkButton href="/organization/payments" size="xs">
+          Set up payments
+        </LinkButton>
+      </Stack>
+    </Alert>
+  ) : null;
 
   if (events.length === 0) {
     return (
@@ -23,6 +44,7 @@ export default async function DashboardPage() {
         <Title order={2} fz={28}>
           Dashboard
         </Title>
+        {paymentBanner}
         <Card withBorder radius="lg" p="xl" shadow="md">
           <Stack align="center" gap="sm" py="lg">
             <IconConfetti size={40} />
@@ -53,6 +75,8 @@ export default async function DashboardPage() {
         </Title>
         <CreateEventMenu />
       </Group>
+
+      {paymentBanner}
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
         <Card withBorder radius="lg" p="lg">

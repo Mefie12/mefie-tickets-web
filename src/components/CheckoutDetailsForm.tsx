@@ -1,14 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Button, Card, Checkbox, Divider, Group, SegmentedControl, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Button, Card, Checkbox, Divider, Group, Radio, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import { ApiError } from "@/lib/authApi";
 import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
+import { computeBuyerCosts } from "@/lib/fees";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
+import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { PhoneInput } from "@/components/PhoneInput";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 
@@ -19,10 +21,12 @@ type CartLine = { product_id: number; ticket_option_id: number | null; product_t
 // still triggers it, order-level, since one line item is all it takes.
 const TERMS_TRIGGERING_TYPES = new Set(["PAID", "TIERED", "REGISTRATION", "DONATION"]);
 
-// null = not yet chosen — every ticket must end in "me" or "other" before
-// submit is allowed, there is no implicit default (see the redesign notes:
-// ownership is never inferred from slot order or ticket position).
-type Assignment = "me" | "other" | null;
+// null = not yet chosen — a non-deferred ticket must end in "me" or
+// "other" before submit is allowed, there is no implicit default (see
+// the redesign notes: ownership is never inferred from slot order or
+// ticket position). "later" is only offered on a deferred event
+// (docs/17) — the unit ships BUYER_HELD and is assigned from the portal.
+type Assignment = "me" | "other" | "later" | null;
 
 type AttendeeSlot = {
   product_id: number;
@@ -36,13 +40,13 @@ type AttendeeSlot = {
   answers: Record<number, AnswerValue>;
 };
 
-function buildAttendeeSlots(cartItems: CartLine[]): AttendeeSlot[] {
+function buildAttendeeSlots(cartItems: CartLine[], deferred: boolean): AttendeeSlot[] {
   return cartItems.flatMap((item) =>
     Array.from({ length: item.quantity }, () => ({
       product_id: item.product_id,
       ticket_option_id: item.ticket_option_id,
       product_title: item.product_title,
-      assignment: null as Assignment,
+      assignment: (deferred ? "later" : null) as Assignment,
       first_name: "",
       last_name: "",
       email: "",
@@ -85,11 +89,20 @@ export function CheckoutDetailsForm({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [orderAnswers, setOrderAnswers] = useState<Record<number, AnswerValue>>({});
-  const [attendees, setAttendees] = useState<AttendeeSlot[]>(() => buildAttendeeSlots(cartItems));
+  const deferred = event.deferred_assignment_enabled;
+  // "later" = ship every unit BUYER_HELD, no attendee entry now; "now" =
+  // enter (some or all) attendees at checkout via the accordion below.
+  const [assignMode, setAssignMode] = useState<"now" | "later">(deferred ? "later" : "now");
+  const [attendees, setAttendees] = useState<AttendeeSlot[]>(() => buildAttendeeSlots(cartItems, deferred));
   const [notifyAttendees, setNotifyAttendees] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsVersionChanged, setTermsVersionChanged] = useState(false);
   const checkoutIdempotencyKey = useRef(crypto.randomUUID());
+
+  const costs = useMemo(
+    () => computeBuyerCosts(Math.round(totalDue * 100), event.pricing),
+    [totalDue, event.pricing],
+  );
 
   const orderQuestions = event.questions.filter((q) => q.scope === "ORDER").sort((a, b) => a.sort_order - b.sort_order);
   const attendeeQuestions = event.questions
@@ -114,19 +127,26 @@ export function CheckoutDetailsForm({
         ...(termsRequired && event.terms
           ? { terms_accepted: termsAccepted, terms_version_id: event.terms.version_id }
           : {}),
-        attendees: attendees.map((a) => {
-          const isBuyerSlot = a.assignment === "me";
-          return {
-            product_id: a.product_id,
-            ticket_option_id: a.ticket_option_id,
-            first_name: isBuyerSlot ? firstName : a.first_name,
-            last_name: isBuyerSlot ? lastName : a.last_name,
-            email: isBuyerSlot ? email : a.email.trim() || null,
-            phone: isBuyerSlot ? phone : a.phone.trim() || null,
-            is_buyer: isBuyerSlot,
-            answers: attendeeQuestions.map((q) => ({ question_id: q.id, answer: a.answers[q.id] ?? "" })),
-          };
-        }),
+        // "later" slots (and the whole "assign later" mode) send nothing —
+        // the backend mints them BUYER_HELD for portal assignment.
+        attendees:
+          assignMode === "later"
+            ? []
+            : attendees
+                .filter((a) => a.assignment === "me" || a.assignment === "other")
+                .map((a) => {
+                  const isBuyerSlot = a.assignment === "me";
+                  return {
+                    product_id: a.product_id,
+                    ticket_option_id: a.ticket_option_id,
+                    first_name: isBuyerSlot ? firstName : a.first_name,
+                    last_name: isBuyerSlot ? lastName : a.last_name,
+                    email: isBuyerSlot ? email : a.email.trim() || null,
+                    phone: isBuyerSlot ? phone : a.phone.trim() || null,
+                    is_buyer: isBuyerSlot,
+                    answers: attendeeQuestions.map((q) => ({ question_id: q.id, answer: a.answers[q.id] ?? "" })),
+                  };
+                }),
       }),
     onSuccess: (data: { order: Order }) => onOrderCreated(data.order),
     onError: (error: Error) => {
@@ -155,8 +175,11 @@ export function CheckoutDetailsForm({
       if (!isQuestionAnswered(q, orderAnswers[q.id])) return `'${q.title}' is required.`;
     }
 
+    if (assignMode === "later") return null;
+
     for (const a of attendees) {
-      if (a.assignment === null) return `Choose who will use each ${a.product_title} ticket.`;
+      if (a.assignment === "later") continue;
+      if (a.assignment === null) return `Choose who will use each ${a.product_title} ticket, or choose to assign it later.`;
       if (a.assignment === "other") {
         if (!a.first_name.trim() || !a.last_name.trim()) return `Enter a name for each ${a.product_title} attendee.`;
         if (a.email.trim() && !/^\S+@\S+\.\S+$/.test(a.email)) return `Enter a valid email for each ${a.product_title} attendee, or leave it blank.`;
@@ -183,7 +206,7 @@ export function CheckoutDetailsForm({
     setAttendees((prev) => prev.map((a, i) => (i === index ? { ...a, ...patch } : a)));
   }
 
-  function assignSlot(index: number, assignment: "me" | "other") {
+  function assignSlot(index: number, assignment: "me" | "other" | "later") {
     setAttendees((prev) =>
       prev.map((a, i) => {
         if (i === index) return { ...a, assignment };
@@ -203,14 +226,25 @@ export function CheckoutDetailsForm({
         <Title order={2} fz={22}>
           Your details
         </Title>
-        <Group grow>
-          <TextInput label="First name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
-          <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
-        </Group>
-        <Group grow>
-          <TextInput label="Email" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
-          <PhoneInput label="Phone" required value={phone} onChange={setPhone} />
-        </Group>
+        {/* Container query, not a viewport breakpoint: the checkout is a
+            ~340px sticky sidebar on desktop and full-width on mobile, so
+            first/last only pair up when the column itself has the room —
+            otherwise everything stacks, which keeps every field a
+            comfortable tap target. Email and phone always get their own
+            row (phone needs the width for its country-code selector). */}
+        <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
+          <TextInput label="First name" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
+          <TextInput label="Last name" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
+        </SimpleGrid>
+        <TextInput
+          label="Email"
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.currentTarget.value)}
+        />
+        <PhoneInput label="Phone" required value={phone} onChange={setPhone} />
       </Stack>
 
       {orderQuestions.length > 0 && (
@@ -229,8 +263,32 @@ export function CheckoutDetailsForm({
 
       <Stack gap="md">
         <Divider label="Attendees" labelPosition="left" />
+
+        {deferred && (
+          <Radio.Group
+            value={assignMode}
+            onChange={(value) => setAssignMode(value as "now" | "later")}
+            label="When do you want to add attendee details?"
+          >
+            <Stack gap="xs" mt="xs">
+              <Radio
+                value="later"
+                label="Assign later"
+                description="Complete the purchase now and assign each ticket from your account whenever you're ready. We'll email you a link."
+              />
+              <Radio
+                value="now"
+                label="Enter attendees now"
+                description="Fill in who each ticket is for as part of checkout."
+              />
+            </Stack>
+          </Radio.Group>
+        )}
+
+        {assignMode === "now" && (
+          <>
         <Text size="sm" c="dimmed">
-          Tell us who will use each ticket.
+          Tell us who will use each ticket{deferred ? ", or leave individual tickets to assign later" : ""}.
         </Text>
         {attendees.map((attendee, index) => {
           const displayNumber = index + 1;
@@ -249,55 +307,65 @@ export function CheckoutDetailsForm({
                   <SegmentedControl
                     size="xs"
                     value={attendee.assignment ?? ""}
-                    onChange={(value) => assignSlot(index, value as "me" | "other")}
+                    onChange={(value) => assignSlot(index, value as "me" | "other" | "later")}
                     data={[
                       { label: "Me", value: "me" },
                       { label: "Someone else", value: "other" },
+                      ...(deferred ? [{ label: "Assign later", value: "later" }] : []),
                     ]}
                   />
                 </Stack>
 
                 {isBuyerSlot && (
-                  <Text size="sm" c="dimmed">
+                  <Text size="sm" c="dimmed" style={{ overflowWrap: "anywhere" }}>
                     Using your details above: {firstName} {lastName} · {email} · {phone}
+                  </Text>
+                )}
+
+                {attendee.assignment === "later" && (
+                  <Text size="sm" c="dimmed">
+                    You&apos;ll assign this ticket from your account later.
                   </Text>
                 )}
 
                 {attendee.assignment === "other" && (
                   <>
-                    <Group grow>
+                    <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
                       <TextInput
                         label="First name"
                         size="sm"
+                        autoComplete="off"
                         value={attendee.first_name}
                         onChange={(e) => updateAttendee(index, { first_name: e.currentTarget.value })}
                       />
                       <TextInput
                         label="Last name"
                         size="sm"
+                        autoComplete="off"
                         value={attendee.last_name}
                         onChange={(e) => updateAttendee(index, { last_name: e.currentTarget.value })}
                       />
-                    </Group>
-                    <Group grow align="flex-start">
-                      <TextInput
-                        label="Email (optional)"
-                        description="We'll send them their ticket if provided"
-                        size="sm"
-                        type="email"
-                        value={attendee.email}
-                        onChange={(e) => updateAttendee(index, { email: e.currentTarget.value })}
-                      />
-                      <PhoneInput
-                        label="Phone (optional)"
-                        value={attendee.phone}
-                        onChange={(value) => updateAttendee(index, { phone: value })}
-                      />
-                    </Group>
+                    </SimpleGrid>
+                    <TextInput
+                      label="Email (optional)"
+                      description="We'll send them their ticket if provided"
+                      size="sm"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="off"
+                      value={attendee.email}
+                      onChange={(e) => updateAttendee(index, { email: e.currentTarget.value })}
+                    />
+                    <PhoneInput
+                      label="Phone (optional)"
+                      size="sm"
+                      value={attendee.phone}
+                      onChange={(value) => updateAttendee(index, { phone: value })}
+                    />
                   </>
                 )}
 
-                {attendee.assignment !== null &&
+                {(attendee.assignment === "me" || attendee.assignment === "other") &&
                   attendeeQuestions.map((q) => (
                     <EditableQuestionField
                       key={q.id}
@@ -319,6 +387,15 @@ export function CheckoutDetailsForm({
           checked={notifyAttendees}
           onChange={(e) => setNotifyAttendees(e.currentTarget.checked)}
         />
+          </>
+        )}
+
+        {assignMode === "later" && (
+          <Text size="sm" c="dimmed">
+            All {attendees.length} {attendees.length === 1 ? "ticket" : "tickets"} will be held on your account.
+            After checkout, open the link we email you to assign each one.
+          </Text>
+        )}
       </Stack>
 
       {termsRequired && event.terms && (
@@ -351,12 +428,34 @@ export function CheckoutDetailsForm({
         </Alert>
       )}
 
-      <Group justify="space-between">
-        <Button variant="subtle" onClick={onBack} disabled={mutation.isPending}>
+      {totalDue > 0 && (
+        <Card withBorder radius="md" p="md">
+          <OrderCostBreakdown
+            amounts={{
+              currency: event.currency_code,
+              subtotalMinor: costs.subtotalMinor,
+              serviceFeeMinor: costs.serviceFeeMinor,
+              taxMinor: costs.taxMinor,
+              totalMinor: costs.totalMinor,
+            }}
+          />
+        </Card>
+      )}
+
+      {/* wrap-reverse: if the two don't fit on one line, the primary
+          action stays on top and "Back" drops below it. */}
+      <Group justify="space-between" wrap="wrap-reverse" gap="sm">
+        <Button variant="subtle" color="gray" onClick={onBack} disabled={mutation.isPending}>
           Back to tickets
         </Button>
-        <Button onClick={handleSubmit} loading={mutation.isPending} disabled={termsVersionChanged}>
-          {totalDue === 0 ? "Register for free" : "Continue"}
+        <Button
+          size="md"
+          onClick={handleSubmit}
+          loading={mutation.isPending}
+          disabled={termsVersionChanged}
+          style={{ flex: "1 1 auto" }}
+        >
+          {totalDue === 0 ? "Register for free" : "Continue to payment"}
         </Button>
       </Group>
     </Stack>

@@ -98,11 +98,18 @@ export type Order = {
   subtotal: string;
   tax_amount: string;
   platform_fee: string;
+  processing_fee: string;
   total_amount: string;
   currency: string;
+  /** Who each fee is charged to; a fee row is shown to the buyer only when its bearer is "ATTENDEE". */
+  tax_bearer: "ATTENDEE" | "ORGANIZER" | null;
+  platform_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
+  processing_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
   items: OrderItemSummary[];
   attendees: OrderAttendeeSummary[];
   terms_acceptance: OrderTermsAcceptance | null;
+  /** Purchased admission units still BUYER_HELD (buy-now-assign-later, docs/17 §7.4). 0 for a non-deferred or RESERVED order. */
+  unassigned_count: number;
 };
 
 async function request<T>(path: string, options: { method?: "GET" | "POST"; body?: unknown } = {}): Promise<T> {
