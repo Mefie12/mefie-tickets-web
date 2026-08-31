@@ -53,8 +53,8 @@ export function DeliveriesPanel({ orderShortId }: { orderShortId: string }) {
                   {row.attendee ? `${row.attendee.first_name} ${row.attendee.last_name}` : `Ticket #${row.sequence_number ?? ""}`}
                 </Text>
                 {row.delivery && (
-                  <Text size="xs" c="dimmed">
-                    To {row.delivery.recipient_masked}
+                  <Text size="xs" c="dimmed" style={{ wordBreak: "break-word" }}>
+                    To {row.delivery.recipient_email}
                   </Text>
                 )}
                 {row.status_group === "failed" && row.delivery?.failure_message && (
@@ -79,6 +79,7 @@ export function DeliveriesPanel({ orderShortId }: { orderShortId: string }) {
       })}
 
       <CorrectDeliveryModal
+        key={fixing?.delivery?.id ?? "none"}
         row={fixing}
         opened={fixing !== null}
         onClose={() => setFixing(null)}
@@ -103,7 +104,8 @@ function CorrectDeliveryModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [email, setEmail] = useState("");
+  // Keyed by delivery id in the parent, so this mounts fresh per target.
+  const [email, setEmail] = useState(row?.delivery?.recipient_email ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const submit = useMutation({
@@ -113,7 +115,6 @@ function CorrectDeliveryModal({
     },
     onSuccess: () => {
       notifications.show({ color: "teal", message: "Ticket re-sent to the new address." });
-      setEmail("");
       onDone();
     },
     onError: (e) => setError(resolveApiErrorMessage(e)),
@@ -124,7 +125,6 @@ function CorrectDeliveryModal({
       opened={opened}
       onClose={() => {
         if (submit.isPending) return;
-        setEmail("");
         setError(null);
         onClose();
       }}
@@ -138,11 +138,12 @@ function CorrectDeliveryModal({
           </Alert>
         )}
         <Text size="sm" c="dimmed">
-          We&apos;ll resend the same ticket to this address. The QR code and ticket reference don&apos;t change.
+          Currently sent to <strong>{row?.delivery?.recipient_email}</strong>. Edit it below and we&apos;ll resend the
+          same ticket — the QR code and ticket reference don&apos;t change.
         </Text>
         <TextInput
           type="email"
-          label="New email"
+          label="Email"
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
           required

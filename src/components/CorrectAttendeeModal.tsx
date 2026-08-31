@@ -43,8 +43,8 @@ export function CorrectAttendeeModal({
   // safe to seed straight from props.
   const [firstName, setFirstName] = useState(entitlement?.attendee?.first_name ?? "");
   const [lastName, setLastName] = useState(entitlement?.attendee?.last_name ?? "");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState(entitlement?.attendee?.email ?? "");
+  const [phone, setPhone] = useState(entitlement?.attendee?.phone ?? "");
   const [answers, setAnswers] = useState<Record<number, AnswerValue>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -60,11 +60,11 @@ export function CorrectAttendeeModal({
       const body: Parameters<typeof correctAttendee>[1] = {};
       if (firstName.trim() && firstName.trim() !== entitlement?.attendee?.first_name) body.first_name = firstName.trim();
       if (lastName.trim() && lastName.trim() !== entitlement?.attendee?.last_name) body.last_name = lastName.trim();
-      if (email.trim()) {
+      if (email.trim() && email.trim() !== (entitlement?.attendee?.email ?? "")) {
         if (!/^\S+@\S+\.\S+$/.test(email.trim())) return Promise.reject(new Error("Enter a valid email."));
         body.email = email.trim();
       }
-      if (phone.trim()) body.phone = phone.trim();
+      if (phone.trim() && phone.trim() !== (entitlement?.attendee?.phone ?? "")) body.phone = phone.trim();
       const changedAnswers = questions
         .filter((q) => answers[q.id] !== undefined && answers[q.id] !== "")
         .map((q) => ({ question_id: q.id, answer: answers[q.id] }));
@@ -105,13 +105,13 @@ export function CorrectAttendeeModal({
           <TextInput label="Last name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
         </SimpleGrid>
         <TextInput
-          label="New email (optional)"
-          description="Leave blank to keep the current one"
+          label="Email"
+          description="Where their ticket is sent"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.currentTarget.value)}
         />
-        <PhoneInput label="New phone (optional)" value={phone} onChange={setPhone} />
+        <PhoneInput label="Phone (optional)" value={phone} onChange={setPhone} />
 
         {schema.isLoading && <Loader size="sm" />}
         {questions.map((q) => (
