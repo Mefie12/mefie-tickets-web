@@ -244,12 +244,14 @@ export type ClaimLinkDetail = {
   delivery_locked: boolean;
   expires_at: string | null;
   hide_inviter_name: boolean;
+  invite_email_sent: boolean;
 };
 
 export type ClaimLinkOptions = {
   delivery_lock_email?: string | null;
   expires_at?: string | null;
   hide_inviter_name?: boolean;
+  send_to_locked_email?: boolean;
 };
 
 export const createClaimLink = (entitlementPublicId: string, options: ClaimLinkOptions) =>
