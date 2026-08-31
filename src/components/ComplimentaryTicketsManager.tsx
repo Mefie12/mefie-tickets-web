@@ -9,7 +9,7 @@ import { notifications } from "@mantine/notifications";
 import { IconAlertCircle, IconCheck, IconPlus, IconTicket, IconTrash } from "@tabler/icons-react";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import type { AnswerValue } from "@/lib/checkoutApi";
-import { issueComplimentaryTickets, listDirectComplimentaryIssues, type ComplimentaryProgram, type DirectComplimentaryIssue } from "@/lib/complimentaryApi";
+import { issueComplimentaryTickets, listDirectComplimentaryIssues, voidComplimentaryTicket, type ComplimentaryProgram, type DirectComplimentaryIssue } from "@/lib/complimentaryApi";
 import type { Product } from "@/lib/productApi";
 import type { Question } from "@/lib/questionApi";
 import { ApiError } from "@/lib/authApi";
@@ -109,6 +109,27 @@ export function ComplimentaryTicketsManager({ eventId, initialProgram, products,
 
   function patchAttendee(index: number, patch: Partial<AttendeeDraft>) { setAttendees((current) => current.map((a, i) => i === index ? { ...a, ...patch } : a)); }
 
+  const voidMutation = useMutation({
+    mutationFn: ({ orderId, ticketId }: { orderId: number; ticketId: number }) => voidComplimentaryTicket(eventId, orderId, ticketId),
+    onSuccess: () => {
+      notifications.show({ color: "teal", icon: <IconCheck size={16} />, message: "Complimentary ticket voided — its capacity is back in the pool." });
+      queryClient.invalidateQueries({ queryKey: ["direct-complimentary-issues", eventId] });
+      refreshProgram();
+    },
+    onError: showError,
+  });
+
+  function confirmVoid(order: DirectComplimentaryIssue, ticket: DirectComplimentaryIssue["ticket_assignments"][number]) {
+    const who = ticket.attendee ? `${ticket.attendee.first_name} ${ticket.attendee.last_name}` : ticket.short_id;
+    modals.openConfirmModal({
+      title: "Void this complimentary ticket?",
+      children: <Text size="sm">{who}&apos;s pass stops working immediately and any unsent ticket email is cancelled. The reserved capacity returns to your complimentary pool — it is not released to public sale. This cannot be undone.</Text>,
+      labels: { confirm: "Void ticket", cancel: "Keep it" },
+      confirmProps: { color: "red" },
+      onConfirm: () => voidMutation.mutate({ orderId: order.id, ticketId: ticket.id }),
+    });
+  }
+
   const totalReserved = program.pool_lines.reduce((sum, line) => sum + line.quantity_reserved, 0);
   const totalAvailable = program.pool_lines.reduce((sum, line) => sum + line.quantity_available, 0);
 
@@ -139,7 +160,15 @@ export function ComplimentaryTicketsManager({ eventId, initialProgram, products,
       <Group justify="flex-end"><Button disabled={program.status !== "ACTIVE" || deadlinePassed || capacityExceeded} loading={issueMutation.isPending} onClick={submitIssue}>Issue {attendees.length} ticket{attendees.length === 1 ? "" : "s"}</Button></Group>
     </Stack></Card>
 
-    <Card withBorder radius="lg" p="lg"><Stack gap="md"><Text fw={700}>Recent direct issuances</Text>{recentIssues.isLoading && <Text size="sm" c="dimmed">Loading recent issuances…</Text>}{recentIssues.data?.length === 0 && <Text size="sm" c="dimmed">No direct complimentary tickets have been issued yet.</Text>}{recentIssues.data?.map((order) => <Group key={order.id} justify="space-between" align="flex-start"><Stack gap={0}><Button component={Link} href={`/events/${eventId}/orders/${order.id}`} variant="subtle" size="compact-sm" px={0}>{order.short_id}</Button><Text size="xs" c="dimmed">{new Date(order.created_at).toLocaleString()} · {order.issued_by ? `${order.issued_by.first_name} ${order.issued_by.last_name}` : "Unknown issuer"}</Text><Text size="sm">{order.items.map((item) => `${item.quantity} × ${item.ticket_display_name}`).join(", ")}</Text></Stack><Stack gap={2} align="flex-end"><Badge variant="light" color={deliveryColor(order)} title={deliveryDescription(order)}>{deliveryLabel(order)}</Badge>{order.delivery_summary_status === "WAITING_FOR_WORKER" && <Text size="xs" c="dimmed" ta="right">Waiting longer than expected</Text>}</Stack></Group>)}</Stack></Card>
+    <Card withBorder radius="lg" p="lg"><Stack gap="md"><Text fw={700}>Recent direct issuances</Text>{recentIssues.isLoading && <Text size="sm" c="dimmed">Loading recent issuances…</Text>}{recentIssues.data?.length === 0 && <Text size="sm" c="dimmed">No direct complimentary tickets have been issued yet.</Text>}{recentIssues.data?.map((order) => <Stack key={order.id} gap="xs">
+  <Group justify="space-between" align="flex-start"><Stack gap={0}><Button component={Link} href={`/events/${eventId}/orders/${order.id}`} variant="subtle" size="compact-sm" px={0}>{order.short_id}</Button><Text size="xs" c="dimmed">{new Date(order.created_at).toLocaleString()} · {order.issued_by ? `${order.issued_by.first_name} ${order.issued_by.last_name}` : "Unknown issuer"}</Text><Text size="sm">{order.items.map((item) => `${item.quantity} × ${item.ticket_display_name}`).join(", ")}</Text></Stack><Stack gap={2} align="flex-end"><Badge variant="light" color={deliveryColor(order)} title={deliveryDescription(order)}>{deliveryLabel(order)}</Badge>{order.delivery_summary_status === "WAITING_FOR_WORKER" && <Text size="xs" c="dimmed" ta="right">Waiting longer than expected</Text>}</Stack></Group>
+  {order.ticket_assignments.length > 0 && <Stack gap={4} pl="sm" style={{ borderLeft: "2px solid var(--mantine-color-gray-3)" }}>{order.ticket_assignments.map((ticket) => <Group key={ticket.id} justify="space-between" gap="xs" wrap="nowrap">
+    <Text size="xs" c={ticket.voided_at ? "dimmed" : undefined} td={ticket.voided_at ? "line-through" : undefined} style={{ minWidth: 0 }} truncate>{ticket.attendee ? `${ticket.attendee.first_name} ${ticket.attendee.last_name}` : ticket.short_id}{ticket.attendee?.email ? ` · ${ticket.attendee.email}` : ""}</Text>
+    {ticket.voided_at ? <Badge size="xs" variant="light" color="gray">Void</Badge>
+      : ticket.is_checked_in ? <Badge size="xs" variant="light" color="teal">Checked in</Badge>
+      : <Button size="compact-xs" variant="subtle" color="red" loading={voidMutation.isPending && voidMutation.variables?.ticketId === ticket.id} onClick={() => confirmVoid(order, ticket)}>Void</Button>}
+  </Group>)}</Stack>}
+</Stack>)}</Stack></Card>
 
     <Card withBorder radius="lg" p="lg"><ComplimentaryDistributorManager eventId={eventId} program={program} products={products} onProgramChange={refreshProgram} /></Card>
     </>}
