@@ -4,6 +4,7 @@ import { backendRequest } from "@/lib/backend";
 import type { Event } from "@/lib/eventApi";
 import type { OrderDetail as OrderDetailType } from "@/lib/orderApi";
 import { OrderDetail } from "@/components/OrderDetail";
+import { RefundRequestReviewPanel } from "@/components/RefundRequestReviewPanel";
 
 export default async function OrderDetailPage({
   params,
@@ -28,6 +29,7 @@ export default async function OrderDetailPage({
         event={eventResult.data.event}
         initialOrder={orderResult.data.order}
       />
+      <RefundRequestReviewPanel eventId={eventId} orderId={orderId} />
     </Stack>
   );
 }

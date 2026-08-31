@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Card, Group, Stack, Text, TextInput } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { IconSearch } from "@tabler/icons-react";
-import type { CheckInAttendee } from "@/lib/publicCheckInApi";
+import type { GateCheckInAttendee } from "@/lib/gateApi";
 
 export function AttendeeSearch({
   attendees,
@@ -12,9 +12,9 @@ export function AttendeeSearch({
   onUndo,
   isBusy,
 }: {
-  attendees: CheckInAttendee[];
+  attendees: GateCheckInAttendee[];
   onCheckIn: (attendeeShortId: string) => void;
-  onUndo: (checkInShortId: string) => void;
+  onUndo?: (checkInShortId: string) => void;
   isBusy: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -65,15 +65,17 @@ export function AttendeeSearch({
                   <Badge color="teal" variant="light">
                     Checked in
                   </Badge>
-                  <Button
-                    size="xs"
-                    variant="subtle"
-                    color="red"
-                    disabled={isBusy}
-                    onClick={() => onUndo(attendee.active_check_in!.short_id)}
-                  >
-                    Undo
-                  </Button>
+                  {onUndo && (
+                    <Button
+                      size="xs"
+                      variant="subtle"
+                      color="red"
+                      disabled={isBusy}
+                      onClick={() => onUndo(attendee.active_check_in!.short_id)}
+                    >
+                      Undo
+                    </Button>
+                  )}
                 </Group>
               ) : attendee.is_checked_in ? (
                 <Badge color="gray" variant="light">
