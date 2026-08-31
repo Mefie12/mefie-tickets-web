@@ -19,7 +19,9 @@ import { ticketLabel } from "@/lib/portalStatus";
  * Create / rotate / revoke the guest claim link for one buyer-held
  * entitlement (docs/17 §10). The shareable URL is shown once, right
  * after create or rotate — it is never re-displayable (same discipline
- * as the order locator).
+ * as the order locator). When the delivery is locked to an email, the
+ * link is also emailed to that address (opt-out on create; always on
+ * rotate — "Resend invite").
  */
 export function ClaimLinkModal({
   entitlement,
@@ -35,22 +37,25 @@ export function ClaimLinkModal({
   const [hideName, setHideName] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
   const [lockEmail, setLockEmail] = useState("");
-  const [freshUrl, setFreshUrl] = useState<string | null>(null);
+  const [sendToLocked, setSendToLocked] = useState(true);
+  const [result, setResult] = useState<ClaimLinkDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const hasLink = entitlement?.claim_link != null;
   const linkId = entitlement?.claim_link?.id ?? null;
+  const linkLocked = entitlement?.claim_link?.delivery_locked ?? false;
 
   function reset() {
     setHideName(false);
     setExpiresAt("");
     setLockEmail("");
-    setFreshUrl(null);
+    setSendToLocked(true);
+    setResult(null);
     setError(null);
   }
 
   const onResult = (link: ClaimLinkDetail, verb: string) => {
-    setFreshUrl(link.url);
+    setResult(link);
     notifications.show({ color: "teal", message: `Invite link ${verb}.` });
     onDone();
   };
@@ -61,6 +66,7 @@ export function ClaimLinkModal({
         hide_inviter_name: hideName,
         expires_at: expiresAt ? new Date(`${expiresAt}T23:59:59`).toISOString() : null,
         delivery_lock_email: lockEmail.trim() || null,
+        send_to_locked_email: lockEmail.trim() ? sendToLocked : undefined,
       }),
     onSuccess: (d) => onResult(d.link, "created"),
     onError: (e) => setError(resolveApiErrorMessage(e)),
@@ -68,7 +74,8 @@ export function ClaimLinkModal({
 
   const rotate = useMutation({
     mutationFn: () => rotateClaimLink(linkId!),
-    onSuccess: (d) => onResult(d.link, "rotated — the old link no longer works"),
+    onSuccess: (d) =>
+      onResult(d.link, linkLocked ? "resent — a fresh link is on its way" : "rotated — the old link no longer works"),
     onError: (e) => setError(resolveApiErrorMessage(e)),
   });
 
@@ -84,6 +91,7 @@ export function ClaimLinkModal({
   });
 
   const busy = create.isPending || rotate.isPending || revoke.isPending;
+  const freshUrl = result?.url ?? null;
 
   return (
     <Modal
@@ -110,8 +118,11 @@ export function ClaimLinkModal({
         )}
 
         {freshUrl && (
-          <Alert color="teal" variant="light" title="Copy this link now">
+          <Alert color="teal" variant="light" title={result?.invite_email_sent ? "Link emailed" : "Copy this link now"}>
             <Stack gap="xs">
+              {result?.invite_email_sent && (
+                <Text size="sm">We&apos;ve emailed this link to the recipient. You can also share it another way:</Text>
+              )}
               <Code block style={{ wordBreak: "break-all" }}>
                 {freshUrl}
               </Code>
@@ -119,7 +130,9 @@ export function ClaimLinkModal({
                 <CopyLinkButton value={freshUrl} />
               </Group>
               <Text size="xs" c="dimmed">
-                For privacy we won&apos;t show this link again. Rotate it here if you lose it.
+                {result?.invite_email_sent
+                  ? "For privacy we won't show it again — it's already on its way to their inbox."
+                  : "For privacy we won't show this link again. Rotate it here if you lose it."}
               </Text>
             </Stack>
           </Alert>
@@ -145,6 +158,13 @@ export function ClaimLinkModal({
               value={lockEmail}
               onChange={(e) => setLockEmail(e.currentTarget.value)}
             />
+            {lockEmail.trim() && (
+              <Checkbox
+                label={`Email this link to ${lockEmail.trim()}`}
+                checked={sendToLocked}
+                onChange={(e) => setSendToLocked(e.currentTarget.checked)}
+              />
+            )}
             <Button onClick={() => create.mutate()} loading={create.isPending}>
               Create invite link
             </Button>
@@ -155,16 +175,21 @@ export function ClaimLinkModal({
           <>
             <Text size="sm">
               An invite link is active
-              {entitlement?.claim_link?.delivery_locked ? " with delivery locked" : ""}
+              {linkLocked ? " with delivery locked" : ""}
               {entitlement?.claim_link?.expires_at
                 ? `, expiring ${new Date(entitlement.claim_link.expires_at).toLocaleDateString()}`
                 : ""}
               .
             </Text>
+            {linkLocked && (
+              <Text size="xs" c="dimmed">
+                Resending mints a new link and emails it to the locked address; the old link stops working.
+              </Text>
+            )}
             <Divider />
             <Group grow>
               <Button variant="light" onClick={() => rotate.mutate()} loading={rotate.isPending}>
-                Rotate link
+                {linkLocked ? "Resend invite" : "Rotate link"}
               </Button>
               <Button variant="light" color="red" onClick={() => revoke.mutate()} loading={revoke.isPending}>
                 Revoke

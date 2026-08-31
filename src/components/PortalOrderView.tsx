@@ -257,6 +257,22 @@ function EntitlementCard({
             <Text size="sm">
               {e.attendee ? `${e.attendee.first_name} ${e.attendee.last_name}` : "No attendee yet"}
             </Text>
+            {e.attendee?.email && (
+              <Text size="xs" c="dimmed" style={{ wordBreak: "break-word" }}>
+                {e.attendee.email}
+              </Text>
+            )}
+            {e.attendee?.phone && (
+              <Text size="xs" c="dimmed">
+                {e.attendee.phone}
+              </Text>
+            )}
+            {e.delivery?.recipient_email &&
+              e.delivery.recipient_email.trim().toLowerCase() !== (e.attendee?.email ?? "").trim().toLowerCase() && (
+                <Text size="xs" c="dimmed" style={{ wordBreak: "break-word" }}>
+                  Sent to {e.delivery.recipient_email}
+                </Text>
+              )}
             {e.claim_link && (
               <Group gap={4} c="dimmed">
                 <IconLink size={13} />

@@ -100,9 +100,10 @@ export function RevokeReassignModal({
     >
       <Stack gap="md">
         {entitlement && (
-          <Text size="sm" c="dimmed">
+          <Text size="sm" c="dimmed" style={{ wordBreak: "break-word" }}>
             {ticketLabel(entitlement.ticket)} #{entitlement.sequence_number}
             {entitlement.attendee ? ` · ${entitlement.attendee.first_name} ${entitlement.attendee.last_name}` : ""}
+            {entitlement.attendee?.email ? ` · ${entitlement.attendee.email}` : ""}
           </Text>
         )}
 

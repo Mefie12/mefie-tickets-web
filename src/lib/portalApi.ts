@@ -64,7 +64,7 @@ export type EntitlementRow = {
   assignment_status: EntitlementAssignmentStatus;
   commercial_status: EntitlementCommercialStatus;
   reacceptance_required: boolean;
-  attendee: { first_name: string; last_name: string } | null;
+  attendee: { first_name: string; last_name: string; email: string | null; phone: string | null } | null;
   credential: { short_id: string; is_checked_in: boolean; credential_generation: number } | null;
   claim_link: {
     id: number;
@@ -73,7 +73,11 @@ export type EntitlementRow = {
     expires_at: string | null;
     hide_inviter_name: boolean;
   } | null;
-  delivery: { workflow_status: string | null; provider_status: string | null } | null;
+  delivery: {
+    workflow_status: string | null;
+    provider_status: string | null;
+    recipient_email: string | null;
+  } | null;
 };
 
 export type OrderDetailPayload = {
@@ -113,7 +117,7 @@ export type DeliveryRow = {
   delivery: {
     id: number;
     generation: number;
-    recipient_masked: string;
+    recipient_email: string;
     workflow_status: string | null;
     provider_status: string | null;
     failure_code: string | null;
@@ -240,12 +244,14 @@ export type ClaimLinkDetail = {
   delivery_locked: boolean;
   expires_at: string | null;
   hide_inviter_name: boolean;
+  invite_email_sent: boolean;
 };
 
 export type ClaimLinkOptions = {
   delivery_lock_email?: string | null;
   expires_at?: string | null;
   hide_inviter_name?: boolean;
+  send_to_locked_email?: boolean;
 };
 
 export const createClaimLink = (entitlementPublicId: string, options: ClaimLinkOptions) =>
