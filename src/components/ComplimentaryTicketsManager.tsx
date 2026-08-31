@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Badge, Button, Card, Checkbox, Group, Select, SimpleGrid, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Badge, Button, Card, Checkbox, Group, Modal, Select, SimpleGrid, Stack, Table, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconAlertCircle, IconCheck, IconPlus, IconTicket, IconTrash } from "@tabler/icons-react";
@@ -109,26 +109,24 @@ export function ComplimentaryTicketsManager({ eventId, initialProgram, products,
 
   function patchAttendee(index: number, patch: Partial<AttendeeDraft>) { setAttendees((current) => current.map((a, i) => i === index ? { ...a, ...patch } : a)); }
 
+  const [voidTarget, setVoidTarget] = useState<{
+    order: DirectComplimentaryIssue;
+    ticket: DirectComplimentaryIssue["ticket_assignments"][number];
+  } | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+
   const voidMutation = useMutation({
-    mutationFn: ({ orderId, ticketId }: { orderId: number; ticketId: number }) => voidComplimentaryTicket(eventId, orderId, ticketId),
+    mutationFn: ({ orderId, ticketId, reason }: { orderId: number; ticketId: number; reason: string }) =>
+      voidComplimentaryTicket(eventId, orderId, ticketId, reason),
     onSuccess: () => {
       notifications.show({ color: "teal", icon: <IconCheck size={16} />, message: "Complimentary ticket voided — its capacity is back in the pool." });
       queryClient.invalidateQueries({ queryKey: ["direct-complimentary-issues", eventId] });
       refreshProgram();
+      setVoidTarget(null);
+      setVoidReason("");
     },
     onError: showError,
   });
-
-  function confirmVoid(order: DirectComplimentaryIssue, ticket: DirectComplimentaryIssue["ticket_assignments"][number]) {
-    const who = ticket.attendee ? `${ticket.attendee.first_name} ${ticket.attendee.last_name}` : ticket.short_id;
-    modals.openConfirmModal({
-      title: "Void this complimentary ticket?",
-      children: <Text size="sm">{who}&apos;s pass stops working immediately and any unsent ticket email is cancelled. The reserved capacity returns to your complimentary pool — it is not released to public sale. This cannot be undone.</Text>,
-      labels: { confirm: "Void ticket", cancel: "Keep it" },
-      confirmProps: { color: "red" },
-      onConfirm: () => voidMutation.mutate({ orderId: order.id, ticketId: ticket.id }),
-    });
-  }
 
   const totalReserved = program.pool_lines.reduce((sum, line) => sum + line.quantity_reserved, 0);
   const totalAvailable = program.pool_lines.reduce((sum, line) => sum + line.quantity_available, 0);
@@ -166,12 +164,26 @@ export function ComplimentaryTicketsManager({ eventId, initialProgram, products,
     <Text size="xs" c={ticket.voided_at ? "dimmed" : undefined} td={ticket.voided_at ? "line-through" : undefined} style={{ minWidth: 0 }} truncate>{ticket.attendee ? `${ticket.attendee.first_name} ${ticket.attendee.last_name}` : ticket.short_id}{ticket.attendee?.email ? ` · ${ticket.attendee.email}` : ""}</Text>
     {ticket.voided_at ? <Badge size="xs" variant="light" color="gray">Void</Badge>
       : ticket.is_checked_in ? <Badge size="xs" variant="light" color="teal">Checked in</Badge>
-      : <Button size="compact-xs" variant="subtle" color="red" loading={voidMutation.isPending && voidMutation.variables?.ticketId === ticket.id} onClick={() => confirmVoid(order, ticket)}>Void</Button>}
+      : <Button size="compact-xs" variant="subtle" color="red" loading={voidMutation.isPending && voidMutation.variables?.ticketId === ticket.id} onClick={() => { setVoidReason(""); setVoidTarget({ order, ticket }); }}>Void</Button>}
   </Group>)}</Stack>}
 </Stack>)}</Stack></Card>
 
     <Card withBorder radius="lg" p="lg"><ComplimentaryDistributorManager eventId={eventId} program={program} products={products} onProgramChange={refreshProgram} /></Card>
     </>}
+
+    <Modal opened={voidTarget !== null} onClose={() => { if (!voidMutation.isPending) setVoidTarget(null); }} title="Void this complimentary ticket?" centered>
+      {voidTarget && <Stack gap="md">
+        <Text size="sm">
+          {voidTarget.ticket.attendee ? `${voidTarget.ticket.attendee.first_name} ${voidTarget.ticket.attendee.last_name}` : voidTarget.ticket.short_id}&apos;s
+          pass stops working immediately and any unsent ticket email is cancelled. The reserved capacity returns to your complimentary pool — it is not released to public sale. This cannot be undone.
+        </Text>
+        <Textarea label="Reason (optional)" description="Recorded in the activity log." autosize minRows={2} maxLength={500} value={voidReason} onChange={(e) => setVoidReason(e.currentTarget.value)} />
+        <Group justify="flex-end">
+          <Button variant="subtle" onClick={() => setVoidTarget(null)} disabled={voidMutation.isPending}>Keep it</Button>
+          <Button color="red" loading={voidMutation.isPending} onClick={() => voidMutation.mutate({ orderId: voidTarget.order.id, ticketId: voidTarget.ticket.id, reason: voidReason })}>Void ticket</Button>
+        </Group>
+      </Stack>}
+    </Modal>
   </Stack>;
 }
 
