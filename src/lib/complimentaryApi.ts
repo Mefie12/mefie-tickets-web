@@ -69,6 +69,15 @@ export function issueComplimentaryTickets(eventId: number, input: {
   return request<{ order: { id: number; short_id: string } }>(`/api/events/${eventId}/complimentary-issues`, { method: "POST", body: input });
 }
 
+export type ComplimentaryIssuedTicket = {
+  id: number;
+  short_id: string;
+  is_checked_in: boolean;
+  voided_at: string | null;
+  attendee: { id: number; first_name: string; last_name: string; email: string | null } | null;
+  entitlement: { public_id: string; assignment_status: string; commercial_status: string; provenance: string } | null;
+};
+
 export type DirectComplimentaryIssue = {
   id: number;
   short_id: string;
@@ -77,12 +86,20 @@ export type DirectComplimentaryIssue = {
   ticket_assignments_count: number;
   issued_by: { id: number; first_name: string; last_name: string } | null;
   items: Array<{ id: number; ticket_display_name: string; quantity: number }>;
+  ticket_assignments: ComplimentaryIssuedTicket[];
   ticket_deliveries: Array<{ id: number; workflow_status: string; provider_status: string }>;
   delivery_summary_status: "EMAIL_OFF" | "EMAIL_QUEUED" | "WAITING_FOR_WORKER" | "SENT" | "DELIVERED" | "NEEDS_ATTENTION";
 };
 
 export function listDirectComplimentaryIssues(eventId: number) {
   return request<{ orders: DirectComplimentaryIssue[] }>(`/api/events/${eventId}/complimentary-issues`).then((result) => result.orders);
+}
+
+export function voidComplimentaryTicket(eventId: number, orderId: number, ticketAssignmentId: number, reason?: string) {
+  return request<{ status: "voided" }>(
+    `/api/events/${eventId}/complimentary-issues/${orderId}/tickets/${ticketAssignmentId}/void`,
+    { method: "POST", body: { reason: reason?.trim() || null } },
+  );
 }
 
 export type AllocationStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "EXHAUSTED" | "RETURNED" | "EXPIRED" | "REVOKED" | "CLOSED";
