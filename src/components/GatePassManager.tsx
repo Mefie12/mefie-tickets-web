@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Alert,
+  Anchor,
   Badge,
   Button,
   Card,
@@ -35,6 +36,7 @@ import { CopyLinkButton } from "@/components/CopyLinkButton";
  * on rotate — gate staff use it at /gate.
  */
 export function GatePassManager({ eventId }: { eventId: number }) {
+  const scannerUrl = process.env.NEXT_PUBLIC_CHECKIN_PWA_URL ?? "http://localhost:3001/gate";
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ["gate-passes", eventId],
@@ -79,8 +81,8 @@ export function GatePassManager({ eventId }: { eventId: number }) {
       </Group>
 
       <Text size="sm" c="dimmed">
-        Gate staff sign in at <Code>/gate</Code> with a pass name + secret, the event ID ({eventId}), and a check-in list
-        code.
+        Gate staff sign in at <Anchor href={scannerUrl} target="_blank" rel="noreferrer">the Mefie Gate Scanner</Anchor> with
+        a pass name + secret, the event ID ({eventId}), and a check-in list code.
       </Text>
 
       {freshSecret && (

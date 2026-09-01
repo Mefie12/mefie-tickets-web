@@ -8,7 +8,9 @@ const tabs = [
   { label: "Overview", suffix: "" },
   { label: "Orders", suffix: "/orders" },
   { label: "Attendees", suffix: "/attendees" },
+  { label: "Entrances", suffix: "/gates" },
   { label: "Gate passes", suffix: "/gate-passes" },
+  { label: "Gate operations", suffix: "/gate-operations" },
   { label: "Complimentary", suffix: "/complimentary" },
   { label: "Event Settings", suffix: "/settings" },
 ];

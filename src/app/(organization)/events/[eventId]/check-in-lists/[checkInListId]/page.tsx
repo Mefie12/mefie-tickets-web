@@ -23,6 +23,7 @@ export default async function CheckInListDetailPage({
   }
 
   const event = eventResult.data.event;
+  const scannerUrl = process.env.NEXT_PUBLIC_CHECKIN_PWA_URL ?? "http://localhost:3001/gate";
   const { check_in_list: list } = listResult.data;
 
   return (
@@ -45,7 +46,8 @@ export default async function CheckInListDetailPage({
             </Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            Gate staff open <Code>/gate</Code> and sign in with a gate pass for this event plus the list code below.
+            Gate staff open <Anchor href={scannerUrl} target="_blank" rel="noreferrer">the Mefie Gate Scanner</Anchor> and
+            sign in with a gate pass for this event plus the list code below.
             Manage passes on the{" "}
             <Anchor component={Link} href={`/events/${eventId}/gate-passes`}>
               gate passes
