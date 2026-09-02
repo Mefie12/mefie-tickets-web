@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Anchor, Badge, Card, Code, Group, Stack, Text, Title } from "@mantine/core";
 import { backendRequest } from "@/lib/backend";
 import type { CheckInList } from "@/lib/checkInListApi";
 import type { Event } from "@/lib/eventApi";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { LinkAnchor } from "@/components/LinkAnchor";
 
 export default async function CheckInListDetailPage({
   params,
@@ -49,9 +49,9 @@ export default async function CheckInListDetailPage({
             Gate staff open <Anchor href={scannerUrl} target="_blank" rel="noreferrer">the Mefie Gate Scanner</Anchor> and
             sign in with a gate pass for this event plus the list code below.
             Manage passes on the{" "}
-            <Anchor component={Link} href={`/events/${eventId}/gate-passes`}>
+            <LinkAnchor href={`/events/${eventId}/gate-passes`}>
               gate passes
-            </Anchor>{" "}
+            </LinkAnchor>{" "}
             page.
           </Text>
           <Group gap="xs" wrap="nowrap">
