@@ -4,7 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Anchor, Button, Checkbox, Group, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Button, Checkbox, Group, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AuthLayout } from "@/components/AuthLayout";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
@@ -24,7 +24,9 @@ function LoginForm() {
   // Lets e.g. the invitation-accept page send an unauthenticated visitor
   // here, then land them back where they came from once logged in —
   // see AcceptInvitationForm's "requires_login" branch.
-  const next = useSearchParams().get("next");
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
+  const sessionExpired = searchParams.get("expired") === "1";
   // A distributor-only account (created via the complimentary-allocation
   // invitation flow) never gets an organization membership, so
   // current_organization_id stays null — /dashboard would otherwise show
@@ -81,6 +83,11 @@ function LoginForm() {
     <AuthLayout title="Welcome back" subtitle="Log in to manage your events and tickets.">
       <form onSubmit={form.onSubmit((values) => loginMutation.mutate(values))}>
         <Stack>
+          {sessionExpired && (
+            <Alert color="orange" title="Your session expired">
+              You were signed out after a period of inactivity. Log in again to pick up where you left off.
+            </Alert>
+          )}
           <TextInput label="Email" placeholder="you@example.com" {...form.getInputProps("email")} />
           <PasswordInput label="Password" {...form.getInputProps("password")} />
           <Group justify="space-between">

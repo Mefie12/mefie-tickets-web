@@ -242,7 +242,7 @@ export default async function PublicEventPage({
                   <Text size="sm" fw={600}>
                     Terms &amp; Conditions
                   </Text>
-                  <TermsAndConditionsLink eventId={event.id} terms={event.terms} />
+                  <TermsAndConditionsLink document={event.terms} pdfUrl={`/api/public/events/${event.id}/terms/pdf`} />
                 </Group>
               )}
             </Stack>

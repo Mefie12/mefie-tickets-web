@@ -19,7 +19,12 @@ export type RoutingGeneration = {
   published_at: string | null;
   routes: RoutingGenerationRoute[];
 };
-export type GateConfiguration = { gates: EventGate[]; generation: RoutingGeneration; publication?: RoutingChangePublication | null };
+export type GateConfiguration = {
+  gates: EventGate[];
+  generation: RoutingGeneration;
+  structure_changes: { allowed: boolean; reason: string | null };
+  publication?: RoutingChangePublication | null;
+};
 export type RoutingChangePublication = {
   id: string;
   status: "PREPARING" | "READY" | "FAILED" | "PUBLISHED" | "CANCELLED";

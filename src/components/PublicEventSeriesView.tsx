@@ -215,7 +215,7 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
                   <Text size="sm" fw={600}>
                     Terms &amp; Conditions
                   </Text>
-                  <TermsAndConditionsLink eventId={occurrence.id} terms={occurrence.terms} />
+                  <TermsAndConditionsLink document={occurrence.terms} pdfUrl={`/api/public/events/${occurrence.id}/terms/pdf`} />
                 </Group>
               )}
             </Stack>

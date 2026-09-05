@@ -3,12 +3,13 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { Badge, Box, Button, Card, Divider, Group, Modal, Stack, Text, Textarea, Title } from "@mantine/core";
+import { Alert, Badge, Box, Button, Card, Divider, Group, Modal, Stack, Text, Textarea, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
+import { IconAlertCircle, IconDownload, IconMail } from "@tabler/icons-react";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { cancelOrder, type OrderDetail as OrderDetailType, type OrderStatus } from "@/lib/orderApi";
+import { cancelOrder, resendOrderTicket, type OrderAttendee, type OrderDetail as OrderDetailType, type OrderStatus } from "@/lib/orderApi";
 import { formatEventDate } from "@/lib/eventDateTime";
 import { formatAmount } from "@/lib/money";
 import type { Event } from "@/lib/eventApi";
@@ -74,6 +75,9 @@ export function OrderDetail({
   // either, for the same reason. A ref sidesteps both.
   const reasonRef = useRef<HTMLTextAreaElement>(null);
   const [viewingTerms, setViewingTerms] = useState(false);
+  const [resendModalAttendee, setResendModalAttendee] = useState<OrderAttendee | null>(null);
+  const [resendReason, setResendReason] = useState("");
+  const [resendBusy, setResendBusy] = useState(false);
 
   const cancelMutation = useMutation({
     mutationFn: (cancelReason: string) => cancelOrder(eventId, order.id, cancelReason || undefined),
@@ -113,6 +117,28 @@ export function OrderDetail({
       confirmProps: { color: "red" },
       onConfirm: () => cancelMutation.mutate(reasonRef.current?.value ?? ""),
     });
+  }
+
+  async function handleResendTicket() {
+    if (!resendModalAttendee || resendReason.trim().length < 3) return;
+    setResendBusy(true);
+    try {
+      await resendOrderTicket(eventId, resendModalAttendee.id, resendReason.trim());
+      notifications.show({
+        color: "teal",
+        message: `Ticket delivery queued for ${resendModalAttendee.first_name} ${resendModalAttendee.last_name}.`,
+      });
+      setResendModalAttendee(null);
+      setResendReason("");
+    } catch (error) {
+      if (redirectOnAuthError(error as Error, router)) return;
+      notifications.show({
+        color: "red",
+        message: error instanceof ApiError ? error.message : "Unable to resend ticket.",
+      });
+    } finally {
+      setResendBusy(false);
+    }
   }
 
   return (
@@ -245,50 +271,65 @@ export function OrderDetail({
       <Card withBorder radius="lg" p="xl">
         <Stack gap="sm">
           <Title order={3} fz={18}>
-            Attendees
+            Attendees &amp; Ticket Delivery
           </Title>
-          {order.attendees.map((attendee) => (
-            <Card key={attendee.id} withBorder radius="md" p="sm">
-              <Group justify="space-between" align="flex-start">
-                <Stack gap={2}>
-                  <Text fw={600} size="sm">
-                    {attendee.first_name} {attendee.last_name}
-                    {attendee.is_buyer && (
-                      <Text component="span" size="xs" c="dimmed">
-                        {" "}
-                        (buyer)
-                      </Text>
-                    )}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {attendee.email} · {attendee.product.title}
-                  </Text>
-                  {attendee.voided_at && (
-                    <Badge color="red" variant="light" size="xs" style={{ alignSelf: "flex-start" }}>
-                      Voided
-                    </Badge>
-                  )}
-                </Stack>
-                <Stack gap={4} align="flex-end">
-                  {attendee.ticket_pdf_path ? (
-                    <Button
-                      component="a"
-                      href={`/api/attendees/${attendee.id}/ticket`}
-                      target="_blank"
-                      size="xs"
-                      variant="light"
-                    >
-                      Download ticket
-                    </Button>
-                  ) : (
-                    <Text size="xs" c="dimmed">
-                      Preparing ticket…
+          {order.attendees.map((attendee) => {
+            const hasAttendeeEmail = Boolean(attendee.email && attendee.email.trim());
+            const displayEmail = hasAttendeeEmail ? attendee.email : `${order.email} (Buyer fallback)`;
+
+            return (
+              <Card key={attendee.id} withBorder radius="md" p="sm">
+                <Group justify="space-between" align="flex-start">
+                  <Stack gap={2}>
+                    <Text fw={600} size="sm">
+                      {attendee.first_name} {attendee.last_name}
+                      {attendee.is_buyer && (
+                        <Text component="span" size="xs" c="dimmed">
+                          {" "}
+                          (buyer)
+                        </Text>
+                      )}
                     </Text>
-                  )}
-                </Stack>
-              </Group>
-            </Card>
-          ))}
+                    <Text size="xs" c="dimmed">
+                      {displayEmail} · {attendee.product.title}
+                    </Text>
+                    {attendee.voided_at && (
+                      <Badge color="red" variant="light" size="xs" style={{ alignSelf: "flex-start" }}>
+                        Voided
+                      </Badge>
+                    )}
+                  </Stack>
+                  <Group gap="xs" align="center">
+                    {!attendee.voided_at && (
+                      <Button
+                        size="xs"
+                        leftSection={<IconMail size={14} />}
+                        onClick={() => {
+                          setResendModalAttendee(attendee);
+                          setResendReason("");
+                        }}
+                      >
+                        Resend ticket
+                      </Button>
+                    )}
+                    {attendee.ticket_pdf_path && (
+                      <Button
+                        component="a"
+                        href={`/api/attendees/${attendee.id}/ticket`}
+                        target="_blank"
+                        size="xs"
+                        variant="subtle"
+                        color="gray"
+                        leftSection={<IconDownload size={14} />}
+                      >
+                        Download PDF
+                      </Button>
+                    )}
+                  </Group>
+                </Group>
+              </Card>
+            );
+          })}
         </Stack>
       </Card>
 
@@ -302,6 +343,73 @@ export function OrderDetail({
 
       <Modal opened={viewingTerms} onClose={() => setViewingTerms(false)} title="Accepted Terms & Conditions" size="lg">
         <Box dangerouslySetInnerHTML={{ __html: order.terms_acceptance?.rich_text_content ?? "" }} />
+      </Modal>
+
+      <Modal
+        opened={!!resendModalAttendee}
+        onClose={() => {
+          if (!resendBusy) {
+            setResendModalAttendee(null);
+            setResendReason("");
+          }
+        }}
+        title={`Resend Ticket — ${resendModalAttendee?.first_name} ${resendModalAttendee?.last_name}`}
+        centered
+      >
+        {resendModalAttendee && (
+          <Stack gap="md">
+            {resendModalAttendee.email && resendModalAttendee.email.trim() ? (
+              <Alert color="blue" icon={<IconMail size={18} />}>
+                <Text size="sm">
+                  This ticket email will be delivered to the attendee&apos;s email address:{" "}
+                  <strong>{resendModalAttendee.email}</strong>.
+                </Text>
+              </Alert>
+            ) : (
+              <Alert color="orange" icon={<IconAlertCircle size={18} />}>
+                <Text size="sm">
+                  No individual email is attached for this attendee (e.g. minor, guest, or unassigned). The ticket email will be delivered to the buyer&apos;s email address:{" "}
+                  <strong>{order.email}</strong>.
+                </Text>
+              </Alert>
+            )}
+
+            <Text size="sm" c="dimmed">
+              A new delivery generation will be dispatched to the recipient. The QR credential and ticket reference remain unchanged.
+            </Text>
+
+            <Textarea
+              label="Audit reason"
+              placeholder="Why are you resending this ticket? (e.g., Customer requested resend)"
+              value={resendReason}
+              onChange={(e) => setResendReason(e.currentTarget.value)}
+              required
+              minRows={2}
+              maxLength={500}
+            />
+
+            <Group justify="flex-end" mt="xs">
+              <Button
+                variant="default"
+                disabled={resendBusy}
+                onClick={() => {
+                  setResendModalAttendee(null);
+                  setResendReason("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                leftSection={<IconMail size={16} />}
+                loading={resendBusy}
+                disabled={resendReason.trim().length < 3}
+                onClick={handleResendTicket}
+              >
+                Confirm &amp; Resend
+              </Button>
+            </Group>
+          </Stack>
+        )}
       </Modal>
     </Stack>
   );
