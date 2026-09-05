@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+import { safeNext } from "@/lib/safeNext";
 import { redirect } from "next/navigation";
 import { getConsumerSession } from "@/lib/consumerSession";
 import { ConsumerPortalShell } from "@/components/ConsumerPortalShell";
@@ -12,7 +14,7 @@ export default async function PortalLayout({ children }: { children: React.React
   const session = await getConsumerSession();
 
   if (!session) {
-    redirect("/tickets/verify");
+    redirect(`/login?next=${encodeURIComponent(safeNext((await headers()).get("x-mefie-return-path"), "consumer", "/tickets"))}`);
   }
 
   return <ConsumerPortalShell profile={session.profile}>{children}</ConsumerPortalShell>;

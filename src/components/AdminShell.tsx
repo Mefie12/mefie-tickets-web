@@ -39,7 +39,7 @@ export function AdminShell({ user, children }: { user: SessionUser; children: Re
 
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSuccess: () => router.push("/login"),
+    onSuccess: () => router.push("/organizers/login"),
   });
 
   return (

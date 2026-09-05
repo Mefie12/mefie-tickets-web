@@ -75,7 +75,7 @@ export function PlatformAdminShell({
 
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSuccess: () => router.push("/login"),
+    onSuccess: () => router.push("/admin/login"),
   });
 
   const has = (permission: string) => permissions.includes(permission);

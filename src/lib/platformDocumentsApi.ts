@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/authApi";
 export type PlatformDocumentTypeSlug = "terms-of-use" | "privacy-policy";
 
 export type PublicPlatformDocument = {
+  version_id: number;
   type: PlatformDocumentTypeSlug;
   content_type: "RICH_TEXT" | "PDF";
   rich_text_content: string | null;

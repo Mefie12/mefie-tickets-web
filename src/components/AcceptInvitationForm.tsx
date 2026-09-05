@@ -130,7 +130,7 @@ function LogInToAcceptStep({
           The invitation to join <strong>{organizationName}</strong> is for <strong>{email}</strong>, which already
           has an account. Log in as that address to accept it.
         </Text>
-        <Button component={Link} href={`/login?next=${encodeURIComponent(nextUrl)}`} fullWidth>
+        <Button component={Link} href={`/organizers/login?next=${encodeURIComponent(nextUrl)}`} fullWidth>
           Log in to continue
         </Button>
       </Stack>

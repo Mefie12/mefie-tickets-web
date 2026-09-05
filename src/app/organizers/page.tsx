@@ -1,0 +1,7 @@
+import { Container, Stack, Title, Text, Group, SimpleGrid, Card } from "@mantine/core";
+import { PublicSiteHeader } from "@/components/PublicSiteHeader";
+import { PublicSiteFooter } from "@/components/PublicSiteFooter";
+import { LinkButton } from "@/components/LinkButton";
+export default function OrganizersPage() {
+  return <><PublicSiteHeader/><Container size="lg" py={64}><Stack gap="xl"><Text c="dimmed">MEFIE FOR ORGANIZERS</Text><Title order={1}>Bring people together. We’ll handle the tickets.</Title><Text size="lg" maw={700}>Publish your event, sell tickets, and welcome your audience with Mefie Tickets.</Text><Group><LinkButton href="/organizers/register">Create an organization</LinkButton><LinkButton href="/organizers/login" variant="default">Organizer login</LinkButton></Group><SimpleGrid cols={{ base: 1, sm: 3 }} my="xl">{[["Publish your events", "Create an event page with dates, ticket options, and the details your audience needs."], ["Sell and distribute tickets", "Manage ticket sales and invitations from your organizer workspace."], ["Welcome your attendees", "Keep track of your guest list and check tickets at the door."]].map(([title, text]) => <Card key={title} withBorder padding="xl"><Title order={2} size="h3" mb="sm">{title}</Title><Text c="dimmed">{text}</Text></Card>)}</SimpleGrid><Text c="dimmed">More organizer guides and support resources are on the way.</Text></Stack></Container><PublicSiteFooter/></>;
+}

@@ -3,6 +3,7 @@ import { IconChevronRight } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import type { DashboardPayload, OrderCard } from "@/lib/portalApi";
+import { LinkButton } from "@/components/LinkButton";
 import { LinkCard } from "@/components/LinkCard";
 
 export const dynamic = "force-dynamic";
@@ -14,17 +15,19 @@ function assignedProgress(summary: OrderCard["entitlement_summary"]): { done: nu
 
 export default async function PortalDashboard() {
   const result = await backendRequest<DashboardPayload>("/api/portal/dashboard");
+  const received = result.status === 200 ? result.data.received ?? [] : [];
   const orders = result.status === 200 ? result.data.orders : [];
 
   return (
     <Stack gap="lg" py="md">
       <Title order={1} fz={24}>
-        Your orders
+        My Tickets
       </Title>
 
+      <Title order={2} size="h3">Purchased</Title>
       {orders.length === 0 && (
         <Text c="dimmed" size="sm">
-          Nothing to show yet. Open a ticket link from one of your confirmation emails to see it here.
+          No purchases here yet. Existing orders can be accessed through the order link in your confirmation email.
         </Text>
       )}
 
@@ -78,6 +81,10 @@ export default async function PortalDashboard() {
           );
         })}
       </Stack>
+      <Title order={2} size="h3">Received</Title>
+      {received.length === 0 && <Text c="dimmed" size="sm">Tickets sent to you will appear here. For older tickets, open the ticket link in your email to connect them.</Text>}
+      {received.map(ticket => <LinkCard key={ticket.id} href={`/tickets/received/${ticket.id}`} withBorder p="md" radius="lg"><Stack gap={4}><Text fw={600}>{ticket.event.title ?? "Event"}</Text><Text size="sm">{ticket.ticket_name} · {ticket.attendee.first_name} {ticket.attendee.last_name}</Text><Text size="xs" c="dimmed">{ticket.event.start_date ? formatEventDateRange(ticket.event.start_date, null, ticket.event.timezone ?? "UTC") : ""}</Text><Badge variant="light">{(ticket.commercial_status !== "ACTIVE" ? ticket.commercial_status : ticket.assignment_status).replaceAll("_", " ")}</Badge></Stack></LinkCard>)}
+      <LinkButton href="/discover" variant="light">Discover events</LinkButton>
     </Stack>
   );
 }

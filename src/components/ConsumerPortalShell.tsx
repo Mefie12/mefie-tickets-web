@@ -23,14 +23,14 @@ export function ConsumerPortalShell({
 
   const logout = useMutation({
     mutationFn: portalLogout,
-    onSuccess: () => router.push("/tickets/verify"),
+    onSuccess: () => router.push("/login"),
   });
   const logoutAll = useMutation({
     mutationFn: portalLogoutAll,
-    onSuccess: () => router.push("/tickets/verify"),
+    onSuccess: () => router.push("/login"),
   });
 
-  const initials = `${profile.first_name[0] ?? ""}${profile.last_name[0] ?? ""}`.toUpperCase();
+  const initials = `${profile.first_name?.[0] ?? ""}${profile.last_name?.[0] ?? ""}`.toUpperCase();
 
   return (
     <AppShell header={{ height: 60 }} padding="md">

@@ -20,7 +20,7 @@ export function DistributorShell({ user, children }: { user: SessionUser; childr
 
   const logoutMutation = useMutation({
     mutationFn: logout,
-    onSuccess: () => router.push("/login"),
+    onSuccess: () => router.push("/organizers/login"),
   });
 
   return (
