@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Anchor, Button, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AuthLayout } from "@/components/AuthLayout";
+import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, type CurrentUser, registerOrganization } from "@/lib/authApi";
+import { getPublicPlatformDocument } from "@/lib/platformDocumentsApi";
 
 type RegisterValues = {
   organization_name: string;
@@ -23,6 +25,13 @@ export default function RegisterPage() {
   const [step, setStep] = useState<"register" | "verify">("register");
   const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
   const router = useRouter();
+
+  // Passive disclosure, not a blocking checkbox — successful registration
+  // itself is the acceptance event (recorded server-side unconditionally).
+  // Each link is only shown once its document has actually been
+  // published; until then the plain label renders with no link.
+  const termsOfUse = useQuery({ queryKey: ["platform-document", "terms-of-use"], queryFn: () => getPublicPlatformDocument("terms-of-use") });
+  const privacyPolicy = useQuery({ queryKey: ["platform-document", "privacy-policy"], queryFn: () => getPublicPlatformDocument("privacy-policy") });
 
   const form = useForm<RegisterValues>({
     initialValues: {
@@ -93,6 +102,30 @@ export default function RegisterPage() {
           <Button type="submit" fullWidth loading={registerMutation.isPending} mt="sm">
             Create account
           </Button>
+          <Text size="xs" c="dimmed" ta="center">
+            By creating an account you agree to our{" "}
+            {termsOfUse.data ? (
+              <TermsAndConditionsLink
+                document={termsOfUse.data}
+                pdfUrl="/api/public/platform-documents/terms-of-use/pdf"
+                label="Terms of Use"
+              />
+            ) : (
+              "Terms of Use"
+            )}{" "}
+            and{" "}
+            {privacyPolicy.data ? (
+              <TermsAndConditionsLink
+                document={privacyPolicy.data}
+                pdfUrl="/api/public/platform-documents/privacy-policy/pdf"
+                label="Privacy Policy"
+              />
+            ) : (
+              "Privacy Policy"
+            )}
+            . If you add a phone number to your account, we may text you about product updates and events — reply
+            STOP at any time to opt out.
+          </Text>
           <Text size="sm" ta="center" c="dimmed">
             Already have an account? <Anchor href="/login">Log in</Anchor>
           </Text>

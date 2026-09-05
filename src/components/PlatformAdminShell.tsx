@@ -27,6 +27,7 @@ import {
   IconCategory,
   IconStar,
   IconDevices,
+  IconFileText,
 } from "@tabler/icons-react";
 import { endAdminSession, type AdminDeviceSession } from "@/lib/adminAuthApi";
 import { logout } from "@/lib/authApi";
@@ -181,6 +182,9 @@ export function PlatformAdminShell({
         )}
         {has("featured_events.view") && (
           <NavLink component={Link} href="/admin/featured-events" label="Featured Events" leftSection={<IconStar size={16} />} active={pathname.startsWith("/admin/featured-events")} />
+        )}
+        {has("platform_documents.view") && (
+          <NavLink component={Link} href="/admin/platform-documents" label="Legal Documents" leftSection={<IconFileText size={16} />} active={pathname.startsWith("/admin/platform-documents")} />
         )}
       </AppShell.Navbar>
 

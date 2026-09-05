@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Card, Group, Modal, Select, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Badge, Button, Card, Group, Modal, Select, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconDoorEnter, IconPlus } from "@tabler/icons-react";
 import type { Product } from "@/lib/productApi";
@@ -10,10 +10,11 @@ import {
   cancelRoutingChange, getRoutingChange, prepareRoutingChange, publishRoutingChange, retryRoutingChange,
   type EventGate, type GateConfiguration, type RoutingChangePublication,
 } from "@/lib/gateRoutingApi";
+import { GateConfigStatus } from "@/components/GateConfigStatus";
 
 export function GateRoutingManager({
-  eventId, eventStatus, products, initial,
-}: { eventId: number; eventStatus: string; products: Product[]; initial: GateConfiguration }) {
+  eventId, eventStatus, products, productLoadError, initial,
+}: { eventId: number; eventStatus: string; products: Product[]; productLoadError: boolean; initial: GateConfiguration }) {
   const [gates, setGates] = useState(initial.gates);
   const [routes, setRoutes] = useState<Record<number, { gateId: number; laneId: number }>>(() => Object.fromEntries(
     initial.generation.routes.map((route) => [route.product_id, { gateId: route.event_gate_id, laneId: route.gate_lane_id }]),
@@ -27,6 +28,11 @@ export function GateRoutingManager({
   const [publication, setPublication] = useState<RoutingChangePublication | null>(initial.publication ?? null);
   const structureEditable = eventStatus === "DRAFT" && initial.generation.status === "DRAFT";
   const routingEditable = structureEditable || eventStatus === "LIVE";
+  const stagedChangeOpen = publication !== null && ["PREPARING", "READY", "FAILED"].includes(publication.status);
+  const structureChangesAllowed = initial.structure_changes.allowed && !stagedChangeOpen;
+  const structureDisabledReason = stagedChangeOpen
+    ? "Finish or cancel the staged routing change before adding entrances or lanes."
+    : initial.structure_changes.reason;
   const defaultGate = gates.find((gate) => gate.is_default)!;
   const gateOptions = useMemo(() => gates.map((gate) => ({ value: String(gate.id), label: gate.name })), [gates]);
 
@@ -99,6 +105,13 @@ export function GateRoutingManager({
       setRoutes(Object.fromEntries(result.publication.generation.routes.map((route) => [route.product_id, {
         gateId: route.event_gate_id, laneId: route.gate_lane_id,
       }])));
+      const activeGateIds = new Set(result.publication.generation.routes.map((route) => route.event_gate_id));
+      const activeLaneIds = new Set(result.publication.generation.routes.map((route) => route.gate_lane_id));
+      setGates((current) => current.map((gate) => ({
+        ...gate,
+        status: activeGateIds.has(gate.id) ? "ACTIVE" : gate.status,
+        lanes: gate.lanes.map((lane) => ({ ...lane, status: activeLaneIds.has(lane.id) ? "ACTIVE" : lane.status })),
+      })));
       notifications.show({ color: "teal", message: "New routing published. Replacement tickets are queued for delivery." });
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not publish routing." });
@@ -129,12 +142,14 @@ export function GateRoutingManager({
       <Stack gap={2}><Title order={2}>Entrances & lanes</Title><Text c="dimmed">
         Tickets show their entrance. Lanes remain operational and can change without reissuing tickets.
       </Text></Stack>
-      <Button leftSection={<IconPlus size={16}/>} disabled={!structureEditable} onClick={() => { setName(""); setGateModal(true); }}>
+      <Group><Button component="a" href="#ticket-routing" variant="light">Ticket routing</Button>
+      <Button leftSection={<IconPlus size={16}/>} disabled={!structureChangesAllowed} onClick={() => { setName(""); setGateModal(true); }}>
         Add entrance
-      </Button>
+      </Button></Group>
     </Group>
-    {!structureEditable && <Card withBorder bg="blue.0"><Stack gap={4}><Text fw={600}>Published routing change</Text><Text size="sm">
-      Gate changes are staged first. Current tickets remain valid until every affected replacement is generated and you explicitly publish. Changes are blocked after scanner preparation or admission activity begins.
+    <GateConfigStatus locked={!structureChangesAllowed} reason={structureDisabledReason} eventStatus={eventStatus} />
+    {eventStatus === "LIVE" && structureChangesAllowed && <Card withBorder bg="blue.0"><Stack gap={4}><Text fw={600}>Live-event routing changes are staged</Text><Text size="sm">
+      You may add entrances and lanes before scanner setup begins. Once you create a scanner setup, this structure locks — new entrances and lanes will need every scanner setup revoked first.
     </Text></Stack></Card>}
     {publication && <Card withBorder bg={publication.status === "FAILED" ? "red.0" : publication.status === "READY" ? "green.0" : "gray.0"}><Stack gap="xs">
       <Group justify="space-between"><Text fw={700}>Routing generation {publication.generation.version}</Text><Badge>{publication.status}</Badge></Group>
@@ -147,16 +162,18 @@ export function GateRoutingManager({
     <SimpleGrid cols={{ base: 1, md: 2 }}>
       {gates.map((gate) => <Card key={gate.id} withBorder radius="lg">
         <Stack gap="sm"><Group justify="space-between"><Group gap="xs"><IconDoorEnter size={20}/><Text fw={700}>{gate.name}</Text></Group>
-          {gate.is_default && <Badge variant="light">Default</Badge>}</Group>
-          <Stack gap={4}>{gate.lanes.map((lane) => <Text key={lane.id} size="sm">{lane.name} <Text span c="dimmed">({lane.code})</Text></Text>)}</Stack>
-          <Button variant="subtle" size="xs" disabled={!structureEditable} onClick={() => { setName(""); setCode(""); setLaneGate(gate); }}>Add lane</Button>
+          <Group gap="xs">{gate.status === "CONFIGURING" && <Badge color="orange" variant="light">Not published</Badge>}{gate.is_default && <Badge variant="light">Default</Badge>}</Group></Group>
+          <Stack gap={4}>{gate.lanes.map((lane) => <Group key={lane.id} gap="xs"><Text size="sm">{lane.name} <Text span c="dimmed">({lane.code})</Text></Text>{lane.status === "CONFIGURING" && <Badge size="xs" color="orange" variant="light">Not published</Badge>}</Group>)}</Stack>
+          <Button variant="subtle" size="xs" disabled={!structureChangesAllowed} onClick={() => { setName(""); setCode(""); setLaneGate(gate); }}>Add lane</Button>
         </Stack>
       </Card>)}
     </SimpleGrid>
-    <Card withBorder radius="lg"><Stack>
-      <Stack gap={2}><Text fw={700}>Ticket routing</Text><Text size="sm" c="dimmed">
+    <Card id="ticket-routing" withBorder radius="lg"><Stack>
+      <Stack gap={2}><Title order={3}>Ticket routing</Title><Text size="sm" c="dimmed">
         Unassigned ticket types use {defaultGate.name}. The entrance—not the lane—is printed and signed into each ticket.
       </Text></Stack>
+      {productLoadError && <Alert color="red" title="Ticket types could not be loaded">Refresh the page before changing routing.</Alert>}
+      {!productLoadError && products.length === 0 && <Alert color="blue" title="No ticket types yet">Create a ticket type first. It will then appear here with an entrance and lane selector.</Alert>}
       {products.map((product) => {
         const route = routes[product.id] ?? { gateId: defaultGate.id, laneId: defaultGate.lanes[0]?.id };
         const routeGate = gates.find((gate) => gate.id === route.gateId) ?? defaultGate;
@@ -178,8 +195,9 @@ export function GateRoutingManager({
             }))}/>
         </SimpleGrid>;
       })}
-      <Group justify="flex-end"><Button disabled={!routingEditable || (publication !== null && publication.status !== "PUBLISHED")} loading={busy}
+      {products.length > 0 && <Group justify="flex-end"><Button disabled={productLoadError || !routingEditable || stagedChangeOpen} loading={busy}
         onClick={() => structureEditable ? saveRouting() : setConfirmChange(true)}>{structureEditable ? "Save routing" : "Prepare routing change"}</Button></Group>
+      }
     </Stack></Card>
     <Modal opened={gateModal} onClose={() => setGateModal(false)} title="New entrance" centered>
       <Stack><TextInput label="Entrance name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus/>

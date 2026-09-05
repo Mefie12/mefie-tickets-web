@@ -1,11 +1,15 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import type { EventGate } from "@/lib/gateRoutingApi";
 import { closeGateOperations, getGateOperations, reviewGateConflict, updateGateDevice } from "@/lib/gateOperationsApi";
 
-export function GateOperationsDashboard({ eventId }: { eventId: number }) {
+export function GateOperationsDashboard({ eventId, gates = [] }: { eventId: number; gates?: EventGate[] }) {
   const client = useQueryClient();
+  const gateName = useMemo(() => new Map(gates.map((g) => [g.id, g.name])), [gates]);
+  const laneName = useMemo(() => new Map(gates.flatMap((g) => g.lanes).map((l) => [l.id, l.name])), [gates]);
   const query = useQuery({ queryKey: ["gate-operations", eventId], queryFn: () => getGateOperations(eventId), refetchInterval: 15_000 });
   const refresh = () => client.invalidateQueries({ queryKey: ["gate-operations", eventId] });
   const device = useMutation({ mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "PAUSED" | "RETIRED" }) => updateGateDevice(eventId, id, status), onSuccess: refresh });
@@ -30,9 +34,11 @@ export function GateOperationsDashboard({ eventId }: { eventId: number }) {
         <Card withBorder key={label as string}><Text size="xs" c="dimmed">{label}</Text><Text fw={700} size="xl">{value}</Text></Card>)}
     </SimpleGrid>
     <Card withBorder><Title order={3} mb="md">Devices</Title><Table.ScrollContainer minWidth={900}><Table striped highlightOnHover>
-      <Table.Thead><Table.Tr><Table.Th>Device</Table.Th><Table.Th>Status</Table.Th><Table.Th>Readiness</Table.Th><Table.Th>Last sync</Table.Th><Table.Th>Pending</Table.Th><Table.Th>Conflicts</Table.Th><Table.Th>Actions</Table.Th></Table.Tr></Table.Thead>
+      <Table.Thead><Table.Tr><Table.Th>Device</Table.Th><Table.Th>Entrance / lane</Table.Th><Table.Th>Status</Table.Th><Table.Th>Readiness</Table.Th><Table.Th>Last sync</Table.Th><Table.Th>Pending</Table.Th><Table.Th>Conflicts</Table.Th><Table.Th>Actions</Table.Th></Table.Tr></Table.Thead>
       <Table.Tbody>{data.devices.map((item) => <Table.Tr key={item.device_registration_id}>
-        <Table.Td>{item.label}</Table.Td><Table.Td>{item.status}</Table.Td><Table.Td>{item.readiness ?? "Not reported"}</Table.Td>
+        <Table.Td>{item.label}</Table.Td>
+        <Table.Td><Text size="sm">{gateName.get(item.gate_id) ?? `Gate ${item.gate_id}`}</Text><Text size="xs" c="dimmed">{laneName.get(item.lane_id) ?? `Lane ${item.lane_id}`}</Text></Table.Td>
+        <Table.Td>{item.status}</Table.Td><Table.Td>{item.readiness ?? "Not reported"}</Table.Td>
         <Table.Td>{item.last_sync_at ? new Date(item.last_sync_at).toLocaleString() : "Never"}</Table.Td><Table.Td>{item.pending}</Table.Td><Table.Td>{item.conflicts}</Table.Td>
         <Table.Td><Group gap="xs">{item.status === "ACTIVE" ? <Button size="xs" variant="light" color="yellow" onClick={() => device.mutate({ id: item.device_registration_id, status: "PAUSED" })}>Pause</Button> : item.status === "PAUSED" ? <Button size="xs" variant="light" onClick={() => device.mutate({ id: item.device_registration_id, status: "ACTIVE" })}>Resume</Button> : null}<Button size="xs" variant="subtle" color="red" disabled={item.status === "RETIRED"} onClick={() => device.mutate({ id: item.device_registration_id, status: "RETIRED" })}>Retire</Button></Group></Table.Td>
       </Table.Tr>)}</Table.Tbody>

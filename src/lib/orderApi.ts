@@ -93,7 +93,7 @@ export type OrderListResponse = {
   meta: { current_page: number; last_page: number; per_page: number; total: number };
 };
 
-async function request<T>(path: string, options: { method?: "GET" | "PATCH"; body?: unknown } = {}): Promise<T> {
+async function request<T>(path: string, options: { method?: "GET" | "PATCH" | "POST"; body?: unknown } = {}): Promise<T> {
   const res = await fetch(path, {
     method: options.method ?? "GET",
     headers: { "Content-Type": "application/json" },
@@ -122,4 +122,14 @@ export function cancelOrder(eventId: number, orderId: number, reason?: string) {
     method: "PATCH",
     body: { reason },
   });
+}
+
+export function resendOrderTicket(eventId: number, ticketId: number, reason: string) {
+  return request<{ data: { delivery_id: number; generation: number } }>(
+    `/api/events/${eventId}/tickets/${ticketId}/resend`,
+    {
+      method: "POST",
+      body: { confirmed: true, reason },
+    }
+  );
 }

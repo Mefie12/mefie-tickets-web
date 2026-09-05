@@ -14,5 +14,6 @@ export default async function GatesPage({ params }: { params: Promise<{ eventId:
   ]);
   if (eventResult.status !== 200 || gateResult.status !== 200) notFound();
   return <GateRoutingManager eventId={Number(eventId)} eventStatus={eventResult.data.event.status}
-    products={productResult.status === 200 ? productResult.data.products : []} initial={gateResult.data}/>;
+    products={productResult.status === 200 ? productResult.data.products : []}
+    productLoadError={productResult.status !== 200} initial={gateResult.data}/>;
 }
