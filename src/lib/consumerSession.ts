@@ -11,7 +11,7 @@ import { backendRequest } from "@/lib/backend";
  * locator + OTP.
  */
 export type ConsumerSession = {
-  profile: { email: string; first_name: string; last_name: string };
+  profile: { email: string; first_name: string | null; last_name: string | null };
   step_up_fresh: boolean;
   session_absolute_expires_at: string;
 };

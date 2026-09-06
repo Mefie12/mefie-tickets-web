@@ -2,15 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Anchor, Button, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Button, Checkbox, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AuthLayout } from "@/components/AuthLayout";
-import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
+import { LegalDocumentLinks } from "@/components/LegalDocumentLinks";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, type CurrentUser, registerOrganization } from "@/lib/authApi";
-import { getPublicPlatformDocument } from "@/lib/platformDocumentsApi";
 
 type RegisterValues = {
   organization_name: string;
@@ -19,19 +18,13 @@ type RegisterValues = {
   email: string;
   password: string;
   password_confirmation: string;
+  accepted_terms: boolean;
 };
 
 export default function RegisterPage() {
   const [step, setStep] = useState<"register" | "verify">("register");
   const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
   const router = useRouter();
-
-  // Passive disclosure, not a blocking checkbox — successful registration
-  // itself is the acceptance event (recorded server-side unconditionally).
-  // Each link is only shown once its document has actually been
-  // published; until then the plain label renders with no link.
-  const termsOfUse = useQuery({ queryKey: ["platform-document", "terms-of-use"], queryFn: () => getPublicPlatformDocument("terms-of-use") });
-  const privacyPolicy = useQuery({ queryKey: ["platform-document", "privacy-policy"], queryFn: () => getPublicPlatformDocument("privacy-policy") });
 
   const form = useForm<RegisterValues>({
     initialValues: {
@@ -41,6 +34,7 @@ export default function RegisterPage() {
       email: "",
       password: "",
       password_confirmation: "",
+      accepted_terms: false,
     },
     validate: {
       organization_name: (v) => (v.trim().length === 0 ? "Organization name is required" : null),
@@ -49,6 +43,7 @@ export default function RegisterPage() {
       email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? null : "Enter a valid email"),
       password: (v) => (v.length < 8 ? "Must be at least 8 characters" : null),
       password_confirmation: (v, values) => (v !== values.password ? "Passwords do not match" : null),
+      accepted_terms: (v) => (v ? null : "You must accept the Terms of Use and Privacy Policy to continue"),
     },
   });
 
@@ -99,31 +94,20 @@ export default function RegisterPage() {
             {...form.getInputProps("password")}
           />
           <PasswordInput label="Confirm password" {...form.getInputProps("password_confirmation")} />
+          <Checkbox
+            {...form.getInputProps("accepted_terms", { type: "checkbox" })}
+            label={
+              <>
+                I accept Mefie Tickets&apos;{" "}
+                <LegalDocumentLinks placement="account-registration" fallback="Terms of Use and Privacy Policy" />.
+              </>
+            }
+          />
           <Button type="submit" fullWidth loading={registerMutation.isPending} mt="sm">
             Create organization
           </Button>
           <Text size="xs" c="dimmed" ta="center">
-            By creating an account you agree to our{" "}
-            {termsOfUse.data ? (
-              <TermsAndConditionsLink
-                document={termsOfUse.data}
-                pdfUrl="/api/public/platform-documents/terms-of-use/pdf"
-                label="Terms of Use"
-              />
-            ) : (
-              "Terms of Use"
-            )}{" "}
-            and{" "}
-            {privacyPolicy.data ? (
-              <TermsAndConditionsLink
-                document={privacyPolicy.data}
-                pdfUrl="/api/public/platform-documents/privacy-policy/pdf"
-                label="Privacy Policy"
-              />
-            ) : (
-              "Privacy Policy"
-            )}
-            . If you add a phone number to your account, we may text you about product updates and events — reply
+            If you add a phone number to your account, we may text you about product updates and events — reply
             STOP at any time to opt out.
           </Text>
           <Text size="sm" ta="center" c="dimmed">

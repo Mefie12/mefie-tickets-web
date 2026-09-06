@@ -16,20 +16,44 @@ import {
   Title,
 } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
-import { backendRequest } from "@/lib/backend";
+import { APP_URL, backendRequest } from "@/lib/backend";
 import { formatAmount } from "@/lib/money";
 import type { EventOverview } from "@/lib/overviewApi";
+import type { Event } from "@/lib/eventApi";
+import type { Organization } from "@/lib/organizationApi";
+import { PublicShareCard } from "@/components/PublicShareCard";
 
 export default async function EventOverviewPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  const result = await backendRequest<{ overview: EventOverview }>(`/api/events/${eventId}/overview`);
+  const [result, eventResult, organizationResult] = await Promise.all([
+    backendRequest<{ overview: EventOverview }>(`/api/events/${eventId}/overview`),
+    backendRequest<{ event: Event }>(`/api/events/${eventId}`),
+    backendRequest<{ organization: Organization | null }>("/api/organization"),
+  ]);
   if (result.status === 404) notFound();
   if (result.status !== 200) throw new Error("Unable to load event overview.");
   const overview = result.data.overview;
   const attention = overview.requires_attention?.unanswered_required_attendee_questions;
+  const event = eventResult.status === 200 ? eventResult.data.event : null;
+  const organization = organizationResult.status === 200 ? organizationResult.data.organization : null;
 
   return (
     <Stack gap="xl">
+      {event && organization && (
+        <PublicShareCard
+          heading="Share this event"
+          variant="compact"
+          url={`${APP_URL}/${organization.slug}/${event.slug}`}
+          title={event.title}
+          text={`View ${event.title} and get tickets.`}
+          enabled={event.status === "LIVE"}
+          disabledExplanation={
+            event.status === "DRAFT"
+              ? "This is the future public URL. Sharing becomes available after publication."
+              : "Archived events are not publicly shareable. Restore and publish the event to enable sharing."
+          }
+        />
+      )}
       <Title order={3}>Overview</Title>
       {attention !== undefined && attention > 0 && <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="Requires attention">{attention} confirmed attendee{attention === 1 ? " has" : "s have"} unanswered required registration questions.</Alert>}
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>

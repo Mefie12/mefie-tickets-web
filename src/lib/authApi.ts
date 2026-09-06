@@ -87,6 +87,7 @@ export function registerOrganization(input: {
   email: string;
   password: string;
   password_confirmation: string;
+  accepted_terms: boolean;
 }) {
   return request<{ user: CurrentUser }>("/api/auth/registration", { method: "POST", body: input });
 }

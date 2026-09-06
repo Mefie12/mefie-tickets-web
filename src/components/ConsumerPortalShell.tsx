@@ -16,7 +16,7 @@ export function ConsumerPortalShell({
   profile,
   children,
 }: {
-  profile: { first_name: string; last_name: string; email: string };
+  profile: { first_name: string | null; last_name: string | null; email: string };
   children: React.ReactNode;
 }) {
   const router = useRouter();

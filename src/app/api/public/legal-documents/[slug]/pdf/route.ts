@@ -2,18 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { API_URL, APP_URL, currentCookieHeader } from "@/lib/backend";
 
 /**
- * Streams an admin-facing platform-document PDF (current or historical)
- * back through the BFF — binary passthrough, same shape as
- * /api/events/[id]/terms/versions/[versionId]/pdf.
+ * Unauthenticated public PDF stream — mirrors
+ * /api/public/events/[eventId]/terms/pdf's binary passthrough shape, but
+ * serves a legal document's current published version.
  */
-export async function GET(request: NextRequest, { params }: { params: Promise<{ type: string; version: string }> }) {
-  const { type, version } = await params;
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   const cookieHeader = await currentCookieHeader();
 
-  const res = await fetch(
-    `${API_URL}/api/admin/platform-documents/${encodeURIComponent(type)}/versions/${encodeURIComponent(version)}/pdf`,
-    { headers: { Cookie: cookieHeader, Origin: APP_URL, Referer: `${APP_URL}/` }, cache: "no-store" },
-  );
+  const res = await fetch(`${API_URL}/api/public/legal-documents/${encodeURIComponent(slug)}/pdf`, {
+    headers: { Cookie: cookieHeader, Origin: APP_URL, Referer: `${APP_URL}/` },
+    cache: "no-store",
+  });
 
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));

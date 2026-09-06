@@ -183,7 +183,7 @@ export function PlatformAdminShell({
         {has("featured_events.view") && (
           <NavLink component={Link} href="/admin/featured-events" label="Featured Events" leftSection={<IconStar size={16} />} active={pathname.startsWith("/admin/featured-events")} />
         )}
-        {has("platform_documents.view") && (
+        {has("platform_legal_documents.view") && (
           <NavLink component={Link} href="/admin/platform-documents" label="Legal Documents" leftSection={<IconFileText size={16} />} active={pathname.startsWith("/admin/platform-documents")} />
         )}
       </AppShell.Navbar>

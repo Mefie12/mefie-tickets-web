@@ -52,9 +52,10 @@ import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
 import { ComplimentarySettings } from "@/components/ComplimentarySettings";
+import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms"];
+const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms", "advanced"];
 
 const STATUS_COLOR: Record<EventStatus, string> = {
   DRAFT: "gray",
@@ -112,6 +113,7 @@ export function EventManager({
   initialComplimentaryProgram: ComplimentaryProgram;
 }) {
   const [event, setEvent] = useState(initialEvent);
+  const sellsPaidTickets = initialProducts.some((product) => ["PAID", "TIERED", "DONATION"].includes(product.type));
   const [requestedStatus, setRequestedStatus] = useState<EventStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const archived = event.status === "ARCHIVED";
@@ -219,6 +221,7 @@ export function EventManager({
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
           <Tabs.Tab value="content">Event page content</Tabs.Tab>
           <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
+          <Tabs.Tab value="advanced">Advanced Settings</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="details" pt="lg">
@@ -253,6 +256,9 @@ export function EventManager({
         </Tabs.Panel>
         <Tabs.Panel value="terms" pt="lg">
           <EventTermsEditor eventId={event.id} disabled={archived} />
+        </Tabs.Panel>
+        <Tabs.Panel value="advanced" pt="lg">
+          <DeferredAssignmentCard eventId={event.id} event={event} sellsPaidTickets={sellsPaidTickets} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

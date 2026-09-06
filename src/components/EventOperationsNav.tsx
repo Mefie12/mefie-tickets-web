@@ -6,8 +6,7 @@ import { usePathname } from "next/navigation";
 
 const tabs = [
   { label: "Overview", suffix: "" },
-  { label: "Orders", suffix: "/orders" },
-  { label: "Attendees", suffix: "/attendees" },
+  { label: "Orders & Attendees", suffix: "/orders", alsoActiveOn: ["/attendees"] },
   { label: "Entrances & ticket routing", suffix: "/gates" },
   { label: "Scanner setup", suffix: "/scanner-setup" },
   { label: "Gate operations", suffix: "/gate-operations" },
@@ -23,7 +22,10 @@ export function EventOperationsNav({ eventId }: { eventId: number }) {
     <Group gap="xs" role="navigation" aria-label="Event operations">
       {tabs.map((tab) => {
         const href = `${base}${tab.suffix}`;
-        const active = tab.suffix === "" ? pathname === base : pathname.startsWith(href);
+        const active =
+          tab.suffix === ""
+            ? pathname === base
+            : pathname.startsWith(href) || (tab.alsoActiveOn ?? []).some((extra) => pathname.startsWith(`${base}${extra}`));
         return (
           <Button key={href} component={Link} href={href} variant={active ? "filled" : "subtle"} size="compact-sm">
             {tab.label}
