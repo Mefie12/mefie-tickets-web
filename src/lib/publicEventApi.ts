@@ -200,6 +200,10 @@ export type PublicEvent = {
   /** Fee/tax rates + bearers frozen onto this event at publish — used to show the all-in price before an order exists (see src/lib/fees.ts). */
   pricing: EventPricing;
   cover_image_url: string | null;
+  /** 1200×630 crop for Open Graph / Twitter link previews. */
+  cover_social_url: string | null;
+  /** Tiny blurred image for a fast LQIP behind the hero. */
+  cover_placeholder_url: string | null;
   gallery: { id: number; url: string; thumbnail_url: string; alt_text: string | null; sort_order: number | null }[];
   /** Server-computed so it can't disagree with the server render (hydration) or with the order endpoint's guard. */
   has_ended: boolean;
