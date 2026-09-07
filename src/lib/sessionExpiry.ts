@@ -22,6 +22,8 @@ import { ApiError } from "@/lib/authApi";
 // (prevents a loop, and a wrong password there is a 422 anyway).
 const AUTH_PATHS = [
   "/login",
+  "/organizers/login",
+  "/organizers/register",
   "/register",
   "/forgot-password",
   "/reset-password",
@@ -70,8 +72,8 @@ export function handleSessionExpiry(error: unknown): boolean {
   const isConsumer = path === "/tickets" || path.startsWith("/tickets/");
   const current = `${window.location.pathname}${window.location.search}`;
   const target = isConsumer
-    ? "/tickets/verify?expired=1"
-    : `/login?expired=1&next=${encodeURIComponent(current)}`;
+    ? `/login?expired=1&next=${encodeURIComponent(current)}`
+    : `/organizers/login?expired=1&next=${encodeURIComponent(current)}`;
   // A full-document navigation on purpose: it discards the in-memory
   // TanStack Query cache built under the dead session and re-runs the
   // server-side layout guards. A soft router.push() would keep the stale

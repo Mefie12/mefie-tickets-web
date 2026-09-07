@@ -3,7 +3,7 @@ import { Box, Container, Divider, Group, Stack, Text } from "@mantine/core";
 import { IconTicket } from "@tabler/icons-react";
 
 export function PublicSiteFooter() {
-  const links = [["/discover", "Discover events"], ["/register", "Create event"], ["/login", "Organizer login"]];
+  const links = [["/discover", "Discover events"], ["/login", "Log in"], ["/register", "Sign up"], ["/organizers", "Why Mefie for organizers"], ["/organizers/register", "Create an organization"], ["/organizers/login", "Organizer login"]];
   return (
     <Box component="footer" mt={80} py={48} style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
       <Container size="xl">

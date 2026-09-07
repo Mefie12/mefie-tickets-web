@@ -109,7 +109,7 @@ function LogInToAcceptStep({ token, email }: { token: string; email: string }) {
           This Admin Console invitation is for <strong>{email}</strong>, which already has an account. Log in as
           that address to accept it.
         </Text>
-        <Button component={Link} href={`/login?next=${encodeURIComponent(nextUrl)}`} fullWidth>
+        <Button component={Link} href={`/organizers/login?next=${encodeURIComponent(nextUrl)}`} fullWidth>
           Log in to continue
         </Button>
       </Stack>

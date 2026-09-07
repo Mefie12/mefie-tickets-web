@@ -1,46 +1,42 @@
 import { notFound } from "next/navigation";
-import { Badge, Button, Group, Stack, Title } from "@mantine/core";
+import { Badge, Box, Button, Flex, Stack, Title } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
-import { backendRequest } from "@/lib/backend";
-import type { Event } from "@/lib/eventApi";
-import type { Organization } from "@/lib/organizationApi";
-import { APP_URL } from "@/lib/backend";
+import { getCurrentOrganization, getEventById } from "@/lib/session";
 import { EventOperationsNav } from "@/components/EventOperationsNav";
-import { PublicShareCard } from "@/components/PublicShareCard";
+import styles from "./eventLayout.module.css";
 
 export default async function EventOperationsLayout({ children, params }: { children: React.ReactNode; params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  const [result, organizationResult] = await Promise.all([
-    backendRequest<{ event: Event }>(`/api/events/${eventId}`),
-    backendRequest<{ organization: Organization | null }>("/api/organization"),
-  ]);
-  if (result.status !== 200 || organizationResult.status !== 200 || !organizationResult.data.organization) notFound();
-  const event = result.data.event;
-  const organization = organizationResult.data.organization;
-  const isLive = event.status === "LIVE";
+  const [event, organization] = await Promise.all([getEventById(eventId), getCurrentOrganization()]);
+  if (!event || !organization) notFound();
 
   return (
-    <Stack gap="lg">
-      <Stack gap="xs">
-        <Button component="a" href="/events" variant="subtle" size="compact-sm" leftSection={<IconArrowLeft size={14} />} style={{ alignSelf: "flex-start" }}>
-          Back to events
-        </Button>
-        <Group justify="space-between">
-          <Title order={2} fz={28}>{event.title}</Title>
-          <Badge color={event.status === "LIVE" ? "teal" : event.status === "DRAFT" ? "gray" : "dark"}>{event.status}</Badge>
-        </Group>
+    <Flex gap="xl" align="flex-start" direction={{ base: "column", md: "row" }}>
+      <Stack className={styles.nav} gap="lg">
+        <Stack gap="xs">
+          <Button
+            component="a"
+            href="/events"
+            variant="subtle"
+            size="compact-sm"
+            leftSection={<IconArrowLeft size={14} />}
+            style={{ alignSelf: "flex-start" }}
+          >
+            Back to events
+          </Button>
+          <Title order={3} fz={22} lineClamp={2}>
+            {event.title}
+          </Title>
+          <Badge
+            color={event.status === "LIVE" ? "teal" : event.status === "DRAFT" ? "gray" : "dark"}
+            style={{ alignSelf: "flex-start" }}
+          >
+            {event.status}
+          </Badge>
+        </Stack>
         <EventOperationsNav eventId={event.id} />
       </Stack>
-      <PublicShareCard
-        heading="Share this event"
-        variant="compact"
-        url={`${APP_URL}/${organization.slug}/${event.slug}`}
-        title={event.title}
-        text={`View ${event.title} and get tickets.`}
-        enabled={isLive}
-        disabledExplanation={event.status === "DRAFT" ? "This is the future public URL. Sharing becomes available after publication." : "Archived events are not publicly shareable. Restore and publish the event to enable sharing."}
-      />
-      {children}
-    </Stack>
+      <Box className={styles.content}>{children}</Box>
+    </Flex>
   );
 }

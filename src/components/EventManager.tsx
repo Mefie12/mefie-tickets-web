@@ -6,7 +6,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Group,
@@ -52,15 +51,10 @@ import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
 import { ComplimentarySettings } from "@/components/ComplimentarySettings";
+import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms"];
-
-const STATUS_COLOR: Record<EventStatus, string> = {
-  DRAFT: "gray",
-  LIVE: "teal",
-  ARCHIVED: "dark",
-};
+const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms", "advanced"];
 
 type StatusConfirmation = {
   title: string;
@@ -112,6 +106,7 @@ export function EventManager({
   initialComplimentaryProgram: ComplimentaryProgram;
 }) {
   const [event, setEvent] = useState(initialEvent);
+  const sellsPaidTickets = initialProducts.some((product) => ["PAID", "TIERED", "DONATION"].includes(product.type));
   const [requestedStatus, setRequestedStatus] = useState<EventStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const archived = event.status === "ARCHIVED";
@@ -143,16 +138,9 @@ export function EventManager({
   return (
     <Stack gap="xl">
       <Stack gap="xs">
-        <Group justify="space-between">
-          <Title order={2} fz={28}>
-            {event.title}
-          </Title>
-          <Group gap="sm">
-            <Badge color={STATUS_COLOR[event.status]} variant="light">
-              {event.status}
-            </Badge>
-          </Group>
-        </Group>
+        <Title order={2} fz={28}>
+          Event settings
+        </Title>
         <Group gap="xs">
           <Text size="sm" c="dimmed">
             Status:
@@ -219,6 +207,7 @@ export function EventManager({
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
           <Tabs.Tab value="content">Event page content</Tabs.Tab>
           <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
+          <Tabs.Tab value="advanced">Advanced Settings</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="details" pt="lg">
@@ -253,6 +242,9 @@ export function EventManager({
         </Tabs.Panel>
         <Tabs.Panel value="terms" pt="lg">
           <EventTermsEditor eventId={event.id} disabled={archived} />
+        </Tabs.Panel>
+        <Tabs.Panel value="advanced" pt="lg">
+          <DeferredAssignmentCard eventId={event.id} event={event} sellsPaidTickets={sellsPaidTickets} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

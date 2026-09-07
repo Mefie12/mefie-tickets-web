@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+import { safeNext } from "@/lib/safeNext";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { DistributorShell } from "@/components/DistributorShell";
@@ -12,7 +14,7 @@ export default async function DistributorLayout({ children }: { children: React.
   const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/login?next=%2Fdistributor");
+    redirect(`/organizers/login?next=${encodeURIComponent(safeNext((await headers()).get("x-mefie-return-path"), "organizer", "/distributor"))}`);
   }
 
   if (!user.email_verified_at) {

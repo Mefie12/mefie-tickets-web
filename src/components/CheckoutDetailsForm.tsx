@@ -10,6 +10,7 @@ import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { computeBuyerCosts } from "@/lib/fees";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
+import { LegalDocumentLinksLine } from "@/components/LegalDocumentLinks";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { PhoneInput } from "@/components/PhoneInput";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
@@ -426,6 +427,9 @@ export function CheckoutDetailsForm({
           />
         </Stack>
       )}
+
+      {/* Platform-wide checkout disclosures (e.g. Refund Policy) — separate from the event's own required Terms & Conditions above. Renders nothing when no document is attached. */}
+      <LegalDocumentLinksLine placement="ticket-checkout" />
 
       {termsVersionChanged && (
         <Alert color="orange" title="Terms & Conditions updated">

@@ -16,21 +16,21 @@ export function ConsumerPortalShell({
   profile,
   children,
 }: {
-  profile: { first_name: string; last_name: string; email: string };
+  profile: { first_name: string | null; last_name: string | null; email: string };
   children: React.ReactNode;
 }) {
   const router = useRouter();
 
   const logout = useMutation({
     mutationFn: portalLogout,
-    onSuccess: () => router.push("/tickets/verify"),
+    onSuccess: () => router.push("/login"),
   });
   const logoutAll = useMutation({
     mutationFn: portalLogoutAll,
-    onSuccess: () => router.push("/tickets/verify"),
+    onSuccess: () => router.push("/login"),
   });
 
-  const initials = `${profile.first_name[0] ?? ""}${profile.last_name[0] ?? ""}`.toUpperCase();
+  const initials = `${profile.first_name?.[0] ?? ""}${profile.last_name?.[0] ?? ""}`.toUpperCase();
 
   return (
     <AppShell header={{ height: 60 }} padding="md">

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Box, Container, Group, Paper, Stack, Text } from "@mantine/core";
 import { IconTicket } from "@tabler/icons-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -16,11 +17,19 @@ export function AuthLayout({
       <Box pos="absolute" top={16} right={16}><ThemeToggle /></Box>
     <Container size="xs" py={80}>
       <Stack gap="xl">
-        <Group gap="xs" justify="center">
-          <IconTicket size={22} />
-          <Text size="sm" c="dimmed" fw={500}>
-            Mefie Tickets
-          </Text>
+        <Group justify="center">
+          <Link
+            href="/"
+            aria-label="Mefie Tickets home"
+            style={{ textDecoration: "none", color: "inherit" }}
+          >
+            <Group gap="xs">
+              <IconTicket size={22} />
+              <Text size="sm" c="dimmed" fw={500}>
+                Mefie Tickets
+              </Text>
+            </Group>
+          </Link>
         </Group>
 
         <Stack gap={4} align="center">
