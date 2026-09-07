@@ -32,7 +32,7 @@ export function DistributorAllocationWorkspace({ allocationId }: { allocationId:
   if (!allocation || detail.isError) return <Container py="xl"><Alert color="red">This allocation is unavailable or does not belong to your account.</Alert></Container>;
   const active = allocation.status === "ACTIVE";
   const canReturn = active || allocation.status === "SUSPENDED";
-  const recipientLimit = allocation.program?.maximum_tickets_per_recipient ?? 10;
+  const recipientLimit = allocation.program?.maximum_tickets_per_recipient ?? 20;
   function patch(index: number, value: Partial<Draft>) { setAttendees((rows) => rows.map((row, i) => i === index ? { ...row, ...value } : row)); }
   function submitIssue() {
     for (const [index, a] of attendees.entries()) { if (!a.allocation_line_id || !a.first_name.trim() || !a.last_name.trim() || !/^\S+@\S+\.\S+$/.test(a.email)) return notifications.show({ color: "red", message: `Complete the required details for attendee ${index + 1}.` }); if (a.phone && !isValidPhoneNumber(a.phone)) return notifications.show({ color: "red", message: `Enter a valid phone for attendee ${index + 1}.` }); for (const q of questions) if (q.is_required && !isQuestionAnswered(q, a.answers[q.id])) return notifications.show({ color: "red", message: `'${q.title}' is required for every attendee.` }); }
