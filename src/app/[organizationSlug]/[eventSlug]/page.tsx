@@ -36,16 +36,24 @@ async function getSeries(organizationSlug: string, seriesSlug: string) {
 export async function generateMetadata({ params }: { params: Promise<{ organizationSlug: string; eventSlug: string }> }): Promise<Metadata> {
   const { organizationSlug, eventSlug } = await params;
 
+  // A 1200×630 crop dedicated to link previews; fall back to the sized
+  // hero, then the organiser's cover. Explicit dimensions let Next emit
+  // og:image:width/height so crawlers don't have to fetch-and-measure.
+  const ogImages = (socialUrl: string | null, heroUrl: string | null, orgUrl: string | null, alt: string) => {
+    const url = socialUrl ?? heroUrl ?? orgUrl;
+    return url ? { images: [{ url, width: 1200, height: 630, alt }] } : {};
+  };
+
   const eventResult = await getEvent(organizationSlug, eventSlug);
   if (eventResult.status === 200) {
     const { event } = eventResult.data;
     const description = event.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${event.title}.`;
     const canonical = `${APP_URL}/${event.organization.slug}/${event.slug}`;
-    const image = event.cover_image_url ?? event.organization.cover_image_url;
+    const images = ogImages(event.cover_social_url, event.cover_image_url, event.organization.cover_image_url, event.title);
     return {
       title: `${event.title} | Mefie Tickets`, description, alternates: { canonical },
-      openGraph: { title: event.title, description, url: canonical, type: "website", ...(image ? { images: [image] } : {}) },
-      twitter: { card: "summary_large_image", title: event.title, description, ...(image ? { images: [image] } : {}) },
+      openGraph: { title: event.title, description, url: canonical, type: "website", ...images },
+      twitter: { card: "summary_large_image", title: event.title, description, ...images },
     };
   }
 
@@ -54,11 +62,11 @@ export async function generateMetadata({ params }: { params: Promise<{ organizat
   const { event_series: series } = seriesResult.data;
   const description = series.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${series.title}.`;
   const canonical = `${APP_URL}/${series.organization.slug}/${series.slug}`;
-  const image = series.cover_image_url ?? series.organization.cover_image_url;
+  const images = ogImages(series.cover_social_url, series.cover_image_url, series.organization.cover_image_url, series.title);
   return {
     title: `${series.title} | Mefie Tickets`, description, alternates: { canonical },
-    openGraph: { title: series.title, description, url: canonical, type: "website", ...(image ? { images: [image] } : {}) },
-    twitter: { card: "summary_large_image", title: series.title, description, ...(image ? { images: [image] } : {}) },
+    openGraph: { title: series.title, description, url: canonical, type: "website", ...images },
+    twitter: { card: "summary_large_image", title: series.title, description, ...images },
   };
 }
 
@@ -115,9 +123,16 @@ export default async function PublicEventPage({
           backgroundColor: "var(--mantine-color-gray-light)",
           // Prefer the event's own cover image (the actual "event detail
           // hero") — the organization's cover is a reasonable fallback for
-          // an event that hasn't uploaded media yet.
+          // an event that hasn't uploaded media yet. The tiny blurred
+          // placeholder sits underneath so there's no grey flash while the
+          // hero loads.
           backgroundImage: (event.cover_image_url ?? organization.cover_image_url)
-            ? `url(${event.cover_image_url ?? organization.cover_image_url})`
+            ? [
+                `url(${event.cover_image_url ?? organization.cover_image_url})`,
+                event.cover_placeholder_url ? `url(${event.cover_placeholder_url})` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")
             : undefined,
           backgroundSize: "cover",
           backgroundPosition: "center",

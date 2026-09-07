@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Dropzone, IMAGE_MIME_TYPE } from "@mantine/dropzone";
 import { ActionIcon, Badge, Button, Card, Group, Image, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
-import { IconChevronDown, IconChevronUp, IconPhoto, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronUp, IconCrop, IconPhoto, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
@@ -13,14 +13,20 @@ import type { Event } from "@/lib/eventApi";
 import {
   deleteEventCoverImage,
   deleteEventGalleryImage,
+  recropEventCover,
   reorderEventGallery,
   updateEventGalleryImageAltText,
   uploadEventCoverImage,
   uploadEventGalleryImage,
 } from "@/lib/eventMediaApi";
+import { ImageCropModal } from "@/components/ImageCropModal";
+import { centeredCrop, coverOutcome, type PixelCrop, readImageSize } from "@/lib/imageCrop";
 
 const MAX_GALLERY_IMAGES = 3;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+// The original is stored untouched, so allow a generous raw upload —
+// a 24 MP phone photo is ~12 MB. Backend caps at 20 MB.
+const MAX_COVER_SOURCE_BYTES = 20 * 1024 * 1024;
 
 /**
  * Cover + gallery editor for an event's Media tab. Processing is
@@ -39,6 +45,16 @@ export function EventMediaEditor({
 }) {
   const [event, setEvent] = useState(initialEvent);
   const router = useRouter();
+  // Crop modal: `src` (blob: URL for a fresh pick, or the stored original's
+  // URL for a re-frame) drives it open; `file` is set only for a fresh pick,
+  // so onCropped knows whether to upload or just re-crop server-side.
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropInitial, setCropInitial] = useState<PixelCrop | null>(null);
+  // The file picked this session — lets "Adjust crop" re-frame with full
+  // pixels even before a reload.
+  const [lastOriginal, setLastOriginal] = useState<File | null>(null);
+  const [preparing, setPreparing] = useState(false);
 
   function handleError(error: Error) {
     if (redirectOnAuthError(error, router)) return;
@@ -48,14 +64,90 @@ export function EventMediaEditor({
     });
   }
 
+  function closeCropModal() {
+    if (cropSrc?.startsWith("blob:")) URL.revokeObjectURL(cropSrc);
+    setCropSrc(null);
+    setCropFile(null);
+    setCropInitial(null);
+  }
+
   const uploadCoverMutation = useMutation({
-    mutationFn: (file: File) => uploadEventCoverImage(eventId, file),
+    mutationFn: ({ file, crop }: { file: File; crop: PixelCrop }) => uploadEventCoverImage(eventId, file, crop),
     onSuccess: (data: { event: Event }) => {
       setEvent(data.event);
-      notifications.show({ color: "teal", message: "Cover image uploaded." });
+      notifications.show({ color: "teal", message: "Cover uploaded." });
     },
     onError: handleError,
   });
+
+  const recropMutation = useMutation({
+    mutationFn: (crop: PixelCrop) => recropEventCover(eventId, crop),
+    onSuccess: (data: { event: Event }) => {
+      setEvent(data.event);
+      notifications.show({ color: "teal", message: "Cover crop updated." });
+    },
+    onError: handleError,
+  });
+
+  /**
+   * Route a freshly-picked file: reject one that can't make a sharp 16:9
+   * cover, upload straight through if it's already landscape-enough, else
+   * open the crop modal.
+   */
+  async function handleCoverFile(file: File) {
+    setPreparing(true);
+    try {
+      const { width, height } = await readImageSize(file);
+      const outcome = coverOutcome(width, height);
+
+      if (outcome === "reject") {
+        notifications.show({
+          color: "red",
+          message:
+            `This image is too small for an event cover. It's ${width} × ${height} px — ` +
+            `aim for 1600 × 900 px or larger so it stays sharp on event pages and when shared.`,
+        });
+        return;
+      }
+
+      setLastOriginal(file);
+
+      if (outcome === "auto") {
+        uploadCoverMutation.mutate({ file, crop: centeredCrop(width, height) });
+        return;
+      }
+
+      setCropFile(file);
+      setCropInitial(null);
+      setCropSrc(URL.createObjectURL(file));
+    } catch (error) {
+      handleError(error instanceof Error ? error : new Error("Could not read that image."));
+    } finally {
+      setPreparing(false);
+    }
+  }
+
+  function openAdjustCrop() {
+    if (lastOriginal) {
+      setCropFile(lastOriginal);
+      setCropInitial(event.cover_crop);
+      setCropSrc(URL.createObjectURL(lastOriginal));
+    } else if (event.cover_original_url) {
+      // Editor reloaded — re-frame the stored original server-side.
+      setCropFile(null);
+      setCropInitial(event.cover_crop);
+      setCropSrc(event.cover_original_url);
+    }
+  }
+
+  function handleCropped(rect: PixelCrop) {
+    if (cropFile) {
+      uploadCoverMutation.mutate({ file: cropFile, crop: rect });
+    } else {
+      recropMutation.mutate(rect);
+    }
+    closeCropModal();
+  }
 
   const deleteCoverMutation = useMutation({
     mutationFn: () => deleteEventCoverImage(eventId),
@@ -110,37 +202,48 @@ export function EventMediaEditor({
       <Stack gap="sm">
         <Text fw={600}>Cover image</Text>
         <Text size="sm" c="dimmed">
-          Required before this event can go live. Used on listing cards, search results, and the event page. Min
-          1200×675, 16:9 recommended, JPEG/PNG/WebP, up to 5MB.
+          Required before this event can go live. Landscape images work best — you&apos;ll frame the crop before
+          publishing.
         </Text>
         {event.cover_image_url ? (
           <Card withBorder radius="lg" p="sm" maw={480}>
             <Image src={event.cover_image_url} radius="md" alt="Event cover" />
             {!disabled && (
-              <Button
-                mt="sm"
-                size="xs"
-                variant="light"
-                color="red"
-                loading={deleteCoverMutation.isPending}
-                onClick={() => deleteCoverMutation.mutate()}
-                style={{ alignSelf: "flex-start" }}
-              >
-                Remove cover image
-              </Button>
+              <Group mt="sm" gap="xs">
+                {(lastOriginal || event.cover_original_url) && (
+                  <Button
+                    size="xs"
+                    variant="light"
+                    leftSection={<IconCrop size={14} />}
+                    loading={preparing || uploadCoverMutation.isPending || recropMutation.isPending}
+                    onClick={openAdjustCrop}
+                  >
+                    Adjust crop
+                  </Button>
+                )}
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="red"
+                  loading={deleteCoverMutation.isPending}
+                  onClick={() => deleteCoverMutation.mutate()}
+                >
+                  Remove
+                </Button>
+              </Group>
             )}
           </Card>
         ) : (
           !disabled && (
             <Dropzone
-              onDrop={(files) => files[0] && uploadCoverMutation.mutate(files[0])}
+              onDrop={(files) => files[0] && void handleCoverFile(files[0])}
               onReject={() =>
                 notifications.show({ color: "red", message: "That file can't be used as a cover image." })
               }
-              maxSize={MAX_SIZE_BYTES}
+              maxSize={MAX_COVER_SOURCE_BYTES}
               accept={IMAGE_MIME_TYPE}
               maxFiles={1}
-              loading={uploadCoverMutation.isPending}
+              loading={preparing || uploadCoverMutation.isPending}
               maw={480}
             >
               <Group justify="center" gap="xl" mih={140} style={{ pointerEvents: "none" }}>
@@ -156,7 +259,7 @@ export function EventMediaEditor({
                 <Stack gap={4} align="center">
                   <Text size="sm">Drag a cover image here, or click to browse</Text>
                   <Text size="xs" c="dimmed">
-                    JPEG, PNG, or WebP · min 1200×675 · up to 5MB
+                    Recommended: 1600 × 900 px or larger · JPG, PNG, WebP · up to 20 MB
                   </Text>
                 </Stack>
               </Group>
@@ -246,6 +349,14 @@ export function EventMediaEditor({
           </Dropzone>
         )}
       </Stack>
+
+      <ImageCropModal
+        src={cropSrc}
+        initialCrop={cropInitial}
+        busy={uploadCoverMutation.isPending || recropMutation.isPending}
+        onCancel={closeCropModal}
+        onCropped={handleCropped}
+      />
     </Stack>
   );
 }

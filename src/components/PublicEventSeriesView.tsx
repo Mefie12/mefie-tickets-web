@@ -58,7 +58,12 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
         style={{
           backgroundColor: "var(--mantine-color-gray-light)",
           backgroundImage: (series.cover_image_url ?? organization.cover_image_url)
-            ? `url(${series.cover_image_url ?? organization.cover_image_url})`
+            ? [
+                `url(${series.cover_image_url ?? organization.cover_image_url})`,
+                series.cover_placeholder_url ? `url(${series.cover_placeholder_url})` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")
             : undefined,
           backgroundSize: "cover",
           backgroundPosition: "center",

@@ -61,7 +61,16 @@ export type Event = {
   /** ISO 4217 code, e.g. "GBP". Never a symbol — see CurrencySelector. */
   currency_code: string;
   location_details: EventLocation | null;
+  /** Sized 16:9 hero derivative of the uploaded cover (not the raw upload). */
   cover_image_url: string | null;
+  /** 1200×630 crop for Open Graph / Twitter link previews. */
+  cover_social_url: string | null;
+  /** Tiny blurred data-ish URL for a fast LQIP behind the hero. */
+  cover_placeholder_url: string | null;
+  /** The organiser's untouched upload — lets "Adjust crop" re-frame it later. */
+  cover_original_url: string | null;
+  /** The 16:9 rectangle (source-image px) currently framed out of the original. */
+  cover_crop: { x: number; y: number; width: number; height: number } | null;
   gallery: GalleryImage[];
   created_at: string;
   updated_at: string;

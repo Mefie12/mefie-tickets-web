@@ -28,6 +28,8 @@ export type PublicEventSeries = {
   timezone: string;
   currency_code: string;
   cover_image_url: string | null;
+  cover_social_url: string | null;
+  cover_placeholder_url: string | null;
   gallery: PublicEvent["gallery"];
   location: EventLocation | null;
   organization: PublicOrganization;
