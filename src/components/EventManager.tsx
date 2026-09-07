@@ -6,7 +6,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Group,
@@ -56,12 +55,6 @@ import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
 const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms", "advanced"];
-
-const STATUS_COLOR: Record<EventStatus, string> = {
-  DRAFT: "gray",
-  LIVE: "teal",
-  ARCHIVED: "dark",
-};
 
 type StatusConfirmation = {
   title: string;
@@ -145,16 +138,9 @@ export function EventManager({
   return (
     <Stack gap="xl">
       <Stack gap="xs">
-        <Group justify="space-between">
-          <Title order={2} fz={28}>
-            {event.title}
-          </Title>
-          <Group gap="sm">
-            <Badge color={STATUS_COLOR[event.status]} variant="light">
-              {event.status}
-            </Badge>
-          </Group>
-        </Group>
+        <Title order={2} fz={28}>
+          Event settings
+        </Title>
         <Group gap="xs">
           <Text size="sm" c="dimmed">
             Status:

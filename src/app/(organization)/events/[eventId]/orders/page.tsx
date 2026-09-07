@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Stack, Text, Title } from "@mantine/core";
+import { Stack, Title } from "@mantine/core";
 import { backendRequest } from "@/lib/backend";
 import type { Event } from "@/lib/eventApi";
 import type { OrderListResponse } from "@/lib/orderApi";
@@ -30,14 +30,9 @@ export default async function OrdersAndAttendeesPage({
 
   return (
     <Stack gap="lg">
-      <Stack gap={0}>
-        <Text size="sm" c="dimmed">
-          {event.title}
-        </Text>
-        <Title order={2} fz={28}>
-          Orders &amp; Attendees
-        </Title>
-      </Stack>
+      <Title order={2} fz={28}>
+        Orders &amp; Attendees
+      </Title>
       <OrdersAttendeesTable
         eventId={Number(eventId)}
         timezone={event.timezone}

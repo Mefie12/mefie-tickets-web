@@ -54,7 +54,6 @@ function AccountForm({ signup }: { signup: boolean }) {
           <Button type="submit" loading={busy} disabled={needsDetails && (legal.isPending || legal.isError)}>{step === "complete" ? "Create account" : "Continue with email"}</Button>
         </>}
         <Text size="sm" ta="center">{signup ? "Already have tickets? " : "New to Mefie? "}<Anchor component={Link} href={signup ? "/login" : "/register"}>{signup ? "Log in" : "Sign up"}</Anchor></Text>
-        <Text size="sm" ta="center"><Anchor component={Link} href="/organizers/login">Organizer login</Anchor></Text>
       </Stack>
     </form>
   </AuthLayout>;

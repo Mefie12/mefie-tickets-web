@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   Alert,
   Card,
@@ -17,25 +17,25 @@ import {
 } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { APP_URL, backendRequest } from "@/lib/backend";
+import { getCurrentOrganization, getEventById } from "@/lib/session";
 import { formatAmount } from "@/lib/money";
 import type { EventOverview } from "@/lib/overviewApi";
-import type { Event } from "@/lib/eventApi";
-import type { Organization } from "@/lib/organizationApi";
 import { PublicShareCard } from "@/components/PublicShareCard";
 
 export default async function EventOverviewPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  const [result, eventResult, organizationResult] = await Promise.all([
+  const [result, event, organization] = await Promise.all([
     backendRequest<{ overview: EventOverview }>(`/api/events/${eventId}/overview`),
-    backendRequest<{ event: Event }>(`/api/events/${eventId}`),
-    backendRequest<{ organization: Organization | null }>("/api/organization"),
+    getEventById(eventId),
+    getCurrentOrganization(),
   ]);
   if (result.status === 404) notFound();
+  // A transient auth failure (e.g. the session expiring between the layout's
+  // guard and this call) should bounce to login, not blow up with a runtime error.
+  if (result.status === 401 || result.status === 419) redirect("/organizers/login");
   if (result.status !== 200) throw new Error("Unable to load event overview.");
   const overview = result.data.overview;
   const attention = overview.requires_attention?.unanswered_required_attendee_questions;
-  const event = eventResult.status === 200 ? eventResult.data.event : null;
-  const organization = organizationResult.status === 200 ? organizationResult.data.organization : null;
 
   return (
     <Stack gap="xl">
