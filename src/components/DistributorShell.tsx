@@ -4,9 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { AppShell, Avatar, Group, Menu, Text, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconLogout, IconTicket, IconUserCircle } from "@tabler/icons-react";
+import { IconChevronDown, IconLogout, IconShieldLock, IconTicket, IconUserCircle } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import type { SessionUser } from "@/lib/session";
+import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
@@ -17,6 +18,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
  */
 export function DistributorShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
   const router = useRouter();
+  const { openPreferences } = usePrivacyConsent();
 
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -52,6 +54,9 @@ export function DistributorShell({ user, children }: { user: SessionUser; childr
             <Menu.Dropdown>
               <Menu.Item component={Link} href="/distributor/settings" leftSection={<IconUserCircle size={16} />}>
                 Account settings
+              </Menu.Item>
+              <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
+                Privacy choices
               </Menu.Item>
               <Menu.Item
                 color="red"

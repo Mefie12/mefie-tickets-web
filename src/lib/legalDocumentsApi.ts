@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/authApi";
 
-export type LegalDocumentPlacementSlug = "account-registration" | "ticket-checkout";
+export type LegalDocumentPlacementSlug = "account-registration" | "ticket-checkout" | "privacy-center";
 
 export type PublicLegalDocument = {
   version_id: number;

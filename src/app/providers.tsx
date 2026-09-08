@@ -8,6 +8,9 @@ import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@ta
 import { ApiError } from "@/lib/authApi";
 import { handleSessionExpiry } from "@/lib/sessionExpiry";
 import { theme } from "@/theme";
+import { PrivacyConsentBanner } from "@/components/privacy/PrivacyConsentBanner";
+import { PrivacyConsentProvider } from "@/components/privacy/PrivacyConsentProvider";
+import { ProductImprovementController } from "@/components/privacy/ProductImprovementController";
 
 /**
  * Client-side providers for the whole app.
@@ -42,7 +45,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <MantineProvider theme={theme} defaultColorScheme="auto">
         <Notifications position="top-right" />
-        <ModalsProvider>{children}</ModalsProvider>
+        <ModalsProvider>
+          <PrivacyConsentProvider>
+            {children}
+            <PrivacyConsentBanner />
+            <ProductImprovementController />
+          </PrivacyConsentProvider>
+        </ModalsProvider>
       </MantineProvider>
     </QueryClientProvider>
   );

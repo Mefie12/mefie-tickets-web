@@ -28,6 +28,7 @@ const STATUS_COLOR: Record<string, string> = { DRAFT: "gray", PUBLISHED: "teal" 
 const PLACEMENT_OPTIONS: { value: LegalDocumentPlacementSlugUpper; label: string }[] = [
   { value: "ACCOUNT_REGISTRATION", label: "Account registration" },
   { value: "TICKET_CHECKOUT", label: "Ticket checkout" },
+  { value: "PRIVACY_CENTER", label: "Privacy centre (cookie banner)" },
 ];
 
 type PlacementRow = { checked: boolean; sortOrder: number };
@@ -36,6 +37,7 @@ type PlacementState = Record<LegalDocumentPlacementSlugUpper, PlacementRow>;
 const emptyPlacementState = (): PlacementState => ({
   ACCOUNT_REGISTRATION: { checked: false, sortOrder: 0 },
   TICKET_CHECKOUT: { checked: false, sortOrder: 0 },
+  PRIVACY_CENTER: { checked: false, sortOrder: 0 },
 });
 
 /**
