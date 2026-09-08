@@ -18,6 +18,7 @@ import {
   IconChevronDown,
   IconLayoutDashboard,
   IconLogout,
+  IconShieldLock,
   IconTicket,
   IconUserCircle,
   IconUsers,
@@ -25,6 +26,7 @@ import {
 } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import type { SessionUser } from "@/lib/session";
+import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
@@ -36,6 +38,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 export function AdminShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { openPreferences } = usePrivacyConsent();
 
   const logoutMutation = useMutation({
     mutationFn: logout,
@@ -71,6 +74,9 @@ export function AdminShell({ user, children }: { user: SessionUser; children: Re
             <Menu.Dropdown>
               <Menu.Item component={Link} href="/settings" leftSection={<IconUserCircle size={16} />}>
                 Account settings
+              </Menu.Item>
+              <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
+                Privacy choices
               </Menu.Item>
               <Menu.Item
                 color="red"

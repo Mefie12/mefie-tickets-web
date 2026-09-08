@@ -24,7 +24,7 @@ export type LegalDocumentPlacement = {
 };
 
 /** The enum's own casing, as stored/returned by the API — distinct from the URL-safe slug used in public routes. */
-export type LegalDocumentPlacementSlugUpper = "ACCOUNT_REGISTRATION" | "TICKET_CHECKOUT";
+export type LegalDocumentPlacementSlugUpper = "ACCOUNT_REGISTRATION" | "TICKET_CHECKOUT" | "PRIVACY_CENTER";
 
 export type LegalDocument = {
   id: number;

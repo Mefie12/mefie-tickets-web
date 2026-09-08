@@ -32,6 +32,7 @@ import {
 import { endAdminSession, type AdminDeviceSession } from "@/lib/adminAuthApi";
 import { logout } from "@/lib/authApi";
 import type { CurrentUser, PlatformRole } from "@/lib/authApi";
+import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const ROLE_LABEL: Record<PlatformRole, string> = {
@@ -64,6 +65,7 @@ export function PlatformAdminShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { openPreferences } = usePrivacyConsent();
   const [now, setNow] = useState(0);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
   const minutesLeft = session && now > 0 ? Math.max(0, Math.ceil((Math.min(new Date(session.expires_at).getTime(), new Date(session.idle_expires_at).getTime()) - now) / 60_000)) : null;
@@ -113,6 +115,9 @@ export function PlatformAdminShell({
             </Menu.Target>
             <Menu.Dropdown>
               <Menu.Item component={Link} href="/admin/security" leftSection={<IconDevices size={16} />}>Security sessions</Menu.Item>
+              <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
+                Privacy choices
+              </Menu.Item>
               <Menu.Item
                 leftSection={<IconShieldLock size={16} />}
                 onClick={() => stepDownMutation.mutate()}
