@@ -1,6 +1,6 @@
 "use client";
 
-import { ActionIcon, Badge, Card, Group, Stack, Text } from "@mantine/core";
+import { ActionIcon, Badge, Card, Group, NumberInput, Stack, Text } from "@mantine/core";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import type { PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
 import { formatMoney } from "@/lib/money";
@@ -34,14 +34,16 @@ export function TicketSelector({ products, quantities, onQuantityChange, currenc
 }
 
 /**
- * −  n  +  quantity control. Big square tap targets, fixed ~112px width
- * so it never crowds the ticket name/price in the narrow checkout
- * column, and no free-text entry (quantities are 0–10, a stepper is both
- * friendlier on mobile and impossible to get into an invalid state).
+ * −  [n]  +  quantity control. Big square tap targets for the buttons, and
+ * the middle is a real number field so a buyer after 20 or 30 tickets can
+ * just type it instead of tapping + twenty times. Value is clamped to
+ * 0–max (on blur, so mid-typing "2" -> "20" isn't fought) and rejects
+ * decimals / negatives.
  */
 function QuantityStepper({ value, onChange, max, disabled }: {
   value: number; onChange: (value: number) => void; max: number; disabled?: boolean;
 }) {
+  const clamp = (n: number) => Math.min(max, Math.max(0, Math.trunc(n)));
   return (
     <Group gap={4} wrap="nowrap" style={{ flex: "0 0 auto" }}>
       <ActionIcon
@@ -51,9 +53,22 @@ function QuantityStepper({ value, onChange, max, disabled }: {
       >
         <IconMinus size={16} />
       </ActionIcon>
-      <Text w={28} ta="center" fw={600} size="sm" style={{ fontVariantNumeric: "tabular-nums" }}>
-        {value}
-      </Text>
+      <NumberInput
+        aria-label="Quantity"
+        value={value}
+        onChange={(v) => onChange(clamp(typeof v === "number" && Number.isFinite(v) ? v : 0))}
+        min={0}
+        max={max}
+        step={1}
+        allowDecimal={false}
+        allowNegative={false}
+        hideControls
+        clampBehavior="blur"
+        disabled={disabled}
+        size="sm"
+        w={52}
+        styles={{ input: { textAlign: "center", fontWeight: 600, paddingInline: 4, fontVariantNumeric: "tabular-nums" } }}
+      />
       <ActionIcon
         variant="default" size="lg" radius="md" aria-label="Add one"
         disabled={disabled || value >= max}
@@ -72,6 +87,9 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: 
   const status = option?.status ?? (product.is_sold_out ? "SOLD_OUT" : product.is_on_sale ? "AVAILABLE" : "PAUSED");
   const available = option ? option.is_available : product.is_on_sale && !product.is_sold_out;
   const remaining = option?.quantity_remaining ?? product.quantity_remaining;
+  // Per-order cap: the organizer's max-per-registration (10 when unset),
+  // further limited by what's actually left. No extra hardcoded ceiling —
+  // an organizer allowing 50 per order should get 50.
   const limit = option?.max_attendees_per_registration ?? product.max_attendees_per_registration ?? 10;
   const price = option?.price ?? product.current_price;
   return <Group justify="space-between" align="center" gap="sm" wrap="nowrap">
@@ -87,7 +105,7 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: 
     <QuantityStepper
       value={quantity}
       onChange={onChange}
-      max={Math.min(10, limit, remaining ?? 10)}
+      max={Math.min(limit, remaining ?? limit)}
       disabled={!available}
     />
   </Group>;

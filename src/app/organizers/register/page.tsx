@@ -82,18 +82,20 @@ export default function RegisterPage() {
         <Stack>
           <TextInput
             label="Organization name"
+            withAsterisk
             placeholder="Acme Events"
             {...form.getInputProps("organization_name")}
           />
-          <TextInput label="First name" placeholder="Ada" {...form.getInputProps("first_name")} />
-          <TextInput label="Last name" placeholder="Lovelace" {...form.getInputProps("last_name")} />
-          <TextInput label="Email" placeholder="you@example.com" {...form.getInputProps("email")} />
+          <TextInput label="First name" withAsterisk placeholder="Ada" {...form.getInputProps("first_name")} />
+          <TextInput label="Last name" withAsterisk placeholder="Lovelace" {...form.getInputProps("last_name")} />
+          <TextInput label="Email" withAsterisk placeholder="you@example.com" {...form.getInputProps("email")} />
           <PasswordInput
             label="Password"
+            withAsterisk
             placeholder="At least 8 characters"
             {...form.getInputProps("password")}
           />
-          <PasswordInput label="Confirm password" {...form.getInputProps("password_confirmation")} />
+          <PasswordInput label="Confirm password" withAsterisk {...form.getInputProps("password_confirmation")} />
           <Checkbox
             {...form.getInputProps("accepted_terms", { type: "checkbox" })}
             label={

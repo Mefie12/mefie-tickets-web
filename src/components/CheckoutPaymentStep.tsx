@@ -77,7 +77,16 @@ export function CheckoutPaymentStep({
   }
 
   return (
-    <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night" } }}>
+    <Elements
+      stripe={stripePromise}
+      options={{
+        clientSecret,
+        // `fontSizeBase: 16px` pinned so the card fields inside Stripe's
+        // iframe never fall under 16px — the threshold below which iOS
+        // Safari zooms into a focused input and leaves the page zoomed.
+        appearance: { theme: "night", variables: { fontSizeBase: "16px" } },
+      }}
+    >
       <PaymentForm
         eventId={eventId}
         order={order}

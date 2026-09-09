@@ -247,11 +247,12 @@ export function CheckoutDetailsForm({
             comfortable tap target. Email and phone always get their own
             row (phone needs the width for its country-code selector). */}
         <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
-          <TextInput label="First name" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
-          <TextInput label="Last name" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
+          <TextInput label="First name" withAsterisk autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
+          <TextInput label="Last name" withAsterisk autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
         </SimpleGrid>
         <TextInput
           label="Email"
+          withAsterisk
           type="email"
           inputMode="email"
           autoComplete="email"
@@ -347,6 +348,7 @@ export function CheckoutDetailsForm({
                     <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
                       <TextInput
                         label="First name"
+                        withAsterisk
                         size="sm"
                         autoComplete="off"
                         value={attendee.first_name}
@@ -354,6 +356,7 @@ export function CheckoutDetailsForm({
                       />
                       <TextInput
                         label="Last name"
+                        withAsterisk
                         size="sm"
                         autoComplete="off"
                         value={attendee.last_name}
