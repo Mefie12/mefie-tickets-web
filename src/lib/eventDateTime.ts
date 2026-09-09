@@ -32,6 +32,21 @@ export function wallClockEndIsInvalid(
   return endDate === startDate && Boolean(startTime && endTime) && endTime <= startTime;
 }
 
+/**
+ * `<input type="datetime-local">` value (`YYYY-MM-DDTHH:mm`) <-> the split
+ * `date` / `time` parts the API takes. Pure string surgery — no `Date`, no
+ * timezone: the value is already wall-clock in the event's chosen zone, and
+ * that stays true on the way in and out.
+ */
+export function joinLocalDateTime({ date, time }: ZonedParts): string {
+  return date && time ? `${date}T${time}` : "";
+}
+
+export function splitLocalDateTime(value: string): ZonedParts {
+  const [date = "", time = ""] = value.split("T");
+  return { date, time: time.slice(0, 5) };
+}
+
 /** The first valid minute after startTime, or null when the day is exhausted. */
 export function nextWallClockMinute(startTime: string): string | null {
   if (!/^\d{2}:\d{2}$/.test(startTime)) return null;
