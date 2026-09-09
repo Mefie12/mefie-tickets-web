@@ -3,19 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import {
-  AppShell,
-  Avatar,
-  Group,
-  Menu,
-  NavLink,
-  Text,
-  UnstyledButton,
-} from "@mantine/core";
+import { Avatar, Menu } from "@mantine/core";
 import {
   IconBuildingStore,
   IconCalendarEvent,
-  IconChevronDown,
   IconLayoutDashboard,
   IconLogout,
   IconShieldLock,
@@ -25,17 +16,26 @@ import {
   IconCreditCard,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
-import type { SessionUser } from "@/lib/session";
+import type { NavOrganization, SessionUser } from "@/lib/session";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ConsoleNav, ConsoleNavItem, ConsoleNavSection, ConsoleShell } from "@/components/console";
 
 /**
  * The organization admin portal shell (nav + auth guard) called for by
- * 09_mvp_development_plan.md Milestone 3a, filled in once the
- * Organization/Events/Team milestones landed (previously deliberately
- * minimal — see git history).
+ * 09_mvp_development_plan.md Milestone 3a. Chrome + responsive sidebar
+ * behaviour live in ConsoleShell; this file owns the organizer-portal
+ * brand card (the current org's logo + name), account menu and nav.
  */
-export function AdminShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
+export function AdminShell({
+  user,
+  organization,
+  children,
+}: {
+  user: SessionUser;
+  organization: NavOrganization | null;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const { openPreferences } = usePrivacyConsent();
@@ -45,100 +45,92 @@ export function AdminShell({ user, children }: { user: SessionUser; children: Re
     onSuccess: () => router.push("/organizers/login"),
   });
 
-  return (
-    <AppShell header={{ height: 60 }} navbar={{ width: 240, breakpoint: "sm" }} padding="md">
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
-            <IconTicket size={20} />
-            <Text fw={700}>Mefie Tickets</Text>
-          </Group>
-
-          <Group gap="sm" wrap="nowrap">
-          <ThemeToggle />
-          <Menu shadow="md" width={200} position="bottom-end">
-            <Menu.Target>
-              <UnstyledButton>
-                <Group gap="xs">
-                  <Avatar radius="xl" size="sm" color="brand">
-                    {user.first_name[0]}
-                    {user.last_name[0]}
-                  </Avatar>
-                  <Text size="sm">
-                    {user.first_name} {user.last_name}
-                  </Text>
-                  <IconChevronDown size={14} />
-                </Group>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item component={Link} href="/settings" leftSection={<IconUserCircle size={16} />}>
-                Account settings
-              </Menu.Item>
-              <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
-                Privacy choices
-              </Menu.Item>
-              <Menu.Item
-                color="red"
-                leftSection={<IconLogout size={16} />}
-                onClick={() => logoutMutation.mutate()}
-              >
-                Log out
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-          </Group>
-        </Group>
-      </AppShell.Header>
-
-      <AppShell.Navbar p="md">
-        {user.role === "ADMIN" && (
-          <NavLink
-            component={Link}
-            href="/organization/payments"
-            label="Payments & Payouts"
-            leftSection={<IconCreditCard size={16} />}
-            active={pathname.startsWith("/organization/payments")}
-          />
-        )}
-        <NavLink
-          component={Link}
-          href="/dashboard"
-          label="Dashboard"
-          leftSection={<IconLayoutDashboard size={16} />}
-          active={pathname === "/dashboard"}
+  const nav = (
+    <ConsoleNav>
+      <ConsoleNavItem
+        href="/dashboard"
+        label="Dashboard"
+        icon={<IconLayoutDashboard size={20} />}
+        active={pathname === "/dashboard"}
+      />
+      <ConsoleNavItem
+        href="/events"
+        label="Events"
+        icon={<IconCalendarEvent size={20} />}
+        active={pathname.startsWith("/events")}
+      />
+      {user.role === "ADMIN" && (
+        <ConsoleNavItem
+          href="/organization/payments"
+          label="Payments & Payouts"
+          icon={<IconCreditCard size={20} />}
+          active={pathname.startsWith("/organization/payments")}
         />
-        <NavLink
-          component={Link}
-          href="/events"
-          label="Events"
-          leftSection={<IconCalendarEvent size={16} />}
-          active={pathname.startsWith("/events")}
-        />
-        <NavLink
-          component={Link}
+      )}
+
+      <ConsoleNavSection label="Organization">
+        <ConsoleNavItem
           href="/organization"
           label="Organization"
-          leftSection={<IconBuildingStore size={16} />}
+          icon={<IconBuildingStore size={20} />}
           active={pathname === "/organization"}
         />
-        <NavLink
-          component={Link}
+        <ConsoleNavItem
           href="/organization/team"
           label="Team"
-          leftSection={<IconUsers size={16} />}
+          icon={<IconUsers size={20} />}
           active={pathname.startsWith("/organization/team")}
         />
-        <NavLink
-          component={Link}
+      </ConsoleNavSection>
+
+      <ConsoleNavSection label="Account">
+        <ConsoleNavItem
           href="/settings"
           label="Account Settings"
-          leftSection={<IconUserCircle size={16} />}
+          icon={<IconUserCircle size={20} />}
           active={pathname === "/settings"}
         />
-      </AppShell.Navbar>
+      </ConsoleNavSection>
+    </ConsoleNav>
+  );
 
-      <AppShell.Main>{children}</AppShell.Main>
-    </AppShell>
+  const menuItems = (
+    <>
+      <Menu.Item component={Link} href="/settings" leftSection={<IconUserCircle size={16} />}>
+        Account settings
+      </Menu.Item>
+      <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
+        Privacy choices
+      </Menu.Item>
+      <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => logoutMutation.mutate()}>
+        Log out
+      </Menu.Item>
+    </>
+  );
+
+  return (
+    <ConsoleShell
+      storageKey="organizer-portal-nav-collapsed"
+      brand={{
+        logo: (
+          <Avatar src={organization?.logo_url ?? undefined} size={28} radius="sm" color="brand">
+            <IconTicket size={18} />
+          </Avatar>
+        ),
+        primary: organization?.name ?? "Mefie Tickets",
+        secondary: "Organizer",
+      }}
+      account={{
+        initials: `${user.first_name[0]}${user.last_name[0]}`,
+        name: `${user.first_name} ${user.last_name}`,
+        email: user.email,
+        avatarColor: "brand",
+        menuItems,
+      }}
+      headerEnd={<ThemeToggle />}
+      nav={nav}
+    >
+      {children}
+    </ConsoleShell>
   );
 }

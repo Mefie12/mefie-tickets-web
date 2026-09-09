@@ -13,6 +13,7 @@ import {
   IconUsers,
   type Icon,
 } from "@tabler/icons-react";
+import classes from "./eventOperationsNav.module.css";
 
 type NavItem = { label: string; suffix: string; icon: Icon; alsoActiveOn?: string[] };
 type NavSection = { heading: string | null; items: NavItem[] };
@@ -48,11 +49,19 @@ export function EventOperationsNav({ eventId }: { eventId: number }) {
   const base = `/events/${eventId}`;
 
   return (
-    <Stack gap="lg" role="navigation" aria-label="Event operations">
+    <Stack gap="lg" role="navigation" aria-label="Event operations" className={classes.nav}>
       {sections.map((section) => (
         <Stack key={section.heading ?? "root"} gap={2}>
           {section.heading && (
-            <Text tt="uppercase" fz={11} fw={700} c="dimmed" px="sm" mb={4}>
+            <Text
+              tt="uppercase"
+              fz={12}
+              fw={500}
+              c="dimmed"
+              px="sm"
+              mb={4}
+              style={{ letterSpacing: "0.6px" }}
+            >
               {section.heading}
             </Text>
           )}
@@ -70,7 +79,7 @@ export function EventOperationsNav({ eventId }: { eventId: number }) {
                 component={Link}
                 href={href}
                 label={item.label}
-                leftSection={<Icon size={18} />}
+                leftSection={<Icon size={20} />}
                 active={active}
               />
             );

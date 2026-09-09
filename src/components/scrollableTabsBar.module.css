@@ -1,0 +1,27 @@
+/*
+ * One-line tab bar: a horizontal scroller of pill tabs with a pinned
+ * "next tab" stepper and an ellipsis menu of every tab. Used at all
+ * breakpoints for lists too wide for a plain Tabs.List.
+ */
+.bar {
+  padding-bottom: var(--mantine-spacing-xs);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.strip {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+.pill {
+  flex-shrink: 0;
+}

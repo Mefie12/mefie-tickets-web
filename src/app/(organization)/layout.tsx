@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { safeNext } from "@/lib/safeNext";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentOrganization, getCurrentUser } from "@/lib/session";
 import { AdminShell } from "@/components/AdminShell";
 
 /**
@@ -32,5 +32,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/distributor");
   }
 
-  return <AdminShell user={user}>{children}</AdminShell>;
+  const organization = await getCurrentOrganization();
+
+  return (
+    <AdminShell user={user} organization={organization}>
+      {children}
+    </AdminShell>
+  );
 }
