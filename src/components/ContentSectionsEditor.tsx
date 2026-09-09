@@ -72,25 +72,14 @@ import {
   listTalentProfiles,
   updateTalentProfile,
   uploadTalentProfileImage,
+  TALENT_ROLES,
   type SocialLink,
   type SocialLinkProvider,
   type TalentProfile,
   type TalentRole,
 } from "@/lib/talentApi";
 
-const ROLE_OPTIONS: { value: TalentRole; label: string }[] = [
-  { value: "DJ", label: "DJ" },
-  { value: "MUSICIAN", label: "Musician" },
-  { value: "BAND", label: "Band / group" },
-  { value: "SPEAKER", label: "Speaker" },
-  { value: "CHEF", label: "Chef" },
-  { value: "COMEDIAN", label: "Comedian" },
-  { value: "HOST_MC", label: "Host / MC" },
-  { value: "DANCER", label: "Dancer" },
-  { value: "ACTOR", label: "Actor" },
-  { value: "VISUAL_ARTIST", label: "Visual artist" },
-  { value: "OTHER", label: "Other" },
-];
+const ROLE_OPTIONS = TALENT_ROLES;
 
 const SOCIAL_PROVIDER_OPTIONS: { value: SocialLinkProvider; label: string }[] = [
   { value: "WEBSITE", label: "Website" },
@@ -103,8 +92,19 @@ const SOCIAL_PROVIDER_OPTIONS: { value: SocialLinkProvider; label: string }[] = 
   { value: "X", label: "X" },
 ];
 
-function roleLabel(role: TalentRole) {
+function roleLabel(role: string) {
   return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
+}
+
+/**
+ * What to actually show for a lineup role, most specific first: a
+ * per-event `role_override` (free text), then a profile-level custom role
+ * (only meaningful when `role === "OTHER"`), then the curated label.
+ */
+function displayRole(role: string, customRole?: string | null, roleOverride?: string | null) {
+  if (roleOverride?.trim()) return roleOverride;
+  if (role === "OTHER" && customRole?.trim()) return customRole;
+  return roleLabel(role);
 }
 
 /** A locally-selected file has no URL yet — this is what lets the Dropzone show what was actually picked before it's ever uploaded. */
@@ -610,7 +610,7 @@ function SortableLineupItemRow({
               </Text>
             </Group>
             <Text size="xs" c="dimmed" truncate>
-              {item.role_override || version?.role}
+              {displayRole(version?.role ?? "", version?.custom_role, item.role_override)}
               {item.set_time_label ? ` · ${item.set_time_label}` : ""}
             </Text>
           </Stack>
@@ -691,7 +691,11 @@ function LineupItemFormModal({
         <Stack>
           <TextInput
             label="Role override (optional)"
-            placeholder={item.talent_profile_version?.role ? roleLabel(item.talent_profile_version.role) : undefined}
+            placeholder={
+              item.talent_profile_version
+                ? displayRole(item.talent_profile_version.role, item.talent_profile_version.custom_role)
+                : undefined
+            }
             description="Shown instead of the talent's default role, just for this event"
             {...form.getInputProps("role_override")}
           />
@@ -806,7 +810,7 @@ function TalentPickerModal({
                             {talent.current_version.display_name}
                           </Text>
                           <Text size="xs" c="dimmed">
-                            {roleLabel(talent.current_version.role)}
+                            {displayRole(talent.current_version.role, talent.current_version.custom_role)}
                           </Text>
                         </Stack>
                       </Group>
@@ -856,12 +860,17 @@ function TalentProfileForm({
   const form = useForm({
     initialValues: {
       display_name: talentProfile?.current_version.display_name ?? "",
-      role: talentProfile?.current_version.role ?? ("DJ" as TalentRole),
+      role: talentProfile?.current_version.role ?? ("HEADLINER" as TalentRole),
+      custom_role: talentProfile?.current_version.custom_role ?? "",
       tagline: talentProfile?.current_version.tagline ?? "",
       biography: talentProfile?.current_version.biography ?? "",
       social_links: talentProfile?.current_version.social_links ?? ([] as SocialLink[]),
     },
-    validate: { display_name: (v) => (v.trim().length === 0 ? "Name is required" : null) },
+    validate: {
+      display_name: (v) => (v.trim().length === 0 ? "Name is required" : null),
+      custom_role: (v, values) =>
+        values.role === "OTHER" && v.trim().length === 0 ? "Enter the role" : null,
+    },
   });
 
   const mutation = useMutation({
@@ -869,6 +878,7 @@ function TalentProfileForm({
       const payload = {
         display_name: values.display_name,
         role: values.role,
+        custom_role: values.role === "OTHER" ? values.custom_role.trim() : null,
         tagline: values.tagline || null,
         biography: values.biography || null,
         social_links: values.social_links.length > 0 ? values.social_links : null,
@@ -919,7 +929,24 @@ function TalentProfileForm({
     <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
       <Stack>
         <TextInput required label="Display / stage name" {...form.getInputProps("display_name")} />
-        <Select required label="Role" data={ROLE_OPTIONS} {...form.getInputProps("role")} />
+        <Select
+          required
+          searchable
+          nothingFoundMessage="No matching role"
+          label="Role"
+          description="Pick the closest match, or 'Other' to type your own."
+          data={ROLE_OPTIONS}
+          {...form.getInputProps("role")}
+        />
+        {form.values.role === "OTHER" && (
+          <TextInput
+            withAsterisk
+            label="Custom role"
+            placeholder="e.g. Puppeteer, Sommelier"
+            maxLength={50}
+            {...form.getInputProps("custom_role")}
+          />
+        )}
         <TextInput label="Tagline (optional)" {...form.getInputProps("tagline")} />
         <Textarea label="Biography (optional)" autosize minRows={2} {...form.getInputProps("biography")} />
 
