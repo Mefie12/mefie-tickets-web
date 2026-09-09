@@ -1,0 +1,68 @@
+/*
+ * The event sub-nav reuses the console's nav-item treatment: 40px rows,
+ * 12px radius, active = the event-taxonomy selected-row style (brand-tinted
+ * fill + accent border + 3px inset left bar + accent icon). Kept as its own
+ * scoped module so it doesn't depend on ConsoleShell's context.
+ */
+.nav :global(.mantine-NavLink-root) {
+  min-height: 40px;
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid transparent;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.nav :global(.mantine-NavLink-root:hover) {
+  border-color: var(--mantine-primary-color-filled);
+}
+
+.nav :global(.mantine-NavLink-root[data-active]) {
+  background-color: var(--mantine-color-brand-light);
+  border-color: var(--mantine-primary-color-filled);
+  box-shadow: inset 3px 0 0 var(--mantine-primary-color-filled);
+  color: var(--mantine-color-text);
+}
+
+.nav :global(.mantine-NavLink-root[data-active] .mantine-NavLink-section) {
+  color: var(--mantine-primary-color-filled);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav :global(.mantine-NavLink-root) {
+    transition: none;
+  }
+}
+
+/* md and up: pin the sub-nav as a sticky second column. */
+.column {
+  width: 100%;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+
+@media (min-width: 62em) {
+  .column {
+    width: 264px;
+    flex-shrink: 0;
+    align-self: flex-start;
+    position: sticky;
+    top: 76px;
+  }
+}
+
+/* Mobile bar that carries the "Menu" trigger. */
+.mobileBar {
+  position: sticky;
+  top: 60px;
+  z-index: 5;
+  margin: 0 calc(-1 * var(--mantine-spacing-md)) var(--mantine-spacing-md);
+  padding: 8px var(--mantine-spacing-md);
+  background-color: var(--mantine-color-body);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}

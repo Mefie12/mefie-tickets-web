@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
@@ -52,9 +52,22 @@ import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
 import { ComplimentarySettings } from "@/components/ComplimentarySettings";
 import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
+import { ScrollableTabsBar } from "@/components/ScrollableTabsBar";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms", "advanced"];
+const TAB_DEFS = [
+  { value: "details", label: "Details" },
+  { value: "date-time", label: "Date & Time" },
+  { value: "location", label: "Location & Access" },
+  { value: "media", label: "Media" },
+  { value: "ticket-setup", label: "Ticket Setup" },
+  { value: "complimentary", label: "Complimentary" },
+  { value: "questions", label: "Questions" },
+  { value: "content", label: "Event page content" },
+  { value: "terms", label: "Terms & Conditions" },
+  { value: "advanced", label: "Advanced Settings" },
+];
+const VALID_TABS = TAB_DEFS.map((t) => t.value);
 
 type StatusConfirmation = {
   title: string;
@@ -111,7 +124,19 @@ export function EventManager({
   const [statusError, setStatusError] = useState<string | null>(null);
   const archived = event.status === "ARCHIVED";
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const requestedTab = searchParams.get("tab") ?? "";
+  const [tab, setTab] = useState(VALID_TABS.includes(requestedTab) ? requestedTab : "details");
+
+  const handleTabChange = (next: string | null) => {
+    if (!next) return;
+    setTab(next);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
 
   const statusMutation = useMutation({
     mutationFn: (status: EventStatus) => updateEventStatus(event.id, status),
@@ -196,19 +221,8 @@ export function EventManager({
         </Stack>
       </Modal>
 
-      <Tabs defaultValue={VALID_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "details"}>
-        <Tabs.List>
-          <Tabs.Tab value="details">Details</Tabs.Tab>
-          <Tabs.Tab value="date-time">Date &amp; Time</Tabs.Tab>
-          <Tabs.Tab value="location">Location &amp; Access</Tabs.Tab>
-          <Tabs.Tab value="media">Media</Tabs.Tab>
-          <Tabs.Tab value="ticket-setup">Ticket Setup</Tabs.Tab>
-          <Tabs.Tab value="complimentary">Complimentary</Tabs.Tab>
-          <Tabs.Tab value="questions">Questions</Tabs.Tab>
-          <Tabs.Tab value="content">Event page content</Tabs.Tab>
-          <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
-          <Tabs.Tab value="advanced">Advanced Settings</Tabs.Tab>
-        </Tabs.List>
+      <Tabs value={tab} onChange={handleTabChange}>
+        <ScrollableTabsBar tabs={TAB_DEFS} value={tab} onChange={handleTabChange} />
 
         <Tabs.Panel value="details" pt="lg">
           <EventDetailsForm event={event} onUpdated={setEvent} disabled={archived} />

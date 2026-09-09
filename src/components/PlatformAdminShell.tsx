@@ -4,19 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
+import { Alert, Menu } from "@mantine/core";
 import {
-  AppShell,
-  Alert,
-  Avatar,
-  Badge,
-  Group,
-  Menu,
-  NavLink,
-  Text,
-  UnstyledButton,
-} from "@mantine/core";
-import {
-  IconChevronDown,
   IconClipboardList,
   IconLayoutDashboard,
   IconLogout,
@@ -34,6 +23,7 @@ import { logout } from "@/lib/authApi";
 import type { CurrentUser, PlatformRole } from "@/lib/authApi";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ConsoleNav, ConsoleNavItem, ConsoleNavSection, ConsoleShell } from "@/components/console";
 
 const ROLE_LABEL: Record<PlatformRole, string> = {
   PLATFORM_SUPER_ADMIN: "Super Admin",
@@ -43,12 +33,16 @@ const ROLE_LABEL: Record<PlatformRole, string> = {
 };
 
 /**
- * The Platform Console's own shell — deliberately distinct branding
- * (dark header, shield mark) from AdminShell (the organization portal)
- * so staff can never mistake which console they're in. Nav items are
- * filtered by the permissions ShowAdminSessionAction returned for the
- * live privileged session, computed fresh server-side on every page
+ * The Platform Console's own shell — its privileged identity is carried
+ * by the accented brand card at the top of the sidebar (shield mark +
+ * role) so staff can never mistake which console they're in. Nav items
+ * are filtered by the permissions ShowAdminSessionAction returned for
+ * the live privileged session, computed fresh server-side on every page
  * load — see decision #15, nothing here is cached beyond the request.
+ *
+ * Chrome + responsive sidebar behaviour live in ConsoleShell; this file
+ * owns the Platform-specific brand, account menu, permission-gated nav
+ * and the privileged-session countdown banner.
  */
 export function PlatformAdminShell({
   user,
@@ -82,118 +76,133 @@ export function PlatformAdminShell({
 
   const has = (permission: string) => permissions.includes(permission);
 
-  return (
-    <AppShell header={{ height: 60 }} navbar={{ width: 240, breakpoint: "sm" }} padding="md">
-      <AppShell.Header style={{ background: "var(--mantine-primary-color-filled)", borderColor: "var(--mantine-primary-color-filled-hover)" }}>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
-            <IconShieldLock size={20} color="var(--mantine-color-yellow-5)" />
-            <Text fw={700} c="white">
-              Mefie Admin Console
-            </Text>
-            <Badge color="yellow" variant="light" size="sm">
-              {ROLE_LABEL[role]}
-            </Badge>
-          </Group>
+  const nav = (
+    <ConsoleNav>
+      <ConsoleNavItem
+        href="/admin/dashboard"
+        label="Dashboard"
+        icon={<IconLayoutDashboard size={20} />}
+        active={pathname === "/admin/dashboard"}
+      />
 
-          <Group gap="sm" wrap="nowrap">
-          <ThemeToggle color="white" />
-          <Menu shadow="md" width={220} position="bottom-end">
-            <Menu.Target>
-              <UnstyledButton>
-                <Group gap="xs">
-                  <Avatar radius="xl" size="sm" color="yellow">
-                    {user.first_name[0]}
-                    {user.last_name[0]}
-                  </Avatar>
-                  <Text size="sm" c="white">
-                    {user.first_name} {user.last_name}
-                  </Text>
-                  <IconChevronDown size={14} color="white" />
-                </Group>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item component={Link} href="/admin/security" leftSection={<IconDevices size={16} />}>Security sessions</Menu.Item>
-              <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
-                Privacy choices
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconShieldLock size={16} />}
-                onClick={() => stepDownMutation.mutate()}
-              >
-                Step down from console
-              </Menu.Item>
-              <Menu.Item
-                color="red"
-                leftSection={<IconLogout size={16} />}
-                onClick={() => logoutMutation.mutate()}
-              >
-                Log out
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
-          </Group>
-        </Group>
-      </AppShell.Header>
-
-      <AppShell.Navbar p="md">
-        <NavLink
-          component={Link}
-          href="/admin/dashboard"
-          label="Dashboard"
-          leftSection={<IconLayoutDashboard size={16} />}
-          active={pathname === "/admin/dashboard"}
-        />
-        <NavLink component={Link} href="/admin/security" label="Security sessions" leftSection={<IconDevices size={16} />} active={pathname.startsWith("/admin/security")} />
+      <ConsoleNavSection label="Directory">
         {has("organizations.view") && (
-          <NavLink
-            component={Link}
+          <ConsoleNavItem
             href="/admin/organizations"
             label="Organizations"
-            leftSection={<IconBuildingStore size={16} />}
+            icon={<IconBuildingStore size={20} />}
             active={pathname.startsWith("/admin/organizations")}
           />
         )}
         {has("users.view") && (
-          <NavLink
-            component={Link}
+          <ConsoleNavItem
             href="/admin/users"
             label="Users"
-            leftSection={<IconUsers size={16} />}
+            icon={<IconUsers size={20} />}
             active={pathname.startsWith("/admin/users")}
           />
         )}
         {has("admin_users.view") && (
-          <NavLink
-            component={Link}
+          <ConsoleNavItem
             href="/admin/admin-users"
             label="Admin Users"
-            leftSection={<IconUserShield size={16} />}
+            icon={<IconUserShield size={20} />}
             active={pathname.startsWith("/admin/admin-users")}
           />
         )}
+      </ConsoleNavSection>
+
+      <ConsoleNavSection label="Platform config">
+        {has("event_taxonomy.view") && (
+          <ConsoleNavItem
+            href="/admin/event-taxonomy"
+            label="Event Taxonomy"
+            icon={<IconCategory size={20} />}
+            active={pathname.startsWith("/admin/event-taxonomy")}
+          />
+        )}
+        {has("featured_events.view") && (
+          <ConsoleNavItem
+            href="/admin/featured-events"
+            label="Featured Events"
+            icon={<IconStar size={20} />}
+            active={pathname.startsWith("/admin/featured-events")}
+          />
+        )}
+        {has("platform_legal_documents.view") && (
+          <ConsoleNavItem
+            href="/admin/platform-documents"
+            label="Legal Documents"
+            icon={<IconFileText size={20} />}
+            active={pathname.startsWith("/admin/platform-documents")}
+          />
+        )}
+      </ConsoleNavSection>
+
+      <ConsoleNavSection label="Security">
         {has("audit_log.view") && (
-          <NavLink
-            component={Link}
+          <ConsoleNavItem
             href="/admin/audit-log"
             label="Audit Log"
-            leftSection={<IconClipboardList size={16} />}
+            icon={<IconClipboardList size={20} />}
             active={pathname.startsWith("/admin/audit-log")}
           />
         )}
-        {has("event_taxonomy.view") && (
-          <NavLink component={Link} href="/admin/event-taxonomy" label="Event Taxonomy" leftSection={<IconCategory size={16} />} active={pathname.startsWith("/admin/event-taxonomy")} />
-        )}
-        {has("featured_events.view") && (
-          <NavLink component={Link} href="/admin/featured-events" label="Featured Events" leftSection={<IconStar size={16} />} active={pathname.startsWith("/admin/featured-events")} />
-        )}
-        {has("platform_legal_documents.view") && (
-          <NavLink component={Link} href="/admin/platform-documents" label="Legal Documents" leftSection={<IconFileText size={16} />} active={pathname.startsWith("/admin/platform-documents")} />
-        )}
-      </AppShell.Navbar>
+        <ConsoleNavItem
+          href="/admin/security"
+          label="Security sessions"
+          icon={<IconDevices size={20} />}
+          active={pathname.startsWith("/admin/security")}
+        />
+      </ConsoleNavSection>
+    </ConsoleNav>
+  );
 
-      <AppShell.Main>{minutesLeft !== null && minutesLeft <= 5 && <Alert color="yellow" mb="md">Your privileged admin session will end in about {minutesLeft} minute{minutesLeft === 1 ? "" : "s"}. Save your work.</Alert>}{children}</AppShell.Main>
-    </AppShell>
+  const menuItems = (
+    <>
+      <Menu.Item component={Link} href="/admin/security" leftSection={<IconDevices size={16} />}>
+        Security sessions
+      </Menu.Item>
+      <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
+        Privacy choices
+      </Menu.Item>
+      <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={() => stepDownMutation.mutate()}>
+        Step down from console
+      </Menu.Item>
+      <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => logoutMutation.mutate()}>
+        Log out
+      </Menu.Item>
+    </>
+  );
+
+  const banner =
+    minutesLeft !== null && minutesLeft <= 5 ? (
+      <Alert color="yellow" mb="md">
+        Your privileged admin session will end in about {minutesLeft} minute{minutesLeft === 1 ? "" : "s"}. Save your work.
+      </Alert>
+    ) : null;
+
+  return (
+    <ConsoleShell
+      storageKey="platform-console-nav-collapsed"
+      brand={{
+        logo: <IconShieldLock size={22} color="var(--mantine-color-yellow-6)" />,
+        primary: "Mefie Admin",
+        secondary: ROLE_LABEL[role],
+        accent: true,
+      }}
+      account={{
+        initials: `${user.first_name[0]}${user.last_name[0]}`,
+        name: `${user.first_name} ${user.last_name}`,
+        email: user.email,
+        avatarColor: "yellow",
+        menuItems,
+      }}
+      headerEnd={<ThemeToggle />}
+      nav={nav}
+      banner={banner}
+    >
+      {children}
+    </ConsoleShell>
   );
 }
