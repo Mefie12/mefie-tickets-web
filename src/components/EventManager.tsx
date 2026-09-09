@@ -28,7 +28,7 @@ import { LocationFields, needsOnline, needsVenue } from "@/components/LocationFi
 import { EventDetailsFields } from "@/components/EventDetailsFields";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { minimumEndTime, utcIsoToZonedParts, wallClockEndIsInvalid } from "@/lib/eventDateTime";
+import { joinLocalDateTime, splitLocalDateTime, utcIsoToZonedParts } from "@/lib/eventDateTime";
 import { browserTimezone } from "@/lib/timezones";
 import { CURRENCIES_BY_CODE, suggestCurrencyForCountryCode } from "@/lib/currencies";
 import type { MapboxSuggestion } from "@/lib/mapbox";
@@ -395,10 +395,10 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
   const end = event.end_date ? utcIsoToZonedParts(event.end_date, event.timezone) : { date: "", time: "" };
   const form = useForm({
     initialValues: {
-      start_date: start.date,
-      start_time: start.time,
-      end_date: end.date,
-      end_time: end.time,
+      // One `<input type="datetime-local">` value per end — `YYYY-MM-DDTHH:mm`,
+      // wall-clock in the event's zone. Split back to date/time only at submit.
+      start_at: joinLocalDateTime(start),
+      end_at: joinLocalDateTime(end),
       // "" (not event.timezone) when never scheduled, so the mount effect
       // below can fill in the browser's zone without changing an
       // already-rendered value — flipping a rendered "UTC" to a guessed
@@ -408,13 +408,12 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
       timezone: event.start_date ? event.timezone : "",
     },
     validate: {
-      start_date: (v) => (!v ? "Start date is required" : null),
-      start_time: (v) => (!v ? "Start time is required" : null),
-      end_date: (v) => (!v ? "End date is required" : null),
+      start_at: (v) => (!v ? "Start date and time is required" : null),
       timezone: (v) => (!v ? "Timezone is required" : null),
-      // Safe as a string comparison: both ends share the one timezone.
-      end_time: (v, values) =>
-        !v ? "End time is required" : `${values.end_date} ${v}` <= `${values.start_date} ${values.start_time}` ? "End must be after start" : null,
+      // Both ends are wall-clock in the one timezone and share the
+      // `YYYY-MM-DDTHH:mm` shape, so a lexicographic compare is chronological.
+      end_at: (v, values) =>
+        !v ? "End date and time is required" : v <= values.start_at ? "End must be after start" : null,
     },
   });
   useEffect(() => {
@@ -423,25 +422,25 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setStartPart = (part: "start_date" | "start_time", value: string) => {
-    const nextStartDate = part === "start_date" ? value : form.values.start_date;
-    const nextStartTime = part === "start_time" ? value : form.values.start_time;
-    form.setFieldValue(part, value);
-    if (wallClockEndIsInvalid(nextStartDate, nextStartTime, form.values.end_date, form.values.end_time)) {
-      form.setFieldValue("end_date", "");
-      form.setFieldValue("end_time", "");
-    }
+  const onStartChange = (value: string) => {
+    form.setFieldValue("start_at", value);
+    // Drop an end that's now at or before the new start rather than leave a
+    // stale, invalid range sitting in the form.
+    if (form.values.end_at && form.values.end_at <= value) form.setFieldValue("end_at", "");
   };
 
   const updateMutation = useMutation({
-    mutationFn: (values: typeof form.values) =>
-      updateEvent(event.id, {
-        start_date: values.start_date,
-        start_time: values.start_time,
-        end_date: values.end_date,
-        end_time: values.end_time,
+    mutationFn: (values: typeof form.values) => {
+      const startParts = splitLocalDateTime(values.start_at);
+      const endParts = splitLocalDateTime(values.end_at);
+      return updateEvent(event.id, {
+        start_date: startParts.date,
+        start_time: startParts.time,
+        end_date: endParts.date,
+        end_time: endParts.time,
         timezone: values.timezone,
-      }),
+      });
+    },
     onSuccess: (data: { event: Event }) => {
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Date and time updated." });
@@ -464,18 +463,19 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
           <Stack>
             <Group grow align="flex-start">
-              <TextInput type="date" label="Start date" {...form.getInputProps("start_date")} onChange={(event) => setStartPart("start_date", event.currentTarget.value)} />
-              <TextInput type="time" label="Start time" {...form.getInputProps("start_time")} onChange={(event) => setStartPart("start_time", event.currentTarget.value)} />
-            </Group>
-            <Group grow align="flex-start">
-              <TextInput type="date" label="End date" min={form.values.start_date || undefined} {...form.getInputProps("end_date")} />
               <TextInput
-                type="time"
-                label="End time"
-                min={minimumEndTime(form.values.start_date, form.values.start_time, form.values.end_date)}
-                disabled={form.values.start_date === form.values.end_date && form.values.start_time === "23:59"}
-                description={form.values.start_date === form.values.end_date && form.values.start_time === "23:59" ? "Choose a later end date." : undefined}
-                {...form.getInputProps("end_time")}
+                type="datetime-local"
+                label="Start"
+                withAsterisk
+                {...form.getInputProps("start_at")}
+                onChange={(e) => onStartChange(e.currentTarget.value)}
+              />
+              <TextInput
+                type="datetime-local"
+                label="End"
+                withAsterisk
+                min={form.values.start_at || undefined}
+                {...form.getInputProps("end_at")}
               />
             </Group>
             <TimezoneSelector
