@@ -15,20 +15,11 @@ import {
   IconWorld,
 } from "@tabler/icons-react";
 import type { PublicContentSection, PublicLineupItem } from "@/lib/publicEventApi";
+import { TALENT_ROLES } from "@/lib/talentApi";
 
-const ROLE_LABELS: Record<string, string> = {
-  DJ: "DJ",
-  MUSICIAN: "Musician",
-  BAND: "Band / group",
-  SPEAKER: "Speaker",
-  CHEF: "Chef",
-  COMEDIAN: "Comedian",
-  HOST_MC: "Host / MC",
-  DANCER: "Dancer",
-  ACTOR: "Actor",
-  VISUAL_ARTIST: "Visual artist",
-  OTHER: "Other",
-};
+const ROLE_LABELS: Record<string, string> = Object.fromEntries(
+  TALENT_ROLES.map((r) => [r.value, r.label]),
+);
 
 const SOCIAL_ICONS: Record<string, typeof IconWorld> = {
   WEBSITE: IconWorld,

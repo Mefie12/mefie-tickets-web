@@ -1,8 +1,43 @@
 import { ApiError } from "@/lib/authApi";
 
 export type TalentRole =
-  | "DJ" | "MUSICIAN" | "BAND" | "SPEAKER" | "CHEF" | "COMEDIAN"
-  | "HOST_MC" | "DANCER" | "ACTOR" | "VISUAL_ARTIST" | "OTHER";
+  | "HEADLINER" | "SUPPORT_ACT" | "PERFORMER" | "DJ" | "MUSICIAN" | "VOCALIST"
+  | "BAND" | "PRODUCER" | "DANCER" | "COMEDIAN" | "MAGICIAN" | "POET" | "ACTOR"
+  | "VISUAL_ARTIST" | "HOST_MC" | "SPEAKER" | "KEYNOTE" | "MODERATOR"
+  | "PANELIST" | "FACILITATOR" | "CHEF" | "GUEST" | "OTHER";
+
+/**
+ * Single source of truth for the talent-role dropdown — the organizer
+ * lineup editor (`ContentSectionsEditor`) and the public event page
+ * (`PublicContentSections`) both derive their option/label maps from this.
+ * Mirrors `App\Enums\TalentRole` on the API. Alphabetical by label;
+ * `OTHER` kept last as the catch-all.
+ */
+export const TALENT_ROLES: { value: TalentRole; label: string }[] = [
+  { value: "ACTOR", label: "Actor" },
+  { value: "BAND", label: "Band / group" },
+  { value: "CHEF", label: "Chef" },
+  { value: "COMEDIAN", label: "Comedian" },
+  { value: "DANCER", label: "Dancer" },
+  { value: "DJ", label: "DJ" },
+  { value: "GUEST", label: "Guest" },
+  { value: "HEADLINER", label: "Headliner" },
+  { value: "HOST_MC", label: "Host / MC" },
+  { value: "KEYNOTE", label: "Keynote speaker" },
+  { value: "MAGICIAN", label: "Magician" },
+  { value: "MODERATOR", label: "Moderator" },
+  { value: "MUSICIAN", label: "Musician" },
+  { value: "PANELIST", label: "Panelist" },
+  { value: "PERFORMER", label: "Performer" },
+  { value: "POET", label: "Poet / spoken word" },
+  { value: "PRODUCER", label: "Producer" },
+  { value: "SPEAKER", label: "Speaker" },
+  { value: "SUPPORT_ACT", label: "Support act" },
+  { value: "VISUAL_ARTIST", label: "Visual artist" },
+  { value: "VOCALIST", label: "Vocalist / singer" },
+  { value: "FACILITATOR", label: "Workshop facilitator" },
+  { value: "OTHER", label: "Other" },
+];
 
 export type SocialLinkProvider = "WEBSITE" | "INSTAGRAM" | "TIKTOK" | "YOUTUBE" | "SPOTIFY" | "SOUNDCLOUD" | "FACEBOOK" | "X";
 
