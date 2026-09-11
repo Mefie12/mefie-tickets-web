@@ -14,6 +14,10 @@
 import type { EventPricing } from "@/lib/fees";
 import { formatMoney } from "@/lib/money";
 
+/** Platform-wide copy, not per-event data — matches the real passwordless/RecipientAccess ticket-delivery flow. Shown on every event page under the organizer's own description. */
+export const TICKET_DELIVERY_NOTE =
+  "Your purchase includes a QR-coded ticket delivered instantly by email. No account is required, and your ticket can be recovered anytime.";
+
 export type QuestionType = "TEXT" | "PARAGRAPH" | "SINGLE_SELECT" | "MULTI_SELECT" | "RADIO" | "ADDRESS" | "AGREEMENT";
 export type QuestionScope = "ORDER" | "ATTENDEE";
 
@@ -176,6 +180,10 @@ export type PublicEventCard = {
   subcategory: PublicEventCategoryItem | null;
   location: { location_type: LocationType | null; city: string | null; country: string | null } | null;
   organizer: { name: string; slug: string; logo_url: string | null };
+  /** Cheapest currently-purchasable price, server-computed (see PublicEventCardResource::startsFromPrice()). Null when nothing is currently purchasable. */
+  starts_from_price: number | null;
+  /** True when starts_from_price is 0 — drives the "Register" vs "Buy Ticket" card CTA. */
+  is_free: boolean;
 };
 
 export type PaginationMeta = {
@@ -199,6 +207,11 @@ export type PublicEvent = {
   currency_code: string;
   /** Fee/tax rates + bearers frozen onto this event at publish — used to show the all-in price before an order exists (see src/lib/fees.ts). */
   pricing: EventPricing;
+  /** Null when the event has no category assigned. */
+  category: PublicEventCategoryItem | null;
+  subcategory: PublicEventCategoryItem | null;
+  /** The real, currently-configured reservation hold (backend config/billing.php) — never hardcode this on the frontend, it can change. */
+  reservation_hold_minutes: number;
   cover_image_url: string | null;
   /** 1200×630 crop for Open Graph / Twitter link previews. */
   cover_social_url: string | null;

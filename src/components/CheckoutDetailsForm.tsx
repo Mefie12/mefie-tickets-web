@@ -238,7 +238,7 @@ export function CheckoutDetailsForm({
     <Stack gap="xl">
       <Stack gap="md">
         <Title order={2} fz={22}>
-          Your details
+          1. Buyer Details
         </Title>
         {/* Container query, not a viewport breakpoint: the checkout is a
             ~340px sticky sidebar on desktop and full-width on mobile, so

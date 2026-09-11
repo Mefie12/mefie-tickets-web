@@ -1,37 +1,24 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Alert, Avatar, Box, Breadcrumbs, Container, Grid, GridCol, Group, Paper, Stack, Text, Title } from "@mantine/core";
+import { Alert, Avatar, Badge, Box, Container, Grid, GridCol, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import { IconCalendar, IconMapPin, IconWorld } from "@tabler/icons-react";
-import { APP_URL, backendRequest } from "@/lib/backend";
+import { APP_URL } from "@/lib/backend";
 import { formatEventDateRange } from "@/lib/eventDateTime";
-import { cheapestPriceLabel, type PublicEvent } from "@/lib/publicEventApi";
-import type { PublicEventSeries } from "@/lib/publicEventSeriesApi";
+import { cheapestPriceLabel, TICKET_DELIVERY_NOTE } from "@/lib/publicEventApi";
+import { getPublicEvent, getPublicSeries } from "@/lib/publicEventFetchers";
 import { staticMapImageUrl } from "@/lib/mapbox";
-import { Checkout } from "@/components/Checkout";
+import { EventTicketPanel } from "@/components/EventTicketPanel";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
+import { EventHeroGallery } from "@/components/EventHeroGallery";
 import { EventGallery } from "@/components/EventGallery";
+import { EventTopActions } from "@/components/EventTopActions";
+import { EventVenueCard } from "@/components/EventVenueCard";
 import { ExpandableHtml } from "@/components/ExpandableHtml";
 import { PublicContentSections } from "@/components/PublicContentSections";
 import { PublicEventSeriesView } from "@/components/PublicEventSeriesView";
 import { MobileBuyBar } from "@/components/MobileBuyBar";
-
-async function getEvent(organizationSlug: string, eventSlug: string) {
-  return backendRequest<{ event: PublicEvent }>(`/api/public/organizations/${encodeURIComponent(organizationSlug)}/events/${encodeURIComponent(eventSlug)}`);
-}
-
-/**
- * §7.2 — a series' public URL is the same flat shape as a standalone
- * event's (`/{organizationSlug}/{slug}`), so this route tries an event
- * lookup first and falls back to a series lookup on 404 rather than
- * needing a second top-level route. generateUniqueSlug() on both the
- * event and series sides (backend) guarantees the two never collide
- * under one organization.
- */
-async function getSeries(organizationSlug: string, seriesSlug: string) {
-  return backendRequest<{ event_series: PublicEventSeries }>(`/api/public/organizations/${encodeURIComponent(organizationSlug)}/series/${encodeURIComponent(seriesSlug)}`);
-}
 
 export async function generateMetadata({ params }: { params: Promise<{ organizationSlug: string; eventSlug: string }> }): Promise<Metadata> {
   const { organizationSlug, eventSlug } = await params;
@@ -44,7 +31,7 @@ export async function generateMetadata({ params }: { params: Promise<{ organizat
     return url ? { images: [{ url, width: 1200, height: 630, alt }] } : {};
   };
 
-  const eventResult = await getEvent(organizationSlug, eventSlug);
+  const eventResult = await getPublicEvent(organizationSlug, eventSlug);
   if (eventResult.status === 200) {
     const { event } = eventResult.data;
     const description = event.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${event.title}.`;
@@ -57,7 +44,7 @@ export async function generateMetadata({ params }: { params: Promise<{ organizat
     };
   }
 
-  const seriesResult = await getSeries(organizationSlug, eventSlug);
+  const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
   if (seriesResult.status !== 200) return {};
   const { event_series: series } = seriesResult.data;
   const description = series.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${series.title}.`;
@@ -77,10 +64,10 @@ export default async function PublicEventPage({
 }) {
   const { organizationSlug, eventSlug } = await params;
 
-  const result = await getEvent(organizationSlug, eventSlug);
+  const result = await getPublicEvent(organizationSlug, eventSlug);
 
   if (result.status !== 200) {
-    const seriesResult = await getSeries(organizationSlug, eventSlug);
+    const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
     if (seriesResult.status !== 200) {
       notFound();
     }
@@ -102,72 +89,73 @@ export default async function PublicEventPage({
     [location?.venue_name, location?.city, location?.state].filter(Boolean).join(", ") || "Location TBA";
 
   // Coordinates give the accurate pin; the text-query fallback covers
-  // manual entry or a missing Mapbox token — either way "Get directions"
-  // still works, just less precisely.
-  const directionsUrl = showVenue
-    ? location?.latitude != null && location?.longitude != null
-      ? `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+  // manual entry or a missing Mapbox token — either way "Preview
+  // directions" still works, just less precisely.
+  const locationQuery = () =>
+    location?.latitude != null && location?.longitude != null
+      ? `${location.latitude},${location.longitude}`
+      : encodeURIComponent(
           [location?.venue_name, location?.address_line1, location?.city, location?.state, location?.postal_code, location?.country]
             .filter(Boolean)
             .join(", "),
-        )}`
-    : null;
+        );
+  const directionsUrl = showVenue ? `https://www.google.com/maps/search/?api=1&query=${locationQuery()}` : null;
+  // A `/maps/dir/` deep link, not `/maps/search/` — this button is a
+  // committed "take me there" action on the Venue card, so it should
+  // open real turn-by-turn navigation rather than just drop a pin.
+  const navigationUrl = showVenue ? `https://www.google.com/maps/dir/?api=1&destination=${locationQuery()}` : null;
+
+  const canonicalUrl = `${APP_URL}/${organization.slug}/${event.slug}`;
+  const addressLine = [location?.address_line1, location?.city].filter(Boolean).join(", ") || null;
+  const checkoutUrl = `/${organization.slug}/${event.slug}/checkout`;
 
   return (
     <Box>
       <PublicSiteHeader />
-      <Box
-        h="clamp(190px, 30vw, 300px)"
-        style={{
-          backgroundColor: "var(--mantine-color-gray-light)",
-          // Prefer the event's own cover image (the actual "event detail
-          // hero") — the organization's cover is a reasonable fallback for
-          // an event that hasn't uploaded media yet. The tiny blurred
-          // placeholder sits underneath so there's no grey flash while the
-          // hero loads.
-          backgroundImage: (event.cover_image_url ?? organization.cover_image_url)
-            ? [
-                `url(${event.cover_image_url ?? organization.cover_image_url})`,
-                event.cover_placeholder_url ? `url(${event.cover_placeholder_url})` : null,
-              ]
-                .filter(Boolean)
-                .join(", ")
-            : undefined,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
+
+      <Container size="xl" pt="md">
+        <EventTopActions
+          shareUrl={canonicalUrl}
+          shareTitle={event.title}
+          shareText={`Check out ${event.title} on Mefie Tickets`}
+        />
+      </Container>
+
+      <Container size="xl" pt="md">
+        <EventHeroGallery
+          coverImageUrl={event.cover_image_url ?? organization.cover_image_url}
+          coverPlaceholderUrl={event.cover_placeholder_url}
+          gallery={event.gallery}
+        />
+      </Container>
 
       <Container size="xl" py="xl" pb={{ base: 90, md: "xl" }}>
         <Grid gutter="xl">
           <GridCol span={{ base: 12, md: 7, lg: 8 }}>
             <Stack gap="xl">
-              <Breadcrumbs separator="/">
-                <Text component="a" href="/discover" size="sm" c="dimmed">
-                  Discover events
-                </Text>
-                <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" lineClamp={1}>
-                  {organization.name}
-                </Text>
-                <Text size="sm" c="dimmed" lineClamp={1}>
+              <Stack gap={10}>
+                {event.category && (
+                  <Badge
+                    radius="xl"
+                    tt="none"
+                    w="fit-content"
+                    styles={{ root: { backgroundColor: "#d8ff72", color: "#171717" } }}
+                  >
+                    {event.category.name}
+                  </Badge>
+                )}
+                <Title order={1} fz={{ base: 26, sm: 34 }} style={{ overflowWrap: "anywhere" }}>
                   {event.title}
-                </Text>
-              </Breadcrumbs>
-
-              <Group gap="md" align="flex-start" wrap="nowrap">
-                <Avatar src={organization.logo_url} size={56} radius="lg" color="brand" style={{ flexShrink: 0 }}>
-                  {organization.name[0]}
-                </Avatar>
-                <Stack gap={4}>
+                </Title>
+                <Group gap={10} align="center" wrap="nowrap">
+                  <Avatar src={organization.logo_url} size={32} radius="lg" color="brand" style={{ flexShrink: 0 }}>
+                    {organization.name[0]}
+                  </Avatar>
                   <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" fw={500}>
-                    {organization.name}
+                    Hosted by {organization.name}
                   </Text>
-                  <Title order={1} fz={{ base: 26, sm: 34 }} style={{ overflowWrap: "anywhere" }}>
-                    {event.title}
-                  </Title>
-                </Stack>
-              </Group>
+                </Group>
+              </Stack>
 
               <Stack gap={6}>
                 {/* Always the event's own timezone, with its label — not the
@@ -185,7 +173,7 @@ export default async function PublicEventPage({
                       <Text size="sm" c="dimmed">{venueLabel}</Text>
                       {directionsUrl && (
                         <Text size="sm" component="a" href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                          Get directions
+                          Preview directions
                         </Text>
                       )}
                     </Group>
@@ -213,21 +201,28 @@ export default async function PublicEventPage({
 
               {event.description && <ExpandableHtml html={event.description} maw={700} />}
 
-              {event.gallery.length > 0 && <EventGallery gallery={event.gallery} />}
+              <Text c="dimmed" maw={700}>
+                {TICKET_DELIVERY_NOTE}
+              </Text>
 
               {event.content_sections.length > 0 && <PublicContentSections sections={event.content_sections} />}
 
-              {/* Purely a visual preview — the "Get directions" link above
+              {/* Purely a visual preview — the "Preview directions" link above
                   is the actual navigation action and is unrelated to this. */}
-              {showVenue && location?.latitude != null && location?.longitude != null && (
-                <Box
-                  component="img"
-                  src={staticMapImageUrl(location.latitude, location.longitude) ?? undefined}
-                  alt={`Map showing ${venueLabel}`}
-                  maw={700}
-                  style={{ width: "100%", borderRadius: "var(--mantine-radius-lg)", display: staticMapImageUrl(location.latitude, location.longitude) ? "block" : "none" }}
+              {showVenue && (
+                <EventVenueCard
+                  venueName={venueLabel}
+                  addressLine={addressLine}
+                  mapImageUrl={
+                    location?.latitude != null && location?.longitude != null
+                      ? staticMapImageUrl(location.latitude, location.longitude)
+                      : null
+                  }
+                  navigationUrl={navigationUrl}
                 />
               )}
+
+              {event.gallery.length > 0 && <EventGallery gallery={event.gallery} />}
 
               {/* Always visible, never gated behind purchase: the event can be
                   months out and there's no ticket-email system yet to deliver
@@ -273,7 +268,7 @@ export default async function PublicEventPage({
                 </Alert>
               ) : (
                 <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
-                  <Checkout event={event} />
+                  <EventTicketPanel event={event} checkoutUrl={checkoutUrl} />
                 </Paper>
               )}
             </Box>

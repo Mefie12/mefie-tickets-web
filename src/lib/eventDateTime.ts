@@ -137,6 +137,15 @@ export function formatEventDate(iso: string | null, timeZone: string): string {
   }).format(new Date(iso));
 }
 
+/** Compact "Sat, 19 Sep · 2:00 PM" for event cards — weekday, short date, and time, no year or zone label. */
+export function formatEventCardDate(iso: string | null, timeZone: string): string {
+  if (!iso) return "Date and time TBA";
+  const date = new Date(iso);
+  const dateFmt = new Intl.DateTimeFormat(LOCALE, { timeZone, weekday: "short", day: "numeric", month: "short" });
+  const timeFmt = new Intl.DateTimeFormat(LOCALE, { timeZone, hour: "numeric", minute: "2-digit", hour12: true });
+  return `${dateFmt.format(date)} · ${timeFmt.format(date)}`;
+}
+
 /** Time of day only, e.g. "18:04" — for gate check-in activity timestamps. */
 export function formatEventTime(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat(LOCALE, { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(

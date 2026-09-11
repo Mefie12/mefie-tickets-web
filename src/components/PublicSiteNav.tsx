@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
-  ActionIcon,
   Box,
   Burger,
   Button,
@@ -16,10 +15,9 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { IconChevronDown, IconSearch, IconTicket } from "@tabler/icons-react";
+import { IconBuildingStore, IconChevronDown, IconInfoCircle, IconLogin, IconTicket } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import { portalLogout, portalLogoutAll } from "@/lib/portalApi";
-import { PublicSearchPanel } from "@/components/PublicSearchPanel";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import {
   AccountIdentity,
@@ -31,14 +29,13 @@ import {
 } from "@/components/PublicAccountMenu";
 
 const organizerLinks = [
-  { label: "Why Mefie for organizers", href: "/organizers" },
-  { label: "Organizer login", href: "/organizers/login" },
-  { label: "Create an organization", href: "/organizers/register" },
+  { label: "Create Organizer Account", href: "/organizers/register", icon: <IconBuildingStore size={16} /> },
+  { label: "Log in to Organization Account", href: "/organizers/login", icon: <IconLogin size={16} /> },
+  { label: "Explore Mefie for Organizers", href: "/organizers", icon: <IconInfoCircle size={16} /> },
 ];
 
 export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: NavConsumer }) {
   const [menuOpened, setMenuOpened] = useState(false);
-  const [searchOpened, setSearchOpened] = useState(false);
   const router = useRouter();
   const closeDrawer = () => setMenuOpened(false);
 
@@ -62,7 +59,7 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
       </Menu.Target>
       <Menu.Dropdown>
         {organizerLinks.map((link) => (
-          <Menu.Item key={link.href} component={Link} href={link.href}>
+          <Menu.Item key={link.href} component={Link} href={link.href} leftSection={link.icon}>
             {link.label}
           </Menu.Item>
         ))}
@@ -103,11 +100,11 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
             </Link>
 
             <Group visibleFrom="md" gap="xs" wrap="nowrap">
-              <ActionIcon aria-label="Search events" variant="subtle" onClick={() => setSearchOpened(true)}>
-                <IconSearch />
-              </ActionIcon>
               <Button component={Link} href="/discover" variant="subtle">
                 Discover events
+              </Button>
+              <Button component={Link} href="/tickets" variant="subtle">
+                My tickets
               </Button>
               {!user && forOrganizers}
               {authed ? <PublicAccountMenu user={user} consumer={consumer} onSignOut={signOut} /> : authButtons}
@@ -115,9 +112,6 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
             </Group>
 
             <Group hiddenFrom="md">
-              <ActionIcon aria-label="Search events" variant="subtle" onClick={() => setSearchOpened(true)}>
-                <IconSearch />
-              </ActionIcon>
               <Burger opened={menuOpened} onClick={() => setMenuOpened((v) => !v)} aria-label="Open navigation" />
             </Group>
           </Group>
@@ -173,6 +167,10 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
             Discover events
           </Button>
 
+          <Button component={Link} href="/tickets" variant="subtle" justify="flex-start" onClick={closeDrawer}>
+            My tickets
+          </Button>
+
           {!user && (
             <Stack gap={4}>
               <Text size="xs" c="dimmed" tt="uppercase" fw={700} px="xs">
@@ -185,6 +183,7 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
                   href={link.href}
                   variant="subtle"
                   justify="flex-start"
+                  leftSection={link.icon}
                   onClick={closeDrawer}
                 >
                   {link.label}
@@ -214,8 +213,6 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
           </Group>
         </Stack>
       </Drawer>
-
-      <PublicSearchPanel opened={searchOpened} onClose={() => setSearchOpened(false)} />
     </>
   );
 }
