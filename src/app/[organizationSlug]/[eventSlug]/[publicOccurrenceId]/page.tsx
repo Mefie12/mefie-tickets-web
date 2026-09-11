@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Box } from "@mantine/core";
-import { APP_URL, backendRequest } from "@/lib/backend";
-import type { PublicEventSeries } from "@/lib/publicEventSeriesApi";
+import { APP_URL } from "@/lib/backend";
+import { getPublicSeriesOccurrence } from "@/lib/publicEventFetchers";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { PublicEventSeriesView } from "@/components/PublicEventSeriesView";
@@ -14,19 +14,13 @@ import { PublicEventSeriesView } from "@/components/PublicEventSeriesView";
  * has occurrences, so a standalone event never reaches this route (its
  * own detail page has no third path segment to begin with).
  */
-async function getSeriesOccurrence(organizationSlug: string, seriesSlug: string, publicOccurrenceId: string) {
-  return backendRequest<{ event_series: PublicEventSeries }>(
-    `/api/public/organizations/${encodeURIComponent(organizationSlug)}/series/${encodeURIComponent(seriesSlug)}/occurrences/${encodeURIComponent(publicOccurrenceId)}`,
-  );
-}
-
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ organizationSlug: string; eventSlug: string; publicOccurrenceId: string }>;
 }): Promise<Metadata> {
   const { organizationSlug, eventSlug, publicOccurrenceId } = await params;
-  const result = await getSeriesOccurrence(organizationSlug, eventSlug, publicOccurrenceId);
+  const result = await getPublicSeriesOccurrence(organizationSlug, eventSlug, publicOccurrenceId);
   if (result.status !== 200) return {};
   const { event_series: series } = result.data;
   const description = series.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${series.title}.`;
@@ -47,7 +41,7 @@ export default async function PublicEventSeriesOccurrencePage({
 }) {
   const { organizationSlug, eventSlug, publicOccurrenceId } = await params;
 
-  const result = await getSeriesOccurrence(organizationSlug, eventSlug, publicOccurrenceId);
+  const result = await getPublicSeriesOccurrence(organizationSlug, eventSlug, publicOccurrenceId);
 
   if (result.status !== 200) {
     notFound();
@@ -56,7 +50,7 @@ export default async function PublicEventSeriesOccurrencePage({
   return (
     <Box>
       <PublicSiteHeader />
-      <PublicEventSeriesView series={result.data.event_series} />
+      <PublicEventSeriesView series={result.data.event_series} publicOccurrenceId={publicOccurrenceId} />
       <PublicSiteFooter />
     </Box>
   );

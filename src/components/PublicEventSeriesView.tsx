@@ -1,12 +1,16 @@
-import { Alert, Avatar, Badge, Box, Breadcrumbs, Container, Grid, GridCol, Group, Paper, Stack, Text, Title } from "@mantine/core";
+import { Alert, Avatar, Badge, Box, Container, Grid, GridCol, Group, Paper, Stack, Text, Title } from "@mantine/core";
 import { IconCalendar, IconMapPin, IconWorld } from "@tabler/icons-react";
 import { formatEventDate, formatEventDateRange, formatEventTime } from "@/lib/eventDateTime";
-import { cheapestPriceLabel } from "@/lib/publicEventApi";
+import { APP_URL } from "@/lib/backend";
+import { cheapestPriceLabel, TICKET_DELIVERY_NOTE } from "@/lib/publicEventApi";
 import type { PublicEventSeries } from "@/lib/publicEventSeriesApi";
 import { staticMapImageUrl } from "@/lib/mapbox";
-import { Checkout } from "@/components/Checkout";
+import { EventTicketPanel } from "@/components/EventTicketPanel";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
+import { EventHeroGallery } from "@/components/EventHeroGallery";
 import { EventGallery } from "@/components/EventGallery";
+import { EventTopActions } from "@/components/EventTopActions";
+import { EventVenueCard } from "@/components/EventVenueCard";
 import { ExpandableHtml } from "@/components/ExpandableHtml";
 import { PublicContentSections } from "@/components/PublicContentSections";
 import { MobileBuyBar } from "@/components/MobileBuyBar";
@@ -20,24 +24,38 @@ import { MobileBuyBar } from "@/components/MobileBuyBar";
  * field-for-field where the content is series-owned (§4.1) — the only
  * series-specific addition is the date switcher below the schedule line
  * and the availability badges it carries.
+ *
+ * `publicOccurrenceId` mirrors what's actually in the URL — present only
+ * when rendered from the `/{seriesSlug}/{publicOccurrenceId}` route, not
+ * from the plain `/{seriesSlug}` (default-occurrence) route — so the
+ * checkout link this builds matches whichever of the two sibling
+ * `/checkout` routes the buyer is actually on.
  */
-export function PublicEventSeriesView({ series }: { series: PublicEventSeries }) {
+export function PublicEventSeriesView({ series, publicOccurrenceId }: { series: PublicEventSeries; publicOccurrenceId?: string }) {
   const { location, organization, selected_occurrence: occurrence } = series;
+  const checkoutUrl = publicOccurrenceId
+    ? `/${organization.slug}/${series.slug}/${publicOccurrenceId}/checkout`
+    : `/${organization.slug}/${series.slug}/checkout`;
 
   const showVenue = location?.location_type === "IN_PERSON" || location?.location_type === "HYBRID";
   const showOnline = location?.location_type === "ONLINE" || location?.location_type === "HYBRID";
   const venueLabel =
     [location?.venue_name, location?.city, location?.state].filter(Boolean).join(", ") || "Location TBA";
 
-  const directionsUrl = showVenue
-    ? location?.latitude != null && location?.longitude != null
-      ? `https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}`
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+  const locationQuery = () =>
+    location?.latitude != null && location?.longitude != null
+      ? `${location.latitude},${location.longitude}`
+      : encodeURIComponent(
           [location?.venue_name, location?.address_line1, location?.city, location?.state, location?.postal_code, location?.country]
             .filter(Boolean)
             .join(", "),
-        )}`
-    : null;
+        );
+  const directionsUrl = showVenue ? `https://www.google.com/maps/search/?api=1&query=${locationQuery()}` : null;
+  // A `/maps/dir/` deep link, not `/maps/search/` — see EventVenueCard's docblock.
+  const navigationUrl = showVenue ? `https://www.google.com/maps/dir/?api=1&destination=${locationQuery()}` : null;
+
+  const canonicalUrl = `${APP_URL}/${organization.slug}/${series.slug}`;
+  const addressLine = [location?.address_line1, location?.city].filter(Boolean).join(", ") || null;
 
   const upcoming = series.occurrences.filter((o) => !o.is_past);
   const badgeFor = (availability: PublicEventSeries["occurrences"][number]["availability"]) =>
@@ -53,52 +71,49 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
 
   return (
     <Box>
-      <Box
-        h="clamp(190px, 30vw, 300px)"
-        style={{
-          backgroundColor: "var(--mantine-color-gray-light)",
-          backgroundImage: (series.cover_image_url ?? organization.cover_image_url)
-            ? [
-                `url(${series.cover_image_url ?? organization.cover_image_url})`,
-                series.cover_placeholder_url ? `url(${series.cover_placeholder_url})` : null,
-              ]
-                .filter(Boolean)
-                .join(", ")
-            : undefined,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
+      <Container size="xl" pt="md">
+        <EventTopActions
+          shareUrl={canonicalUrl}
+          shareTitle={series.title}
+          shareText={`Check out ${series.title} on Mefie Tickets`}
+        />
+      </Container>
+
+      <Container size="xl" pt="md">
+        <EventHeroGallery
+          coverImageUrl={series.cover_image_url ?? organization.cover_image_url}
+          coverPlaceholderUrl={series.cover_placeholder_url}
+          gallery={series.gallery}
+        />
+      </Container>
 
       <Container size="xl" py="xl" pb={{ base: 90, md: "xl" }}>
         <Grid gutter="xl">
           <GridCol span={{ base: 12, md: 7, lg: 8 }}>
             <Stack gap="xl">
-              <Breadcrumbs separator="/">
-                <Text component="a" href="/discover" size="sm" c="dimmed">
-                  Discover events
-                </Text>
-                <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" lineClamp={1}>
-                  {organization.name}
-                </Text>
-                <Text size="sm" c="dimmed" lineClamp={1}>
+              <Stack gap={10}>
+                {occurrence.category && (
+                  <Badge
+                    radius="xl"
+                    tt="none"
+                    w="fit-content"
+                    styles={{ root: { backgroundColor: "#d8ff72", color: "#171717" } }}
+                  >
+                    {occurrence.category.name}
+                  </Badge>
+                )}
+                <Title order={1} fz={{ base: 26, sm: 34 }} style={{ overflowWrap: "anywhere" }}>
                   {series.title}
-                </Text>
-              </Breadcrumbs>
-
-              <Group gap="md" align="flex-start" wrap="nowrap">
-                <Avatar src={organization.logo_url} size={56} radius="lg" color="brand" style={{ flexShrink: 0 }}>
-                  {organization.name[0]}
-                </Avatar>
-                <Stack gap={4}>
+                </Title>
+                <Group gap={10} align="center" wrap="nowrap">
+                  <Avatar src={organization.logo_url} size={32} radius="lg" color="brand" style={{ flexShrink: 0 }}>
+                    {organization.name[0]}
+                  </Avatar>
                   <Text component="a" href={`/${organization.slug}`} size="sm" c="dimmed" fw={500}>
-                    {organization.name}
+                    Hosted by {organization.name}
                   </Text>
-                  <Title order={1} fz={{ base: 26, sm: 34 }} style={{ overflowWrap: "anywhere" }}>
-                    {series.title}
-                  </Title>
-                </Stack>
-              </Group>
+                </Group>
+              </Stack>
 
               <Stack gap={6}>
                 <Group gap={8}>
@@ -114,7 +129,7 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
                       <Text size="sm" c="dimmed">{venueLabel}</Text>
                       {directionsUrl && (
                         <Text size="sm" component="a" href={directionsUrl} target="_blank" rel="noopener noreferrer">
-                          Get directions
+                          Preview directions
                         </Text>
                       )}
                     </Group>
@@ -177,24 +192,31 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
 
               {series.description && <ExpandableHtml html={series.description} maw={700} />}
 
-              {series.gallery.length > 0 && <EventGallery gallery={series.gallery} />}
+              <Text c="dimmed" maw={700}>
+                {TICKET_DELIVERY_NOTE}
+              </Text>
 
               {/* From the *selected occurrence*, not the series template — a
                   special one-off lineup/rotation must show only on its own
                   date, never bleed into every occurrence's page. */}
               {occurrence.content_sections.length > 0 && <PublicContentSections sections={occurrence.content_sections} />}
 
-              {/* Purely a visual preview — the "Get directions" link above
+              {/* Purely a visual preview — the "Preview directions" link above
                   is the actual navigation action and is unrelated to this. */}
-              {showVenue && location?.latitude != null && location?.longitude != null && (
-                <Box
-                  component="img"
-                  src={staticMapImageUrl(location.latitude, location.longitude) ?? undefined}
-                  alt={`Map showing ${venueLabel}`}
-                  maw={700}
-                  style={{ width: "100%", borderRadius: "var(--mantine-radius-lg)", display: staticMapImageUrl(location.latitude, location.longitude) ? "block" : "none" }}
+              {showVenue && (
+                <EventVenueCard
+                  venueName={venueLabel}
+                  addressLine={addressLine}
+                  mapImageUrl={
+                    location?.latitude != null && location?.longitude != null
+                      ? staticMapImageUrl(location.latitude, location.longitude)
+                      : null
+                  }
+                  navigationUrl={navigationUrl}
                 />
               )}
+
+              {series.gallery.length > 0 && <EventGallery gallery={series.gallery} />}
 
               {showOnline && (
                 <Paper withBorder radius="lg" p="lg" maw={700}>
@@ -234,7 +256,7 @@ export function PublicEventSeriesView({ series }: { series: PublicEventSeries })
                 </Alert>
               ) : (
                 <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
-                  <Checkout event={occurrence} />
+                  <EventTicketPanel event={occurrence} checkoutUrl={checkoutUrl} />
                 </Paper>
               )}
             </Box>

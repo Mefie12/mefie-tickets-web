@@ -15,21 +15,16 @@ export function TicketSelector({ products, quantities, onQuantityChange, currenc
 }) {
   if (products.length === 0) return <Text c="dimmed" size="sm">No tickets available for this event yet.</Text>;
 
-  return <Stack gap="md">{products.map((product) => (
-    <Card key={product.id} withBorder radius="lg" p="md">
-      <Stack gap="sm">
-        <Text fw={700}>{product.title}</Text>
-        {product.type === "TIERED" ? product.options?.map((option) => (
-          <TicketOptionRow key={option.id} product={product} option={option}
-            quantity={quantities[ticketLineKey(product.id, option.id)] ?? 0}
-            onChange={(quantity) => onQuantityChange(product.id, option.id, quantity)} currencyCode={currencyCode} />
-        )) : (
-          <TicketOptionRow product={product} option={null}
-            quantity={quantities[ticketLineKey(product.id, null)] ?? 0}
-            onChange={(quantity) => onQuantityChange(product.id, null, quantity)} currencyCode={currencyCode} />
-        )}
-      </Stack>
-    </Card>
+  return <Stack gap="sm">{products.map((product) => (
+    product.type === "TIERED" ? product.options?.map((option) => (
+      <TicketOptionRow key={ticketLineKey(product.id, option.id)} product={product} option={option}
+        quantity={quantities[ticketLineKey(product.id, option.id)] ?? 0}
+        onChange={(quantity) => onQuantityChange(product.id, option.id, quantity)} currencyCode={currencyCode} />
+    )) : (
+      <TicketOptionRow key={ticketLineKey(product.id, null)} product={product} option={null}
+        quantity={quantities[ticketLineKey(product.id, null)] ?? 0}
+        onChange={(quantity) => onQuantityChange(product.id, null, quantity)} currencyCode={currencyCode} />
+    )
   ))}</Stack>;
 }
 
@@ -92,21 +87,42 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: 
   // an organizer allowing 50 per order should get 50.
   const limit = option?.max_attendees_per_registration ?? product.max_attendees_per_registration ?? 10;
   const price = option?.price ?? product.current_price;
-  return <Group justify="space-between" align="center" gap="sm" wrap="nowrap">
-    <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
-      {option && <Text fw={600} size="sm" style={{ overflowWrap: "anywhere" }}>{option.name}</Text>}
-      <Text size="sm" c="dimmed">
-        {formatMoney(price, currencyCode)}
-        {Number(price ?? 0) > 0 && " + fees"}
-      </Text>
-      {remaining !== null && <Text size="xs" c="dimmed">{remaining} remaining</Text>}
-      {!available && <Badge color={status === "SOLD_OUT" ? "red" : "gray"} variant="light" size="sm">{status.replaceAll("_", " ")}</Badge>}
-    </Stack>
-    <QuantityStepper
-      value={quantity}
-      onChange={onChange}
-      max={Math.min(limit, remaining ?? limit)}
-      disabled={!available}
-    />
-  </Group>;
+  const heading = option?.name ?? product.title;
+  const subtitleParts = [
+    remaining !== null ? `${remaining} remaining` : null,
+    Number(price ?? 0) > 0 ? "+ fees" : null,
+  ].filter((part): part is string => part !== null);
+
+  // Same reasoning as OrderSummaryCard: this card's background is
+  // deliberately light regardless of site color scheme, so text needs
+  // an explicit dark color rather than the theme-default, which is a
+  // light grey in dark mode and unreadable against a light background.
+  const textColor = "var(--mantine-color-grey-9)";
+  const mutedColor = "var(--mantine-color-grey-6)";
+
+  return (
+    <Card radius="lg" p="md" bg="var(--mantine-color-grey-1)">
+      <Stack gap={8}>
+        <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
+          <Text fw={500} size="sm" c={textColor} style={{ overflowWrap: "anywhere" }}>{heading}</Text>
+          <Text fw={500} size="sm" c={textColor} style={{ whiteSpace: "nowrap" }}>{formatMoney(price, currencyCode)}</Text>
+        </Group>
+        {(subtitleParts.length > 0 || !available) && (
+          <Group justify="space-between" align="center" gap="xs">
+            <Text size="xs" c={mutedColor}>{subtitleParts.join(" · ")}</Text>
+            {!available && <Badge color={status === "SOLD_OUT" ? "red" : "gray"} variant="light" size="sm">{status.replaceAll("_", " ")}</Badge>}
+          </Group>
+        )}
+        <Group justify="space-between" align="center">
+          <Text size="xs" c={mutedColor}>Quantity</Text>
+          <QuantityStepper
+            value={quantity}
+            onChange={onChange}
+            max={Math.min(limit, remaining ?? limit)}
+            disabled={!available}
+          />
+        </Group>
+      </Stack>
+    </Card>
+  );
 }

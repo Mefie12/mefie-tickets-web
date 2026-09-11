@@ -64,10 +64,10 @@ export function PublicContentSections({ sections }: { sections: PublicContentSec
 }
 
 /**
- * A compact vertical list (name + role + set time), not a card grid —
- * closer to how posh.vip lists set times per performer. Featured/
- * headliner items still get visual emphasis (bigger avatar, bold name)
- * but stay in the same list rather than a separate grid section.
+ * A responsive card grid — one card per performer, each showing the
+ * profile image, name/role, description, and social links together
+ * rather than the description hiding behind a click. Featured/
+ * headliner items get a slightly larger card and avatar.
  */
 function LineupSection({ items }: { items: PublicLineupItem[] }) {
   if (items.length === 0) {
@@ -79,77 +79,76 @@ function LineupSection({ items }: { items: PublicLineupItem[] }) {
   }
 
   return (
-    <Stack gap="xs">
+    <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
       {items.map((item) => (
-        <TalentRow key={item.id} item={item} />
+        <TalentCard key={item.id} item={item} />
       ))}
-    </Stack>
+    </SimpleGrid>
   );
 }
 
-function TalentRow({ item }: { item: PublicLineupItem }) {
+function TalentCard({ item }: { item: PublicLineupItem }) {
   const [expanded, setExpanded] = useState(false);
   const bio = item.description || item.biography;
   const showToggle = !!bio && bio.length > 140;
-  const large = item.is_featured;
 
   return (
-    <Card withBorder radius="lg" p={large ? "md" : "sm"}>
-      <Group wrap="nowrap" align="flex-start" gap="sm">
-        <Avatar src={item.profile_image_url} size={large ? 72 : 48} radius="xl" />
-        <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-          <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
-            <Stack gap={0} style={{ minWidth: 0 }}>
-              <Group gap={6} wrap="nowrap">
-                {item.is_featured && <IconStarFilled size={14} color="var(--mantine-color-yellow-6)" />}
-                <Text fw={700} size={large ? "lg" : "sm"} truncate>
-                  {item.display_name}
-                </Text>
-              </Group>
-              <Text size="xs" c="dimmed">
-                {item.custom_role || ROLE_LABELS[item.role] || item.role}
-              </Text>
-            </Stack>
-            {item.set_time_label && (
-              <Text size="sm" c="dimmed" fw={600} style={{ whiteSpace: "nowrap" }}>
-                {item.set_time_label}
-              </Text>
-            )}
+    <Card withBorder radius="lg" p="lg">
+      <Stack gap="sm" align="center" ta="center">
+        <Avatar src={item.profile_image_url} size={item.is_featured ? 88 : 72} radius="xl" />
+        <Stack gap={2} align="center">
+          <Group gap={6} wrap="nowrap" justify="center">
+            {item.is_featured && <IconStarFilled size={14} color="var(--mantine-color-yellow-6)" />}
+            <Text fw={700} size="md">
+              {item.display_name}
+            </Text>
           </Group>
-          {item.tagline && <Text size="sm" fs="italic">{item.tagline}</Text>}
-          {bio && (
-            <Text size="sm" lineClamp={expanded ? undefined : 2}>
-              {bio}
+          <Text size="xs" c="dimmed">
+            {item.custom_role || ROLE_LABELS[item.role] || item.role}
+          </Text>
+          {item.set_time_label && (
+            <Text size="xs" c="dimmed" fw={600}>
+              {item.set_time_label}
             </Text>
           )}
-          {showToggle && (
-            <Button variant="subtle" size="compact-xs" onClick={() => setExpanded((v) => !v)} style={{ alignSelf: "flex-start" }}>
-              {expanded ? "Show less" : "Read more"}
-            </Button>
-          )}
-          {item.social_links && item.social_links.length > 0 && (
-            <Group gap={4}>
-              {item.social_links.map((link) => {
-                const Icon = SOCIAL_ICONS[link.provider] ?? IconWorld;
-                return (
-                  <ActionIcon
-                    key={link.provider}
-                    component="a"
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    variant="subtle"
-                    color="gray"
-                    aria-label={`${item.display_name} on ${link.provider.toLowerCase()} (opens in a new tab)`}
-                  >
-                    <Icon size={16} />
-                  </ActionIcon>
-                );
-              })}
-            </Group>
-          )}
         </Stack>
-      </Group>
+        {item.tagline && (
+          <Text size="sm" fs="italic">
+            {item.tagline}
+          </Text>
+        )}
+        {bio && (
+          <Text size="sm" lineClamp={expanded ? undefined : 3}>
+            {bio}
+          </Text>
+        )}
+        {showToggle && (
+          <Button variant="subtle" size="compact-xs" onClick={() => setExpanded((v) => !v)}>
+            {expanded ? "Show less" : "Read more"}
+          </Button>
+        )}
+        {item.social_links && item.social_links.length > 0 && (
+          <Group gap={4} justify="center">
+            {item.social_links.map((link) => {
+              const Icon = SOCIAL_ICONS[link.provider] ?? IconWorld;
+              return (
+                <ActionIcon
+                  key={link.provider}
+                  component="a"
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="subtle"
+                  color="gray"
+                  aria-label={`${item.display_name} on ${link.provider.toLowerCase()} (opens in a new tab)`}
+                >
+                  <Icon size={16} />
+                </ActionIcon>
+              );
+            })}
+          </Group>
+        )}
+      </Stack>
     </Card>
   );
 }

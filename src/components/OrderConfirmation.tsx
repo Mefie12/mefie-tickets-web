@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Badge, Box, Card, Divider, Group, Modal, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { Alert, Badge, Box, Card, Group, Modal, Stack, Text, ThemeIcon, Title } from "@mantine/core";
 import { IconCircleCheck, IconTicket } from "@tabler/icons-react";
 import type { Order } from "@/lib/checkoutApi";
-import { formatMoney } from "@/lib/money";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
+import { OrderSummaryCard } from "@/components/OrderSummaryCard";
 
 /**
  * Shown either immediately (a FREE order completes synchronously with
@@ -50,26 +50,12 @@ export function OrderConfirmation({ eventId, order }: { eventId: number; order: 
         </Alert>
       )}
 
+      <Box w="100%" maw={480} ta="left">
+        <OrderSummaryCard order={order} />
+      </Box>
+
       <Card withBorder radius="lg" p="lg" w="100%" maw={480} ta="left">
-        <Stack gap="sm">
-          {order.items.map((item, index) => (
-            <Group key={index} justify="space-between">
-              <Stack gap={0}>
-                <Text size="sm" fw={500}>
-                  {item.ticket_display_name}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Qty {item.quantity}
-                </Text>
-              </Stack>
-              <Text size="sm">{formatMoney(item.item_total, order.currency)}</Text>
-            </Group>
-          ))}
-
-          <Divider />
-
-          <OrderCostBreakdown order={order} />
-        </Stack>
+        <OrderCostBreakdown order={order} />
       </Card>
 
       {order.terms_acceptance && (
