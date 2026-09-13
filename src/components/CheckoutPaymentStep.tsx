@@ -58,7 +58,7 @@ export function CheckoutPaymentStep({
   clientSecret: string;
   /** The event's own venue country (location.country) — see paymentElementOptionsFor. */
   defaultBillingCountry?: string | null;
-  onPaid: () => void;
+  onPaid: (order: Order) => void;
 }) {
   // Held-funds policy: the PaymentIntent behind this client_secret is
   // created on Mefie's own platform Stripe account, not the organizer's
@@ -114,7 +114,7 @@ function PaymentForm({
   order: Order;
   clientSecret: string;
   defaultBillingCountry?: string | null;
-  onPaid: () => void;
+  onPaid: (order: Order) => void;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -182,8 +182,12 @@ function PaymentForm({
   });
 
   useEffect(() => {
-    if (statusQuery.data?.status === "COMPLETED") onPaid();
-  }, [statusQuery.data?.status, onPaid]);
+    // statusQuery.data.order is the fresh, post-completion order (real
+    // unassigned_count/attendees) — falling back to the pre-payment
+    // `order` prop only guards a response shape that should never
+    // actually happen once status is COMPLETED.
+    if (statusQuery.data?.status === "COMPLETED") onPaid(statusQuery.data.order ?? order);
+  }, [statusQuery.data, onPaid, order]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

@@ -36,25 +36,24 @@ export default async function CheckoutRoutePage({
     <Box>
       <PublicSiteHeader />
       <Container size="xl" py="xl">
-        <Stack gap="lg">
-          <Text component="a" href={backUrl} size="sm" fw={500} style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}>
-            <IconArrowLeft size={16} /> Back to event details
-          </Text>
-          <Stack gap={4}>
-            <Title order={1} fz={{ base: 24, sm: 30 }}>
-              Complete your booking
-            </Title>
-            <Text c="dimmed">You&apos;re almost there — fill in your details and pay to confirm your tickets.</Text>
-          </Stack>
-
-          {event.has_ended ? (
+        {event.has_ended ? (
+          <Stack gap="lg">
+            <Text component="a" href={backUrl} size="sm" fw={500} style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}>
+              <IconArrowLeft size={16} /> Back to event details
+            </Text>
+            <Stack gap={4}>
+              <Title order={1} fz={{ base: 24, sm: 30 }}>
+                Complete your booking
+              </Title>
+              <Text c="dimmed">You&apos;re almost there — fill in your details and pay to confirm your tickets.</Text>
+            </Stack>
             <Alert color="gray" variant="light" title="This event has ended">
               Tickets are no longer available for this event.
             </Alert>
-          ) : (
-            <CheckoutPage event={event} backUrl={backUrl} />
-          )}
-        </Stack>
+          </Stack>
+        ) : (
+          <CheckoutPage event={event} backUrl={backUrl} />
+        )}
       </Container>
       <PublicSiteFooter />
     </Box>

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { Alert, Box, Button, Grid, GridCol, Loader, Paper, Stack, Text } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { Alert, Box, Button, Grid, GridCol, Loader, Paper, Stack, Text, Title } from "@mantine/core";
+import { IconAlertCircle, IconArrowLeft } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { createPaymentIntent, getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
@@ -87,7 +87,10 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         if (authoritative.status === "COMPLETED") {
           sessionStorage.removeItem(checkoutStorageKey(event.id));
           clearCart(event.id);
-          setOrder({ ...persisted.order, status: "COMPLETED" });
+          // Prefer the fresh order the status check just returned (real
+          // unassigned_count/attendees) over the stale RESERVED snapshot
+          // — the persisted copy predates payment completion.
+          setOrder(authoritative.order ?? { ...persisted.order, status: "COMPLETED" });
           setStep("confirmation");
         } else if (authoritative.status === "RESERVED") {
           setOrder(persisted.order);
@@ -149,77 +152,99 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     }
   }
 
+  // Full-page, no leftover "Complete your booking" chrome once the
+  // buyer has actually finished — matches the Figma payment-success
+  // frames, which have no such header above the success content.
+  const showBookingHeader = step !== "confirmation";
+
+  let content: React.ReactNode;
   if (cart === "loading") {
-    return (
+    content = (
       <Stack align="center" py="xl">
         <Loader />
       </Stack>
     );
-  }
-
-  if (cart === null) {
+  } else if (cart === null) {
     // Redirect effect above is already in flight — render nothing rather
     // than a flash of an empty checkout form.
-    return null;
-  }
+    content = null;
+  } else if (step === "confirmation" && order) {
+    content = <OrderConfirmation eventTitle={event.title} order={order} />;
+  } else {
+    content = (
+      <Grid gutter="xl">
+        <GridCol span={{ base: 12, md: 7 }} order={{ base: 2, md: 1 }}>
+          <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
+            {step === "payment" && order ? (
+              paymentIntentMutation.isPending ? (
+                <Stack align="center" py="xl" gap="xs">
+                  <Loader />
+                  <Text c="dimmed" size="sm">
+                    Preparing payment…
+                  </Text>
+                </Stack>
+              ) : clientSecret ? (
+                <CheckoutPaymentStep
+                  eventId={event.id}
+                  order={order}
+                  clientSecret={clientSecret}
+                  defaultBillingCountry={event.location?.country}
+                  onPaid={(updatedOrder) => {
+                    sessionStorage.removeItem(checkoutStorageKey(event.id));
+                    clearCart(event.id);
+                    setOrder(updatedOrder);
+                    setStep("confirmation");
+                  }}
+                />
+              ) : (
+                // Reservation was created but the payment-intent call failed —
+                // retry against the same order rather than re-collecting details.
+                <Stack align="center" py="xl" gap="md">
+                  <Alert color="red" icon={<IconAlertCircle size={18} />} title="Couldn't start payment">
+                    Your tickets are still reserved (order {order.short_id}). Try again below.
+                  </Alert>
+                  <Button onClick={() => paymentIntentMutation.mutate(order)}>Retry</Button>
+                </Stack>
+              )
+            ) : (
+              <CheckoutDetailsForm
+                event={event}
+                cartItems={cartItems}
+                totalDue={total}
+                onOrderCreated={handleOrderCreated}
+                onBack={() => router.push(backUrl)}
+              />
+            )}
+          </Paper>
+        </GridCol>
 
-  if (step === "confirmation" && order) {
-    return <OrderConfirmation eventId={event.id} order={order} />;
+        <GridCol span={{ base: 12, md: 5 }} order={{ base: 1, md: 2 }}>
+          <Box pos={{ base: "static", md: "sticky" }} top={84}>
+            <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
+              <CheckoutOrderSummary event={event} lines={order ? { order } : { lines: summaryLines }} />
+            </Paper>
+          </Box>
+        </GridCol>
+      </Grid>
+    );
   }
 
   return (
-    <Grid gutter="xl">
-      <GridCol span={{ base: 12, md: 7 }} order={{ base: 2, md: 1 }}>
-        <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
-          {step === "payment" && order ? (
-            paymentIntentMutation.isPending ? (
-              <Stack align="center" py="xl" gap="xs">
-                <Loader />
-                <Text c="dimmed" size="sm">
-                  Preparing payment…
-                </Text>
-              </Stack>
-            ) : clientSecret ? (
-              <CheckoutPaymentStep
-                eventId={event.id}
-                order={order}
-                clientSecret={clientSecret}
-                defaultBillingCountry={event.location?.country}
-                onPaid={() => {
-                  sessionStorage.removeItem(checkoutStorageKey(event.id));
-                  clearCart(event.id);
-                  setStep("confirmation");
-                }}
-              />
-            ) : (
-              // Reservation was created but the payment-intent call failed —
-              // retry against the same order rather than re-collecting details.
-              <Stack align="center" py="xl" gap="md">
-                <Alert color="red" icon={<IconAlertCircle size={18} />} title="Couldn't start payment">
-                  Your tickets are still reserved (order {order.short_id}). Try again below.
-                </Alert>
-                <Button onClick={() => paymentIntentMutation.mutate(order)}>Retry</Button>
-              </Stack>
-            )
-          ) : (
-            <CheckoutDetailsForm
-              event={event}
-              cartItems={cartItems}
-              totalDue={total}
-              onOrderCreated={handleOrderCreated}
-              onBack={() => router.push(backUrl)}
-            />
-          )}
-        </Paper>
-      </GridCol>
-
-      <GridCol span={{ base: 12, md: 5 }} order={{ base: 1, md: 2 }}>
-        <Box pos={{ base: "static", md: "sticky" }} top={84}>
-          <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
-            <CheckoutOrderSummary event={event} lines={order ? { order } : { lines: summaryLines }} />
-          </Paper>
-        </Box>
-      </GridCol>
-    </Grid>
+    <Stack gap="lg">
+      {showBookingHeader && (
+        <Stack gap="lg">
+          <Text component="a" href={backUrl} size="sm" fw={500} style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}>
+            <IconArrowLeft size={16} /> Back to event details
+          </Text>
+          <Stack gap={4}>
+            <Title order={1} fz={{ base: 24, sm: 30 }}>
+              Complete your booking
+            </Title>
+            <Text c="dimmed">You&apos;re almost there — fill in your details and pay to confirm your tickets.</Text>
+          </Stack>
+        </Stack>
+      )}
+      {content}
+    </Stack>
   );
 }
