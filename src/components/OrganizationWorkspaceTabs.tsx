@@ -2,9 +2,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Badge, Card, Group, Loader, Pagination, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Badge, Button, Card, Group, Loader, Pagination, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle, IconBuildingStore, IconTicket, IconUsers } from '@tabler/icons-react';
+import { redirectOnAdminAuthError } from '@/lib/adminAuthErrorRedirect';
+import { AdminReplacePaymentAccountModal } from '@/components/AdminReplacePaymentAccountModal';
 import { fetchOrganizationWorkspace, type MoneySummary } from '@/lib/platformOrganizationApi';
 
 type Overview = { period: { from: string; to: string }; lifetime: MoneySummary[]; period_financials: MoneySummary[]; events: { total: number; by_status: Record<string, number> }; tickets: { issued: number; checked_in: number }; health_alerts: AlertRow[]; recent_activity: ActivityRow[]; last_updated_at: string };
@@ -40,7 +44,7 @@ export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPa
     <Tabs.Panel value="sales" pt="lg"><OrdersPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="customers" pt="lg"><CustomersPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="team" pt="lg"><TeamPanel organizationId={organizationId} /></Tabs.Panel>
-    <Tabs.Panel value="payments" pt="lg"><PaymentsPanel organizationId={organizationId} /></Tabs.Panel>
+    <Tabs.Panel value="payments" pt="lg"><PaymentsPanel organizationId={organizationId} canReplaceAccount={has('payouts.replace_account')} /></Tabs.Panel>
     <Tabs.Panel value="notes" pt="lg">{notesPanel}</Tabs.Panel>
     <Tabs.Panel value="activity" pt="lg"><ActivityPanel organizationId={organizationId} /></Tabs.Panel>
   </Tabs>;
@@ -72,5 +76,34 @@ function EventsPanel({ organizationId }: { organizationId: string }) {
 function OrdersPanel({ organizationId }: { organizationId:string }) { const [page,setPage]=useState(1),[q,setQ]=useState(''),[status,setStatus]=useState(''); const query=useQuery({queryKey:['org-orders',organizationId,page,q,status],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'orders',{page,q,status})}); const rows=(query.data?.orders??[]) as Record<string,any>[]; return <Stack><Group><TextInput placeholder="Order or event" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={v=>setStatus(v??'')} data={['RESERVED','COMPLETED','CANCELLED','AWAITING_OFFLINE_PAYMENT','ABANDONED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped><Table.Thead><Table.Tr><Table.Th>Order</Table.Th><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Source</Table.Th><Table.Th>Total</Table.Th><Table.Th>Created</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.short_id}</Table.Td><Table.Td>{r.event_title}</Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{r.source}</Table.Td><Table.Td>{money(r.total_amount,r.currency)}</Table.Td><Table.Td>{date(r.created_at)}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No orders match these filters."/>}</Stack>; }
 function CustomersPanel({organizationId}:{organizationId:string}) { const [page,setPage]=useState(1),[q,setQ]=useState(''); const query=useQuery({queryKey:['org-customers',organizationId,page,q],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'customers',{page,q})}); const rows=(query.data?.customers??[]) as Record<string,any>[]; return <Stack><TextInput placeholder="Search customers" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/>{!query.data?<Loading error={query.error}/>:rows.length?<><Table><Table.Thead><Table.Tr><Table.Th>Customer</Table.Th><Table.Th>Contact (masked)</Table.Th><Table.Th>Events</Table.Th><Table.Th>Tickets</Table.Th><Table.Th>Checked in</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.first_name} {r.last_name}</Table.Td><Table.Td>{r.email}<br/>{r.phone}</Table.Td><Table.Td>{r.events_count}</Table.Td><Table.Td>{r.tickets_count}</Table.Td><Table.Td>{r.checked_in_count}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No customers yet."/>}</Stack>; }
 function TeamPanel({organizationId}:{organizationId:string}) { const query=useQuery({queryKey:['org-team',organizationId],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'team')}); const rows=(query.data?.members??[]) as Record<string,any>[]; return !query.data?<Loading error={query.error}/>:rows.length?<Table><Table.Thead><Table.Tr><Table.Th>Member</Table.Th><Table.Th>Role</Table.Th><Table.Th>Status</Table.Th><Table.Th>Joined</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.first_name} {r.last_name}</Table.Td><Table.Td>{r.role}</Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{date(r.joined_at)}</Table.Td></Table.Tr>)}</Table.Tbody></Table>:<Empty label="No team members."/>; }
-function PaymentsPanel({organizationId}:{organizationId:string}) { const query=useQuery({queryKey:['org-payments',organizationId],queryFn:()=>fetchOrganizationWorkspace<{payments:{financials:MoneySummary[];accounts:Record<string,any>[];payouts:Record<string,any>[];last_updated_at:string}}>(organizationId,'payments'),refetchInterval:30000}); if(!query.data)return <Loading error={query.error}/>; const p=query.data.payments; return <Stack><FinancialCards rows={p.financials}/><Title order={4}>Payment accounts</Title>{p.accounts.map(a=><Card withBorder key={a.id}><Group justify="space-between"><Text fw={600}>{a.provider} · {a.environment}</Text><Badge color={a.payments_enabled?'teal':'red'}>{a.account_status}</Badge></Group><Text size="sm" c="dimmed">Routing {a.routing_status} · Payments {a.payments_enabled?'enabled':'disabled'} · Transfers {a.transfers_enabled?'enabled':'disabled'}</Text></Card>)}<Title order={4}>Payout history</Title>{p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Text>{x.note||'Payout release'}</Text><Text fw={700}>{money(String(Number(x.amount_minor)/100),x.currency)}</Text></Group><Text size="xs" c="dimmed">{x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}</Stack>; }
+function PaymentsPanel({organizationId, canReplaceAccount}:{organizationId:string; canReplaceAccount: boolean}) {
+  const router = useRouter();
+  const [replaceModalOpen, setReplaceModalOpen] = useState(false);
+  const query=useQuery({queryKey:['org-payments',organizationId],queryFn:()=>fetchOrganizationWorkspace<{payments:{financials:MoneySummary[];accounts:Record<string,any>[];payouts:Record<string,any>[];last_updated_at:string}}>(organizationId,'payments'),refetchInterval:30000});
+  if(!query.data)return <Loading error={query.error}/>;
+  const p=query.data.payments;
+  return <Stack>
+    <FinancialCards rows={p.financials}/>
+    <Group justify="space-between" align="center">
+      <Title order={4}>Payment accounts</Title>
+      {canReplaceAccount && <Button variant="outline" color="red" size="xs" onClick={() => setReplaceModalOpen(true)}>Replace payment account</Button>}
+    </Group>
+    {p.accounts.map(a=><Card withBorder key={a.id}><Group justify="space-between"><Text fw={600}>{a.provider} · {a.environment}</Text><Badge color={a.payments_enabled?'teal':'red'}>{a.account_status}</Badge></Group><Text size="sm" c="dimmed">Routing {a.routing_status} · Payments {a.payments_enabled?'enabled':'disabled'} · Transfers {a.transfers_enabled?'enabled':'disabled'}</Text></Card>)}
+    <Title order={4}>Payout history</Title>
+    {p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Text>{x.note||'Payout release'}</Text><Text fw={700}>{money(String(Number(x.amount_minor)/100),x.currency)}</Text></Group><Text size="xs" c="dimmed">{x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}
+    {canReplaceAccount && (
+      <AdminReplacePaymentAccountModal
+        opened={replaceModalOpen}
+        onClose={() => setReplaceModalOpen(false)}
+        organizationId={organizationId}
+        onReplaced={() => query.refetch()}
+        onError={(error) => {
+          const redirected = redirectOnAdminAuthError(error, router);
+          if (!redirected) notifications.show({ color: 'red', message: error.message });
+          return redirected;
+        }}
+      />
+    )}
+  </Stack>;
+}
 function ActivityPanel({organizationId}:{organizationId:string}) { const [category,setCategory]=useState(''); const query=useQuery({queryKey:['org-activity',organizationId,category],queryFn:()=>fetchOrganizationWorkspace<Page<ActivityRow>>(organizationId,'activity',{category})}); const rows=(query.data?.activity??[]) as ActivityRow[]; return <Stack><Select clearable placeholder="Activity type" value={category} onChange={v=>setCategory(v??'')} data={[{value:'event',label:'Events'},{value:'commerce',label:'Commerce'},{value:'admin',label:'Platform admin'}]}/>{!query.data?<Loading error={query.error}/>:rows.length?rows.map(row=><Card withBorder key={row.id}><Group justify="space-between"><Stack gap={2}><Group><Badge variant="light">{row.category}</Badge><Text fw={600}>{row.action.replaceAll('_',' ')}</Text></Group><Text size="sm">{row.summary}</Text></Stack><Stack gap={2} align="flex-end"><Text size="xs" c="dimmed">{date(row.occurred_at)}</Text><Badge size="xs" color={row.source==='derived'?'gray':'blue'}>{row.source}</Badge></Stack></Group></Card>):<Empty label="No activity matches this filter."/>}</Stack>; }

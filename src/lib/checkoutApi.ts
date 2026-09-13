@@ -140,7 +140,12 @@ export function createPaymentIntent(eventId: number, shortId: string) {
 }
 
 export function getOrderPaymentStatus(eventId: number, shortId: string) {
-  return request<{ status: OrderStatus; completed_at: string | null }>(
+  // `order` is only present once `status` is COMPLETED — the frontend's
+  // only in-memory order snapshot is the pre-payment RESERVED one, which
+  // has no entitlements yet (unassigned_count/attendees are always
+  // empty on it), so this is the one place a fresh, post-completion
+  // order can be picked up.
+  return request<{ status: OrderStatus; completed_at: string | null; order?: Order }>(
     `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/payment-status`,
   );
 }

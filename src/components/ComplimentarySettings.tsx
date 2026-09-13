@@ -12,7 +12,7 @@ import { updateComplimentaryProgram, type ComplimentaryProgram, type DeadlineMod
 import type { Product } from "@/lib/productApi";
 import { complimentaryInventory, optionRemaining, poolLineKey } from "@/lib/complimentaryInventory";
 
-export function ComplimentarySettings({ eventId, initialProgram, products, disabled }: { eventId: number; initialProgram: ComplimentaryProgram; products: Product[]; disabled: boolean }) {
+export function ComplimentarySettings({ eventId, initialProgram, products, disabled, onSaved }: { eventId: number; initialProgram: ComplimentaryProgram; products: Product[]; disabled: boolean; onSaved?: () => void }) {
   const router = useRouter();
   const [program, setProgram] = useState(initialProgram);
   const [enabled, setEnabled] = useState(initialProgram.status === "ACTIVE");
@@ -56,6 +56,7 @@ export function ComplimentarySettings({ eventId, initialProgram, products, disab
       // (reverts to the pre-save figure) until the next full page load.
       router.refresh();
       notifications.show({ color: "teal", icon: <IconCheck size={16} />, message: "Complimentary settings saved." });
+      onSaved?.();
     },
     onError: (error: Error) => notifications.show({ color: "red", message: error.message }),
   });

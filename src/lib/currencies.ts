@@ -47,11 +47,3 @@ function buildCurrencies(): Currency[] {
 export const CURRENCIES: Currency[] = buildCurrencies();
 
 export const CURRENCIES_BY_CODE: Map<string, Currency> = new Map(CURRENCIES.map((c) => [c.code, c]));
-
-/** Country's cca2 -> its primary currency code, or null if unknown/online (no country). */
-export function suggestCurrencyForCountryCode(countryCode: string | null | undefined): string | null {
-  if (!countryCode) return null;
-  const country = worldCountries.find((c) => c.cca2 === countryCode);
-  if (!country?.currencies) return null;
-  return Object.keys(country.currencies)[0] ?? null;
-}
