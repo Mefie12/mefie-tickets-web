@@ -379,7 +379,7 @@ function EventDetailsForm({
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <EventDetailsFields
               values={form.values}
@@ -504,7 +504,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <Group grow align="flex-start">
               <TextInput
@@ -627,7 +627,7 @@ function EventLocationForm({
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <LocationFields
               values={form.values}

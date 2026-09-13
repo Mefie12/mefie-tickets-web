@@ -27,6 +27,12 @@ const EXPANDED_WIDTH = 260;
 const RAIL_WIDTH = 80;
 // Mantine `sm` — must match the AppShell navbar `breakpoint` below.
 const DESKTOP_QUERY = "(min-width: 48em)";
+// 768-991px — the persistent sidebar's own width (260px) eats over a third
+// of a tablet's viewport at this range, before any page content even
+// starts. Matches eventOperationsNav.module.css's 62em ("md and up")
+// breakpoint, so the sidebar and the event sub-nav agree on what counts
+// as "tablet" vs "desktop".
+const TABLET_QUERY = "(min-width: 48em) and (max-width: 61.9375em)";
 
 export type ConsoleBrand = {
   /** ~24-28px mark. */
@@ -81,10 +87,22 @@ export function ConsoleShell({
 }) {
   const pathname = usePathname();
   const [mobileOpened, { toggle: toggleMobile, close: closeMobile }] = useDisclosure(false);
-  const [collapsed, setCollapsed] = useLocalStorage({ key: storageKey, defaultValue: false });
+  // `null` means the organizer has never explicitly toggled this — once
+  // they do, setCollapsed always writes a real boolean, which then wins
+  // over the tablet default on every device from then on (same
+  // cross-device persistence useLocalStorage already gave the manual
+  // toggle before this change).
+  const [storedCollapsed, setCollapsed] = useLocalStorage<boolean | null>({ key: storageKey, defaultValue: null });
   // Desktop-first: assume desktop before the effect resolves so the server
   // render and first paint match the common (desktop) case.
   const isDesktop = useMediaQuery(DESKTOP_QUERY, true);
+  // No stored preference yet: default to the icon rail specifically in the
+  // 768-991px range, where the full 260px sidebar leaves barely 460px for
+  // actual content — full desktop widths keep the previous expanded
+  // default. Stays reactive to live viewport changes (e.g. a tablet
+  // rotating) for as long as no explicit preference has been set.
+  const isTablet = useMediaQuery(TABLET_QUERY, false) ?? false;
+  const collapsed = storedCollapsed ?? isTablet;
   const railCollapsed = isDesktop ? collapsed : false;
 
   // Tapping any nav link on mobile navigates — dismiss the drawer with it.
@@ -106,7 +124,14 @@ export function ConsoleShell({
         collapsed: { mobile: !mobileOpened, desktop: false },
       }}
       padding="md"
-      zIndex={200}
+      // Mantine's own scale is app:100 < modal:200 < popover:300 < overlay:400
+      // (see --mantine-z-index-* in @mantine/core/styles.css) — this used to
+      // be 200, tied with Modal's own z-index, which ties resolve by DOM/paint
+      // order rather than a documented rule. That let the navbar render over
+      // an open Modal (e.g. "Add ticket type") whenever the mobile drawer was
+      // open. Staying at the "app chrome" tier keeps every Modal/Popover in
+      // the app correctly above the nav, not just this one call site.
+      zIndex={100}
       // CSS transitions on the AppShell navbar (width AND transform) stall
       // mid-tween under dev re-renders / Fast Refresh and leave the navbar
       // stuck in an intermediate state. Snap instead.
@@ -146,7 +171,7 @@ export function ConsoleShell({
       </AppShell.Header>
 
       {mobileOpened && (
-        <Overlay hiddenFrom="sm" onClick={closeMobile} zIndex={199} fixed backgroundOpacity={0.55} />
+        <Overlay hiddenFrom="sm" onClick={closeMobile} zIndex={99} fixed backgroundOpacity={0.55} />
       )}
 
       <AppShell.Navbar

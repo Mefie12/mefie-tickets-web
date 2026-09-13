@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NavLink, Stack, Text } from "@mantine/core";
+import { NavLink, Stack, Text, Tooltip } from "@mantine/core";
 import {
   IconGift,
   IconLayoutDashboard,
@@ -44,7 +44,7 @@ const sections: NavSection[] = [
   },
 ];
 
-export function EventOperationsNav({ eventId }: { eventId: number }) {
+export function EventOperationsNav({ eventId, collapsed = false }: { eventId: number; collapsed?: boolean }) {
   const pathname = usePathname();
   const base = `/events/${eventId}`;
 
@@ -52,7 +52,7 @@ export function EventOperationsNav({ eventId }: { eventId: number }) {
     <Stack gap="lg" role="navigation" aria-label="Event operations" className={classes.nav}>
       {sections.map((section) => (
         <Stack key={section.heading ?? "root"} gap={2}>
-          {section.heading && (
+          {section.heading && !collapsed && (
             <Text
               tt="uppercase"
               fz={12}
@@ -73,6 +73,20 @@ export function EventOperationsNav({ eventId }: { eventId: number }) {
                 : pathname.startsWith(href) ||
                   (item.alsoActiveOn ?? []).some((extra) => pathname.startsWith(`${base}${extra}`));
             const Icon = item.icon;
+            if (collapsed) {
+              return (
+                <Tooltip key={href} label={item.label} position="right" withArrow>
+                  <NavLink
+                    component={Link}
+                    href={href}
+                    aria-label={item.label}
+                    leftSection={<Icon size={20} />}
+                    active={active}
+                    className={classes.collapsedLink}
+                  />
+                </Tooltip>
+              );
+            }
             return (
               <NavLink
                 key={href}

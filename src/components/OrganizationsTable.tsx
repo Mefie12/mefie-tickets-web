@@ -18,6 +18,7 @@ import {
 } from "@mantine/core";
 import { IconSearch } from "@tabler/icons-react";
 import { redirectOnAdminAuthError } from "@/lib/adminAuthErrorRedirect";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { listOrganizations, type AdminOrganization, type PageMeta } from "@/lib/platformOrganizationApi";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -85,7 +86,7 @@ export function OrganizationsTable({
       </Group>
 
       <Card withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
-        <Table.ScrollContainer minWidth={800}>
+        <TableScrollShadow minWidth={800}>
           <Table verticalSpacing="sm" horizontalSpacing="md">
             <Table.Thead>
               <Table.Tr>
@@ -138,7 +139,7 @@ export function OrganizationsTable({
               ))}
             </Table.Tbody>
           </Table>
-        </Table.ScrollContainer>
+        </TableScrollShadow>
       </Card>
 
       {meta.last_page > 1 && (

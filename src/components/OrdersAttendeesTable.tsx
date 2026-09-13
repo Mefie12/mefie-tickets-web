@@ -23,6 +23,7 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconAdjustmentsHorizontal, IconDots, IconSearch } from "@tabler/icons-react";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { exportOrdersUrl, listOrders, ORDER_STATUS, type OrderListItem, type OrderListResponse } from "@/lib/orderApi";
 import { exportAttendeesUrl, listAttendees, type AttendeeListItem, type AttendeeListResponse } from "@/lib/attendeeApi";
 import { formatAmount } from "@/lib/money";
@@ -319,7 +320,7 @@ export function OrdersAttendeesTable({
       )}
 
       <Card withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
-        <Table.ScrollContainer minWidth={880}>
+        <TableScrollShadow minWidth={880}>
           <Table highlightOnHover verticalSpacing={0} styles={tableStyles}>
             <Table.Thead>
               <Table.Tr>
@@ -503,7 +504,7 @@ export function OrdersAttendeesTable({
               })}
             </Table.Tbody>
           </Table>
-        </Table.ScrollContainer>
+        </TableScrollShadow>
 
         {!activeQuery.isLoading && rows.length === 0 && (
           <Box p="xl">

@@ -8,6 +8,7 @@ import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconUserPlus } from "@tabler/icons-react";
 import { redirectOnAdminAuthError } from "@/lib/adminAuthErrorRedirect";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { ApiError, type PlatformRole } from "@/lib/authApi";
 import {
   cancelAdminInvitation,
@@ -157,7 +158,7 @@ export function AdminStaffTable({ initialRows }: { initialRows: AdminUserRow[] }
       </Group>
 
       <Card withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
-        <Table.ScrollContainer minWidth={760}>
+        <TableScrollShadow minWidth={760}>
           <Table verticalSpacing="sm" horizontalSpacing="md">
             <Table.Thead>
               <Table.Tr>
@@ -234,7 +235,7 @@ export function AdminStaffTable({ initialRows }: { initialRows: AdminUserRow[] }
               ))}
             </Table.Tbody>
           </Table>
-        </Table.ScrollContainer>
+        </TableScrollShadow>
       </Card>
 
       <Modal opened={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite Admin Console staff">

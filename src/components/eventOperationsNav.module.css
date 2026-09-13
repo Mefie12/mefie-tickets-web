@@ -35,6 +35,16 @@
   }
 }
 
+/* Collapsed rail: icon only, centered, no label. */
+.collapsedLink :global(.mantine-NavLink-body) {
+  display: none;
+}
+
+.collapsedLink {
+  justify-content: center;
+  padding-inline: 0;
+}
+
 /* md and up: pin the sub-nav as a sticky second column. */
 .column {
   width: 100%;
@@ -53,6 +63,10 @@
     align-self: flex-start;
     position: sticky;
     top: 76px;
+  }
+
+  .column[data-collapsed] {
+    width: 80px;
   }
 }
 

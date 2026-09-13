@@ -127,7 +127,7 @@ export function RecurrenceRuleEditor({
 
   return (
     <Stack gap="md">
-      <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <Stack gap="md">
           <TextInput type="date" label="First occurrence" required value={startsOn} onChange={(e) => onStartsOnChange(e.currentTarget.value)} />
 
