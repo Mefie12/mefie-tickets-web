@@ -35,6 +35,7 @@ import {
 } from "@tabler/icons-react";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import {
   cancelOrder,
   orderView,
@@ -550,7 +551,7 @@ export function OrderDetail({
             {emptyTicketsNote}
           </Text>
         ) : (
-          <Table.ScrollContainer minWidth={760}>
+          <TableScrollShadow minWidth={760}>
             <Table verticalSpacing="sm">
               <Table.Thead>
                 <Table.Tr>
@@ -701,7 +702,7 @@ export function OrderDetail({
                 })}
               </Table.Tbody>
             </Table>
-          </Table.ScrollContainer>
+          </TableScrollShadow>
         )}
       </Section>
 

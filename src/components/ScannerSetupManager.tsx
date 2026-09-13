@@ -6,6 +6,7 @@ import { ActionIcon, Alert, Badge, Button, Card, CopyButton, Group, Image, List,
 import { IconTrash } from "@tabler/icons-react";
 import type { EventGate } from "@/lib/gateRoutingApi";
 import { GateConfigStatus } from "@/components/GateConfigStatus";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import {
   createScannerSetup,
   listScannerSetups,
@@ -228,7 +229,7 @@ export function ScannerSetupManager({
       </Group>
       {rows.length === 0
         ? <Text size="sm" c="dimmed">No scanner setups yet. Create one above.</Text>
-        : <Table.ScrollContainer minWidth={760}><Table verticalSpacing="sm" highlightOnHover>
+        : <TableScrollShadow minWidth={760}><Table verticalSpacing="sm" highlightOnHover>
           <Table.Thead><Table.Tr>
             <Table.Th>Setup</Table.Th><Table.Th>Assignment</Table.Th><Table.Th>Recipient</Table.Th><Table.Th>Activation</Table.Th><Table.Th>Created</Table.Th><Table.Th /></Table.Tr></Table.Thead>
           <Table.Tbody>{rows.map((setup) => {
@@ -275,7 +276,7 @@ export function ScannerSetupManager({
               </Table.Td>
             </Table.Tr>;
           })}</Table.Tbody>
-        </Table></Table.ScrollContainer>}
+        </Table></TableScrollShadow>}
       <Text size="xs" c="dimmed" mt="sm">
         The setup link stays valid for the whole event — only the activation code expires (resend it above).
         To pause, retire, or move a device that has already enrolled, use{" "}

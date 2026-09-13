@@ -149,7 +149,10 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
           pos="fixed"
           bottom={16}
           left="50%"
-          style={{ transform: "translateX(-50%)", zIndex: 200, maxWidth: "min(560px, 92vw)", width: "100%" }}
+          // Mantine's own scale is app:100 < modal:200 (@mantine/core/styles.css)
+          // — this used to tie with Modal's z-index, which let this bar render
+          // over the AssignEntitlementModal/batch-links modal its own buttons open.
+          style={{ transform: "translateX(-50%)", zIndex: 100, maxWidth: "min(560px, 92vw)", width: "100%" }}
         >
           <Group justify="space-between" wrap="nowrap">
             <Text size="sm" fw={500}>

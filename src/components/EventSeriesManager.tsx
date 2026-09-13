@@ -294,7 +294,7 @@ function DetailsForm({ series, onUpdated, disabled, onSaved }: { series: EventSe
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <EventDetailsFields
               values={form.values}
@@ -432,7 +432,7 @@ function LocationForm({ series, onUpdated, disabled, onSaved }: { series: EventS
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <LocationFields
               values={form.values}

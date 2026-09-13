@@ -24,7 +24,11 @@ export function PrivacyConsentBanner() {
       right={0}
       p="md"
       style={{
-        zIndex: 200,
+        // Mantine's own scale is app:100 < modal:200 (@mantine/core/styles.css)
+        // — this used to tie with Modal's z-index, which let the banner render
+        // over "See details"' own preferences modal. "Never blocks discovery
+        // or checkout" (see docblock) means every Modal must stay above this.
+        zIndex: 100,
         backgroundColor: "var(--mantine-color-body)",
         borderTop: "1px solid var(--mantine-color-default-border)",
         boxShadow: "0 -4px 16px rgba(0, 0, 0, 0.08)",
