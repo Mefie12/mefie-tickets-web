@@ -69,6 +69,16 @@ const TAB_DEFS = [
 ];
 const VALID_TABS = TAB_DEFS.map((t) => t.value);
 
+// Only forms with one discrete "this tab is done" save action advance the
+// organizer forward — a tab that's an open-ended list (media, tickets,
+// questions, content) or a multi-step/no-single-save workflow (terms,
+// which auto-saves per field) never fires this, since there's no way to
+// know the organizer is actually finished with it.
+function nextTab(current: string): string | null {
+  const index = VALID_TABS.indexOf(current);
+  return index >= 0 && index < VALID_TABS.length - 1 ? VALID_TABS[index + 1] : null;
+}
+
 type StatusConfirmation = {
   title: string;
   body: string;
@@ -152,6 +162,11 @@ export function EventManager({
     },
   });
 
+  const advanceTab = (fromTab: string) => {
+    const next = nextTab(fromTab);
+    if (next) handleTabChange(next);
+  };
+
   const confirmation = requestedStatus ? statusConfirmation(event.status, requestedStatus) : null;
 
   const requestStatusChange = (status: EventStatus) => {
@@ -225,13 +240,13 @@ export function EventManager({
         <ScrollableTabsBar tabs={TAB_DEFS} value={tab} onChange={handleTabChange} />
 
         <Tabs.Panel value="details" pt="lg">
-          <EventDetailsForm event={event} onUpdated={setEvent} disabled={archived} />
+          <EventDetailsForm event={event} onUpdated={setEvent} disabled={archived} onSaved={() => advanceTab("details")} />
         </Tabs.Panel>
         <Tabs.Panel value="date-time" pt="lg">
-          <EventDateTimeForm event={event} onUpdated={setEvent} disabled={archived} />
+          <EventDateTimeForm event={event} onUpdated={setEvent} disabled={archived} onSaved={() => advanceTab("date-time")} />
         </Tabs.Panel>
         <Tabs.Panel value="location" pt="lg">
-          <EventLocationForm event={event} onUpdated={setEvent} disabled={archived} />
+          <EventLocationForm event={event} onUpdated={setEvent} disabled={archived} onSaved={() => advanceTab("location")} />
         </Tabs.Panel>
         <Tabs.Panel value="media" pt="lg">
           <EventMediaEditor eventId={event.id} initialEvent={event} disabled={archived} />
@@ -246,7 +261,7 @@ export function EventManager({
           />
         </Tabs.Panel>
         <Tabs.Panel value="complimentary" pt="lg">
-          <ComplimentarySettings eventId={event.id} initialProgram={initialComplimentaryProgram} products={initialProducts} disabled={archived} />
+          <ComplimentarySettings eventId={event.id} initialProgram={initialComplimentaryProgram} products={initialProducts} disabled={archived} onSaved={() => advanceTab("complimentary")} />
         </Tabs.Panel>
         <Tabs.Panel value="questions" pt="lg">
           <QuestionsEditor eventId={event.id} initialQuestions={initialQuestions} disabled={archived} />
@@ -269,10 +284,12 @@ function EventDetailsForm({
   event,
   onUpdated,
   disabled,
+  onSaved,
 }: {
   event: Event;
   onUpdated: (event: Event) => void;
   disabled: boolean;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const taxonomies = useQuery<EventTaxonomies>({ queryKey: ["event-taxonomies"], queryFn: getEventTaxonomies });
@@ -321,7 +338,7 @@ function EventDetailsForm({
       attribute_ids: values.attribute_ids.map(Number),
       currency_code: values.currency_code,
     }),
-    onSuccess: (data: { event: Event }) => { onUpdated(data.event); notifications.show({ color: "teal", message: "Event details updated." }); },
+    onSuccess: (data: { event: Event }) => { onUpdated(data.event); notifications.show({ color: "teal", message: "Event details updated." }); onSaved?.(); },
     onError: (error: Error) => handleFormError(error, form.setErrors, router),
   });
 
@@ -389,7 +406,7 @@ function EventDetailsForm({
   );
 }
 
-function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpdated: (event: Event) => void; disabled: boolean }) {
+function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Event; onUpdated: (event: Event) => void; disabled: boolean; onSaved?: () => void }) {
   const router = useRouter();
   const start = event.start_date ? utcIsoToZonedParts(event.start_date, event.timezone) : { date: "", time: "" };
   const end = event.end_date ? utcIsoToZonedParts(event.end_date, event.timezone) : { date: "", time: "" };
@@ -444,6 +461,7 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
     onSuccess: (data: { event: Event }) => {
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Date and time updated." });
+      onSaved?.();
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
@@ -510,10 +528,12 @@ function EventLocationForm({
   event,
   onUpdated,
   disabled,
+  onSaved,
 }: {
   event: Event;
   onUpdated: (event: Event) => void;
   disabled: boolean;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const loc = event.location_details;
@@ -549,6 +569,7 @@ function EventLocationForm({
     onSuccess: (data: { event: Event }) => {
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Location updated." });
+      onSaved?.();
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;

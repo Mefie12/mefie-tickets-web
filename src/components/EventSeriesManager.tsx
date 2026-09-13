@@ -81,6 +81,15 @@ function isGeneratingStatus(status: EventSeries["generation_status"]): boolean {
 
 const VALID_TABS = ["details", "recurrence", "location", "media", "ticket-setup", "questions", "content", "terms", "publish"];
 
+// Same rule as EventManager.tsx's nextTab: only a tab with one discrete
+// save action advances the organizer forward — open-ended lists (media,
+// tickets, questions, content) and terms (auto-saves per field, no
+// single "done" moment) never call this.
+function nextTab(current: string): string | null {
+  const index = VALID_TABS.indexOf(current);
+  return index >= 0 && index < VALID_TABS.length - 1 ? VALID_TABS[index + 1] : null;
+}
+
 function seriesToRecurrenceValues(series: EventSeries): RecurrenceFormValues {
   return {
     frequency: series.frequency,
@@ -117,6 +126,11 @@ export function EventSeriesManager({
   const activeTab = requestedTab && VALID_TABS.includes(requestedTab) ? requestedTab : "details";
   const disabled = series.status !== "DRAFT";
   const isGenerating = isGeneratingStatus(series.generation_status);
+
+  const advanceTab = (fromTab: string) => {
+    const next = nextTab(fromTab);
+    if (next) router.replace(`?tab=${next}`, { scroll: false });
+  };
 
   // §4.3 — polls the series' own show endpoint while a publish/extend/
   // pattern-change job is running in the background, so the organizer
@@ -201,13 +215,13 @@ export function EventSeriesManager({
         </Tabs.List>
 
         <Tabs.Panel value="details" pt="lg">
-          <DetailsForm series={series} onUpdated={setSeries} disabled={disabled} />
+          <DetailsForm series={series} onUpdated={setSeries} disabled={disabled} onSaved={() => advanceTab("details")} />
         </Tabs.Panel>
         <Tabs.Panel value="recurrence" pt="lg">
-          <RecurrenceForm series={series} onUpdated={setSeries} disabled={disabled} />
+          <RecurrenceForm series={series} onUpdated={setSeries} disabled={disabled} onSaved={() => advanceTab("recurrence")} />
         </Tabs.Panel>
         <Tabs.Panel value="location" pt="lg">
-          <LocationForm series={series} onUpdated={setSeries} disabled={disabled} />
+          <LocationForm series={series} onUpdated={setSeries} disabled={disabled} onSaved={() => advanceTab("location")} />
         </Tabs.Panel>
         <Tabs.Panel value="media" pt="lg">
           <EventMediaEditor eventId={series.template_event_id} initialEvent={initialTemplateEvent} disabled={disabled} />
@@ -238,7 +252,7 @@ export function EventSeriesManager({
   );
 }
 
-function DetailsForm({ series, onUpdated, disabled }: { series: EventSeries; onUpdated: (series: EventSeries) => void; disabled: boolean }) {
+function DetailsForm({ series, onUpdated, disabled, onSaved }: { series: EventSeries; onUpdated: (series: EventSeries) => void; disabled: boolean; onSaved?: () => void }) {
   const router = useRouter();
   const taxonomies = useQuery<EventTaxonomies>({ queryKey: ["event-taxonomies"], queryFn: getEventTaxonomies });
 
@@ -263,7 +277,7 @@ function DetailsForm({ series, onUpdated, disabled }: { series: EventSeries; onU
         event_category_id: values.event_category_id ? Number(values.event_category_id) : null,
         event_subcategory_id: values.event_subcategory_id ? Number(values.event_subcategory_id) : null,
       }),
-    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Series details updated." }); },
+    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Series details updated." }); onSaved?.(); },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
       if (error instanceof ApiError && error.errors) {
@@ -303,7 +317,7 @@ function DetailsForm({ series, onUpdated, disabled }: { series: EventSeries; onU
   );
 }
 
-function RecurrenceForm({ series, onUpdated, disabled }: { series: EventSeries; onUpdated: (series: EventSeries) => void; disabled: boolean }) {
+function RecurrenceForm({ series, onUpdated, disabled, onSaved }: { series: EventSeries; onUpdated: (series: EventSeries) => void; disabled: boolean; onSaved?: () => void }) {
   const router = useRouter();
   const [startsOn, setStartsOn] = useState(series.starts_on);
   const [values, setValues] = useState<RecurrenceFormValues>(seriesToRecurrenceValues(series));
@@ -311,7 +325,7 @@ function RecurrenceForm({ series, onUpdated, disabled }: { series: EventSeries; 
 
   const mutation = useMutation({
     mutationFn: () => updateEventSeries(series.id, { starts_on: startsOn, recurrence: toRecurrenceRuleInput(values) }),
-    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Schedule updated." }); },
+    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Schedule updated." }); onSaved?.(); },
     onError: (err: Error) => {
       if (redirectOnAuthError(err, router)) return;
       setError(err.message);
@@ -333,7 +347,7 @@ function RecurrenceForm({ series, onUpdated, disabled }: { series: EventSeries; 
   );
 }
 
-function LocationForm({ series, onUpdated, disabled }: { series: EventSeries; onUpdated: (series: EventSeries) => void; disabled: boolean }) {
+function LocationForm({ series, onUpdated, disabled, onSaved }: { series: EventSeries; onUpdated: (series: EventSeries) => void; disabled: boolean; onSaved?: () => void }) {
   const router = useRouter();
   const loc = series.location_details;
 
@@ -364,7 +378,7 @@ function LocationForm({ series, onUpdated, disabled }: { series: EventSeries; on
 
   const mutation = useMutation({
     mutationFn: (values: typeof form.values) => updateEventSeries(series.id, { location: values as EventLocationInput }),
-    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Location updated." }); },
+    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Location updated." }); onSaved?.(); },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
       if (error instanceof ApiError && error.errors) {

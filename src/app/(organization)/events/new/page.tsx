@@ -56,7 +56,7 @@ export default function NewEventPage() {
         attribute_ids: values.attribute_ids.map(Number),
         currency_code: values.currency_code || undefined,
       }),
-    onSuccess: (data: { event: Event }) => router.push(`/events/${data.event.id}?tab=date-time`),
+    onSuccess: (data: { event: Event }) => router.push(`/events/${data.event.id}/settings?tab=date-time`),
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
       if (error instanceof ApiError && error.errors) {

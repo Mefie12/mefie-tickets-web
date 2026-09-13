@@ -44,7 +44,7 @@ export default function NewRecurringEventPage() {
         event_category_id: values.event_category_id ? Number(values.event_category_id) : null,
         event_subcategory_id: values.event_subcategory_id ? Number(values.event_subcategory_id) : null,
       }),
-    onSuccess: (data: { event_series: EventSeries }) => router.push(`/event-series/${data.event_series.id}`),
+    onSuccess: (data: { event_series: EventSeries }) => router.push(`/event-series/${data.event_series.id}?tab=location`),
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
       if (error instanceof ApiError && error.errors) {
