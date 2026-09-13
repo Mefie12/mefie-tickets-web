@@ -7,7 +7,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Anchor, Button, Card, Group, MultiSelect, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { CurrencySelector } from "@/components/CurrencySelector";
 import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
 import { EventDetailsFields } from "@/components/EventDetailsFields";
 import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
@@ -104,10 +103,19 @@ export default function NewEventPage() {
                 }
               />
             ) : (
-              <CurrencySelector
-                label="Currency (optional)"
-                description="No payment setup yet — this is provisional and will be locked to whatever currency you eventually set up payments in."
-                {...form.getInputProps("currency_code")}
+              <TextInput
+                label="Currency"
+                placeholder="Not set"
+                value=""
+                disabled
+                description={
+                  <>
+                    Set up payments to determine your event&apos;s currency.{" "}
+                    <Anchor component={Link} href="/organization/payments">
+                      Go to Payments
+                    </Anchor>
+                  </>
+                }
               />
             )}
             <MultiSelect searchable clearable label="Audience (optional)" description="Helps attendees discover events intended for them."

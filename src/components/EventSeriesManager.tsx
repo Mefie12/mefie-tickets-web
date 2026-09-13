@@ -28,6 +28,8 @@ import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { LocationFields, needsOnline, needsVenue } from "@/components/LocationFields";
 import { EventDetailsFields } from "@/components/EventDetailsFields";
+import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
+import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
 import type { MapboxSuggestion } from "@/lib/mapbox";
 import {
   DEFAULT_RECURRENCE_VALUES,
@@ -255,6 +257,7 @@ export function EventSeriesManager({
 function DetailsForm({ series, onUpdated, disabled, onSaved }: { series: EventSeries; onUpdated: (series: EventSeries) => void; disabled: boolean; onSaved?: () => void }) {
   const router = useRouter();
   const taxonomies = useQuery<EventTaxonomies>({ queryKey: ["event-taxonomies"], queryFn: getEventTaxonomies });
+  const paymentCurrency = useQuery({ queryKey: ["organization-payment-currency"], queryFn: getOrganizationPaymentCurrency });
 
   const form = useForm({
     initialValues: {
@@ -303,6 +306,34 @@ function DetailsForm({ series, onUpdated, disabled, onSaved }: { series: EventSe
               currentSubcategory={series.subcategory}
               titleLabel="Series title"
             />
+            {paymentCurrency.data ? (
+              <TextInput
+                label="Currency"
+                value={`${paymentCurrency.data} — set by your payment setup`}
+                disabled
+                description={
+                  <>
+                    Every price on this series&apos; template — tickets, tiers, checkout — is quoted in this
+                    currency, set by your organization&apos;s payment setup. <PaymentCurrencyExplainer />
+                  </>
+                }
+              />
+            ) : (
+              <TextInput
+                label="Currency"
+                placeholder="Not set"
+                value=""
+                disabled
+                description={
+                  <>
+                    Set up payments to determine this series&apos; currency.{" "}
+                    <Anchor component={Link} href="/organization/payments">
+                      Go to Payments
+                    </Anchor>
+                  </>
+                }
+              />
+            )}
             {!disabled ? (
               <Button type="submit" style={{ alignSelf: "flex-start" }} loading={mutation.isPending}>
                 Save changes

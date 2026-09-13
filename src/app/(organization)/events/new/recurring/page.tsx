@@ -5,19 +5,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Anchor, Button, Card, Group, Stack, Text, Title } from "@mantine/core";
+import { Anchor, Button, Card, Group, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { EventDetailsFields } from "@/components/EventDetailsFields";
+import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
 import { DEFAULT_RECURRENCE_VALUES, RecurrenceRuleEditor, toRecurrenceRuleInput, type RecurrenceFormValues } from "@/components/RecurrenceRuleEditor";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { getEventTaxonomies, type EventTaxonomies } from "@/lib/eventApi";
 import { createEventSeries, type EventSeries } from "@/lib/eventSeriesApi";
+import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
 
 export default function NewRecurringEventPage() {
   const router = useRouter();
   const [startsOn, setStartsOn] = useState("");
   const [recurrence, setRecurrence] = useState<RecurrenceFormValues>(DEFAULT_RECURRENCE_VALUES);
+  const paymentCurrency = useQuery({ queryKey: ["organization-payment-currency"], queryFn: getOrganizationPaymentCurrency });
 
   const taxonomies = useQuery<EventTaxonomies>({ queryKey: ["event-taxonomies"], queryFn: getEventTaxonomies });
 
@@ -83,6 +86,34 @@ export default function NewRecurringEventPage() {
               titleLabel="Series title"
               categoryLabel="Category (optional for drafts)"
             />
+            {paymentCurrency.data ? (
+              <TextInput
+                label="Currency"
+                value={`${paymentCurrency.data} — set by your payment setup`}
+                disabled
+                description={
+                  <>
+                    Every event in this series settles in your organization&apos;s payment currency.{" "}
+                    <PaymentCurrencyExplainer />
+                  </>
+                }
+              />
+            ) : (
+              <TextInput
+                label="Currency"
+                placeholder="Not set"
+                value=""
+                disabled
+                description={
+                  <>
+                    Set up payments to determine this series&apos; currency.{" "}
+                    <Anchor component={Link} href="/organization/payments">
+                      Go to Payments
+                    </Anchor>
+                  </>
+                }
+              />
+            )}
 
             <Title order={5} mt="md">
               Recurrence schedule
