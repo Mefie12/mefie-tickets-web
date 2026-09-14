@@ -10,10 +10,12 @@ import {
   Anchor,
   Button,
   Card,
+  Flex,
   Group,
   Modal,
   MultiSelect,
   SegmentedControl,
+  SimpleGrid,
   Stack,
   Tabs,
   Text,
@@ -267,9 +269,18 @@ export function EventManager({
         <Stack gap="md">
           <Text size="sm">{confirmation?.body}</Text>
           {statusError && <Alert color="red">{statusError}</Alert>}
-          <Group justify="flex-end">
+          {/* Two buttons whose combined label width (esp. a blocker's
+              longer, action-specific label) can exceed a narrow modal on
+              mobile — a plain wrapping Group then drops the confirm button
+              onto its own right-aligned line below "Keep current status",
+              which reads as a broken layout. Below `xs`, stack both full
+              width instead, with the actionable one on top (visually
+              primary) via column-reverse; `xs` and up keeps the original
+              single-row, right-aligned layout. */}
+          <Flex direction={{ base: "column-reverse", xs: "row" }} justify="flex-end" gap="sm">
             <Button
               variant="default"
+              w={{ base: "100%", xs: "auto" }}
               disabled={statusMutation.isPending || fixCurrencyAndPublishMutation.isPending}
               onClick={closeStatusModal}
             >
@@ -277,12 +288,13 @@ export function EventManager({
             </Button>
             <Button
               color={blocker ? undefined : confirmation?.confirmColor}
+              w={{ base: "100%", xs: "auto" }}
               loading={statusMutation.isPending || fixCurrencyAndPublishMutation.isPending}
               onClick={handleConfirmClick}
             >
               {blocker?.label ?? confirmation?.confirmLabel}
             </Button>
-          </Group>
+          </Flex>
         </Stack>
       </Modal>
 
@@ -506,7 +518,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
-            <Group grow align="flex-start">
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
               <TextInput
                 type="datetime-local"
                 label="Start"
@@ -521,7 +533,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
                 min={form.values.start_at || undefined}
                 {...form.getInputProps("end_at")}
               />
-            </Group>
+            </SimpleGrid>
             <TimezoneSelector
               label="Event timezone"
               description="All times above are in this timezone, and that's how buyers will see them."
