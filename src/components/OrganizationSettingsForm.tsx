@@ -124,7 +124,7 @@ export function OrganizationSettingsForm({
 
       <Card withBorder radius="lg" p="xl">
         <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
-          <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0 }}>
+          <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <Stack>
               <TextInput label="Organization name" {...form.getInputProps("name")} />
               <TextInput label="Contact email" type="email" {...form.getInputProps("email")} />

@@ -78,7 +78,7 @@ function ResetPasswordForm() {
   if (done) {
     return (
       <AuthLayout title="Password updated" subtitle="Your password has been reset successfully.">
-        <Button component={Link} href="/login" fullWidth>
+        <Button component={Link} href="/organizers/login" fullWidth>
           Log in
         </Button>
       </AuthLayout>

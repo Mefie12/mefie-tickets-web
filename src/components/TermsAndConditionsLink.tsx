@@ -2,32 +2,40 @@
 
 import { useState } from "react";
 import { Box, Modal, Text } from "@mantine/core";
-import type { PublicEventTerms } from "@/lib/publicEventApi";
+
+export type LinkableDocument = {
+  content_type: "RICH_TEXT" | "PDF";
+  /** null for PDF — pdfUrl is used instead. */
+  rich_text_content: string | null;
+};
 
 /**
  * Shared "View Terms & Conditions" trigger — used on the public event
- * page (viewing only, per §19) and inside CheckoutDetailsForm's
- * acceptance checkbox. PDF opens the stream route in a new tab; rich
- * text opens a Modal with the server-sanitized HTML (same
- * dangerouslySetInnerHTML pattern as the event description).
+ * page, inside CheckoutDetailsForm's acceptance checkbox, and on the
+ * organizer registration form's passive Terms of Use / Privacy Policy
+ * disclosure. Generic over any RICH_TEXT|PDF document (event terms or a
+ * platform-wide document) rather than hardcoding the event-terms shape —
+ * callers supply the PDF stream URL directly. PDF opens the stream route
+ * in a new tab; rich text opens a Modal with the server-sanitized HTML
+ * (same dangerouslySetInnerHTML pattern as the event description).
  */
 export function TermsAndConditionsLink({
-  eventId,
-  terms,
+  document,
+  pdfUrl,
   label = "View Terms & Conditions",
 }: {
-  eventId: number;
-  terms: PublicEventTerms;
+  document: LinkableDocument;
+  pdfUrl: string;
   label?: string;
 }) {
   const [opened, setOpened] = useState(false);
 
-  if (terms.content_type === "PDF") {
+  if (document.content_type === "PDF") {
     return (
       <Text
         size="sm"
         component="a"
-        href={`/api/public/events/${eventId}/terms/pdf`}
+        href={pdfUrl}
         target="_blank"
         rel="noopener noreferrer"
         // Stops a parent <label> (e.g. the checkout acceptance checkbox)
@@ -54,7 +62,7 @@ export function TermsAndConditionsLink({
         {label}
       </Text>
       <Modal opened={opened} onClose={() => setOpened(false)} title="Terms & Conditions" size="lg">
-        <Box dangerouslySetInnerHTML={{ __html: terms.rich_text_content ?? "" }} />
+        <Box dangerouslySetInnerHTML={{ __html: document.rich_text_content ?? "" }} />
       </Modal>
     </>
   );

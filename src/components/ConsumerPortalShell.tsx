@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { AppShell, Avatar, Container, Group, Menu, Text, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconLogout, IconLogout2, IconTicket } from "@tabler/icons-react";
+import { IconChevronDown, IconLogout, IconLogout2, IconShieldLock, IconTicket } from "@tabler/icons-react";
 import { portalLogout, portalLogoutAll } from "@/lib/portalApi";
+import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
@@ -16,21 +17,22 @@ export function ConsumerPortalShell({
   profile,
   children,
 }: {
-  profile: { first_name: string; last_name: string; email: string };
+  profile: { first_name: string | null; last_name: string | null; email: string };
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const { openPreferences } = usePrivacyConsent();
 
   const logout = useMutation({
     mutationFn: portalLogout,
-    onSuccess: () => router.push("/tickets/verify"),
+    onSuccess: () => router.push("/login"),
   });
   const logoutAll = useMutation({
     mutationFn: portalLogoutAll,
-    onSuccess: () => router.push("/tickets/verify"),
+    onSuccess: () => router.push("/login"),
   });
 
-  const initials = `${profile.first_name[0] ?? ""}${profile.last_name[0] ?? ""}`.toUpperCase();
+  const initials = `${profile.first_name?.[0] ?? ""}${profile.last_name?.[0] ?? ""}`.toUpperCase();
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -58,6 +60,9 @@ export function ConsumerPortalShell({
               </Menu.Target>
               <Menu.Dropdown>
                 <Menu.Label>{profile.email}</Menu.Label>
+                <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
+                  Privacy choices
+                </Menu.Item>
                 <Menu.Item
                   leftSection={<IconLogout size={16} />}
                   onClick={() => logout.mutate()}

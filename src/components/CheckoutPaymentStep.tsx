@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { loadStripe, type StripePaymentElementOptions } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useQuery } from "@tanstack/react-query";
-import { Alert, Button, Card, Loader, Stack, Text } from "@mantine/core";
+import { Alert, Button, Card, Loader, Stack, Text, Title } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
 import { getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import { formatMoney } from "@/lib/money";
@@ -58,7 +58,7 @@ export function CheckoutPaymentStep({
   clientSecret: string;
   /** The event's own venue country (location.country) — see paymentElementOptionsFor. */
   defaultBillingCountry?: string | null;
-  onPaid: () => void;
+  onPaid: (order: Order) => void;
 }) {
   // Held-funds policy: the PaymentIntent behind this client_secret is
   // created on Mefie's own platform Stripe account, not the organizer's
@@ -77,15 +77,29 @@ export function CheckoutPaymentStep({
   }
 
   return (
-    <Elements stripe={stripePromise} options={{ clientSecret, appearance: { theme: "night" } }}>
-      <PaymentForm
-        eventId={eventId}
-        order={order}
-        clientSecret={clientSecret}
-        defaultBillingCountry={defaultBillingCountry}
-        onPaid={onPaid}
-      />
-    </Elements>
+    <Stack gap="md">
+      <Title order={2} fz={22}>
+        2. Payment Details
+      </Title>
+      <Elements
+        stripe={stripePromise}
+        options={{
+          clientSecret,
+          // `fontSizeBase: 16px` pinned so the card fields inside Stripe's
+          // iframe never fall under 16px — the threshold below which iOS
+          // Safari zooms into a focused input and leaves the page zoomed.
+          appearance: { theme: "night", variables: { fontSizeBase: "16px" } },
+        }}
+      >
+        <PaymentForm
+          eventId={eventId}
+          order={order}
+          clientSecret={clientSecret}
+          defaultBillingCountry={defaultBillingCountry}
+          onPaid={onPaid}
+        />
+      </Elements>
+    </Stack>
   );
 }
 
@@ -100,7 +114,7 @@ function PaymentForm({
   order: Order;
   clientSecret: string;
   defaultBillingCountry?: string | null;
-  onPaid: () => void;
+  onPaid: (order: Order) => void;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -168,8 +182,12 @@ function PaymentForm({
   });
 
   useEffect(() => {
-    if (statusQuery.data?.status === "COMPLETED") onPaid();
-  }, [statusQuery.data?.status, onPaid]);
+    // statusQuery.data.order is the fresh, post-completion order (real
+    // unassigned_count/attendees) — falling back to the pre-payment
+    // `order` prop only guards a response shape that should never
+    // actually happen once status is COMPLETED.
+    if (statusQuery.data?.status === "COMPLETED") onPaid(statusQuery.data.order ?? order);
+  }, [statusQuery.data, onPaid, order]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

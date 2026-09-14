@@ -35,6 +35,8 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
 
   const { order, entitlements } = data;
   const invalidate = () => qc.invalidateQueries({ queryKey: ["portal-order", shortId] });
+  const [loadedAt] = useState(() => Date.now());
+  const pastCutoff = !!order.admission_closes_at && new Date(order.admission_closes_at).getTime() < loadedAt;
 
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [claimTarget, setClaimTarget] = useState<EntitlementRow | null>(null);
@@ -92,7 +94,17 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
         </Text>
       </Stack>
 
-      {assignable.length > 1 && (
+      {pastCutoff && (
+        <Alert color="orange" variant="light">
+          Ticket assignment for this event has closed
+          {order.admission_closes_at
+            ? ` (${new Date(order.admission_closes_at).toLocaleDateString()})`
+            : ""}
+          . Your existing tickets stay valid; contact the organizer if an attendee still needs to change.
+        </Alert>
+      )}
+
+      {!pastCutoff && assignable.length > 1 && (
         <Group gap="xs">
           <Checkbox
             size="sm"
@@ -111,7 +123,8 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
           <EntitlementCard
             key={e.public_id}
             e={e}
-            selectable={assignable.some((a) => a.public_id === e.public_id)}
+            pastCutoff={pastCutoff}
+            selectable={!pastCutoff && assignable.some((a) => a.public_id === e.public_id)}
             selected={selected.has(e.public_id)}
             onToggle={() => toggle(e.public_id)}
             onAssign={() => setAssignTarget(e.public_id)}
@@ -127,7 +140,7 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
 
       <DeliveriesPanel orderShortId={shortId} />
 
-      {selected.size > 0 && (
+      {!pastCutoff && selected.size > 0 && (
         <Paper
           withBorder
           shadow="md"
@@ -136,7 +149,10 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
           pos="fixed"
           bottom={16}
           left="50%"
-          style={{ transform: "translateX(-50%)", zIndex: 200, maxWidth: "min(560px, 92vw)", width: "100%" }}
+          // Mantine's own scale is app:100 < modal:200 (@mantine/core/styles.css)
+          // — this used to tie with Modal's z-index, which let this bar render
+          // over the AssignEntitlementModal/batch-links modal its own buttons open.
+          style={{ transform: "translateX(-50%)", zIndex: 100, maxWidth: "min(560px, 92vw)", width: "100%" }}
         >
           <Group justify="space-between" wrap="nowrap">
             <Text size="sm" fw={500}>
@@ -216,6 +232,7 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
 
 function EntitlementCard({
   e,
+  pastCutoff,
   selectable,
   selected,
   onToggle,
@@ -228,6 +245,7 @@ function EntitlementCard({
   confirmingTerms,
 }: {
   e: EntitlementRow;
+  pastCutoff: boolean;
   selectable: boolean;
   selected: boolean;
   onToggle: () => void;
@@ -290,7 +308,12 @@ function EntitlementCard({
           <Badge color={meta.color} variant="light">
             {meta.label}
           </Badge>
-          {e.assignment_status === "BUYER_HELD" && !e.claim_link && (
+          {pastCutoff && e.assignment_status === "BUYER_HELD" && (
+            <Text size="xs" c="dimmed">
+              Assignment closed
+            </Text>
+          )}
+          {!pastCutoff && e.assignment_status === "BUYER_HELD" && !e.claim_link && (
             <Group gap={6} justify="flex-end">
               <Button size="xs" variant="subtle" onClick={onShareLink}>
                 Share link
@@ -300,7 +323,7 @@ function EntitlementCard({
               </Button>
             </Group>
           )}
-          {e.assignment_status === "BUYER_HELD" && e.claim_link && (
+          {!pastCutoff && e.assignment_status === "BUYER_HELD" && e.claim_link && (
             <Button size="xs" variant="light" onClick={onShareLink}>
               Manage link
             </Button>
@@ -310,7 +333,7 @@ function EntitlementCard({
               <Button size="xs" variant="subtle" onClick={onCorrect}>
                 Edit details
               </Button>
-              {e.assignment_status === "ISSUED" && (
+              {!pastCutoff && e.assignment_status === "ISSUED" && (
                 <>
                   <Button size="xs" variant="subtle" onClick={onReassign}>
                     Reassign

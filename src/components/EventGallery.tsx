@@ -1,60 +1,47 @@
 "use client";
 
 import { useState } from "react";
-import { Carousel } from "@mantine/carousel";
-import { Box, Image, Modal, SimpleGrid, UnstyledButton } from "@mantine/core";
+import { Button, Group, Image, SimpleGrid, Title, UnstyledButton } from "@mantine/core";
 import type { PublicEvent } from "@/lib/publicEventApi";
-
-type GalleryImage = PublicEvent["gallery"][number];
+import { GalleryLightbox } from "@/components/GalleryLightbox";
 
 /**
- * Small interactive island embedded in the otherwise server-rendered
- * public event page (same pattern as TermsAndConditionsLink) — only
- * this needs client state (the lightbox + the carousel itself), not
- * the whole page.
- *
- * Mobile gets a swipeable Carousel (one image at a time, better fit
- * for a narrow viewport than a stacked full-width grid); tablet/desktop
- * keeps the original side-by-side grid. Both are wired to the same
- * click-to-enlarge lightbox.
+ * The full "Event gallery" section further down the page — every
+ * photo, in a responsive grid, with its own lightbox (see
+ * EventHeroGallery's docblock for why this doesn't share state with
+ * the hero preview above it).
  */
 export function EventGallery({ gallery }: { gallery: PublicEvent["gallery"] }) {
-  const [openedImage, setOpenedImage] = useState<GalleryImage | null>(null);
+  const [openedIndex, setOpenedIndex] = useState<number | null>(null);
 
   return (
-    <Box maw={700}>
-      <Box hiddenFrom="sm">
-        <Carousel slideSize="100%" slideGap="sm" withIndicators>
-          {gallery.map((image) => (
-            <Carousel.Slide key={image.id}>
-              <UnstyledButton onClick={() => setOpenedImage(image)} style={{ display: "block", width: "100%" }}>
-                <Image src={image.url} alt={image.alt_text ?? ""} radius="md" h={220} />
-              </UnstyledButton>
-            </Carousel.Slide>
-          ))}
-        </Carousel>
-      </Box>
-
-      <SimpleGrid visibleFrom="sm" cols={{ sm: gallery.length }} spacing="sm">
-        {gallery.map((image) => (
-          <UnstyledButton key={image.id} onClick={() => setOpenedImage(image)}>
-            <Image src={image.url} alt={image.alt_text ?? ""} radius="md" h={180} />
+    <div>
+      <Group justify="space-between" mb="md">
+        <Title order={2} fz={{ base: 22, md: 28 }}>
+          Event gallery
+        </Title>
+        <Button variant="default" size="compact-sm" onClick={() => setOpenedIndex(0)}>
+          View all photos
+        </Button>
+      </Group>
+      <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="sm">
+        {gallery.map((image, index) => (
+          <UnstyledButton
+            key={image.id}
+            onClick={() => setOpenedIndex(index)}
+            style={{ borderRadius: "var(--mantine-radius-md)", overflow: "hidden" }}
+          >
+            <Image src={image.thumbnail_url} alt={image.alt_text ?? ""} radius="md" h={180} fit="cover" />
           </UnstyledButton>
         ))}
       </SimpleGrid>
 
-      <Modal
-        opened={openedImage !== null}
-        onClose={() => setOpenedImage(null)}
-        size="xl"
-        padding={0}
-        withCloseButton
-        centered
-      >
-        {openedImage && (
-          <Image src={openedImage.url} alt={openedImage.alt_text ?? ""} fit="contain" mah="80vh" radius="md" />
-        )}
-      </Modal>
-    </Box>
+      <GalleryLightbox
+        gallery={gallery}
+        openedIndex={openedIndex}
+        onClose={() => setOpenedIndex(null)}
+        onNavigate={setOpenedIndex}
+      />
+    </div>
   );
 }

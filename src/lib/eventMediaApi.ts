@@ -1,5 +1,6 @@
 import { ApiError } from "@/lib/authApi";
 import type { Event } from "@/lib/eventApi";
+import { cropFields, type PixelCrop } from "@/lib/imageCrop";
 
 async function request<T>(
   path: string,
@@ -31,10 +32,20 @@ async function upload(path: string, formData: FormData): Promise<{ event: Event 
   return data as { event: Event };
 }
 
-export function uploadEventCoverImage(eventId: number, file: File) {
+/** Upload the organiser's original + the 16:9 rectangle they framed (source-image pixels). */
+export function uploadEventCoverImage(eventId: number, file: File, crop: PixelCrop) {
   const formData = new FormData();
   formData.append("cover_image", file);
+  for (const [key, value] of Object.entries(cropFields(crop))) formData.append(key, String(value));
   return upload(`/api/events/${eventId}/media/cover`, formData);
+}
+
+/** Re-frame the already-stored original — no re-upload, backend rebuilds the derivatives. */
+export function recropEventCover(eventId: number, crop: PixelCrop) {
+  return request<{ event: Event }>(`/api/events/${eventId}/media/cover/crop`, {
+    method: "PATCH",
+    body: cropFields(crop),
+  });
 }
 
 export function deleteEventCoverImage(eventId: number) {

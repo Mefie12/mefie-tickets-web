@@ -53,6 +53,7 @@ export type OrderCard = {
 };
 
 export type DashboardPayload = {
+  received: ReceivedTicket[];
   profile: { email: string; first_name: string; last_name: string };
   orders: OrderCard[];
 };
@@ -304,3 +305,10 @@ export const verifyStepUp = (code: string) =>
 
 export const portalLogout = () => request("/api/portal/consumer/logout", { method: "POST" });
 export const portalLogoutAll = () => request("/api/portal/consumer/logout-all", { method: "POST" });
+
+export type ReceivedTicket = {
+  id: number; ticket_reference: string; ticket_name: string | null; ticket_option: string | null;
+  event: { title: string | null; start_date: string | null; timezone: string | null };
+  attendee: { first_name: string | null; last_name: string | null };
+  assignment_status: string; commercial_status: string; reacceptance_required: boolean; credential_available: boolean;
+};

@@ -20,6 +20,7 @@ export type LineupItem = {
   talent_profile_version?: {
     display_name: string;
     role: TalentRole;
+    custom_role: string | null;
     tagline: string | null;
     profile_image_url: string | null;
     social_links: SocialLink[] | null;

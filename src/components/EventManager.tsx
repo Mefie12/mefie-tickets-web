@@ -1,18 +1,21 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
+import Link from "next/link";
 import {
   Alert,
-  Badge,
+  Anchor,
   Button,
   Card,
+  Flex,
   Group,
   Modal,
   MultiSelect,
   SegmentedControl,
+  SimpleGrid,
   Stack,
   Tabs,
   Text,
@@ -21,17 +24,15 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { TimezoneSelector } from "@/components/TimezoneSelector";
-import { COUNTRIES_BY_CODE } from "@/lib/countries";
-import { CurrencySelector } from "@/components/CurrencySelector";
 import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
 import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
+import { PUBLISH_BLOCKERS } from "@/lib/publishBlockers";
 import { LocationFields, needsOnline, needsVenue } from "@/components/LocationFields";
 import { EventDetailsFields } from "@/components/EventDetailsFields";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { minimumEndTime, utcIsoToZonedParts, wallClockEndIsInvalid } from "@/lib/eventDateTime";
+import { joinLocalDateTime, splitLocalDateTime, utcIsoToZonedParts } from "@/lib/eventDateTime";
 import { browserTimezone } from "@/lib/timezones";
-import { CURRENCIES_BY_CODE, suggestCurrencyForCountryCode } from "@/lib/currencies";
 import type { MapboxSuggestion } from "@/lib/mapbox";
 import {
   getEventTaxonomies,
@@ -52,15 +53,33 @@ import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
 import { ComplimentarySettings } from "@/components/ComplimentarySettings";
+import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
+import { ScrollableTabsBar } from "@/components/ScrollableTabsBar";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
-const VALID_TABS = ["details", "date-time", "location", "media", "ticket-setup", "complimentary", "questions", "content", "terms"];
+const TAB_DEFS = [
+  { value: "details", label: "Details" },
+  { value: "date-time", label: "Date & Time" },
+  { value: "location", label: "Location & Access" },
+  { value: "media", label: "Media" },
+  { value: "ticket-setup", label: "Ticket Setup" },
+  { value: "complimentary", label: "Complimentary" },
+  { value: "questions", label: "Questions" },
+  { value: "content", label: "Event page content" },
+  { value: "terms", label: "Terms & Conditions" },
+  { value: "advanced", label: "Advanced Settings" },
+];
+const VALID_TABS = TAB_DEFS.map((t) => t.value);
 
-const STATUS_COLOR: Record<EventStatus, string> = {
-  DRAFT: "gray",
-  LIVE: "teal",
-  ARCHIVED: "dark",
-};
+// Only forms with one discrete "this tab is done" save action advance the
+// organizer forward — a tab that's an open-ended list (media, tickets,
+// questions, content) or a multi-step/no-single-save workflow (terms,
+// which auto-saves per field) never fires this, since there's no way to
+// know the organizer is actually finished with it.
+function nextTab(current: string): string | null {
+  const index = VALID_TABS.indexOf(current);
+  return index >= 0 && index < VALID_TABS.length - 1 ? VALID_TABS[index + 1] : null;
+}
 
 type StatusConfirmation = {
   title: string;
@@ -112,47 +131,107 @@ export function EventManager({
   initialComplimentaryProgram: ComplimentaryProgram;
 }) {
   const [event, setEvent] = useState(initialEvent);
+  const sellsPaidTickets = initialProducts.some((product) => ["PAID", "TIERED", "DONATION"].includes(product.type));
   const [requestedStatus, setRequestedStatus] = useState<EventStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusErrorCode, setStatusErrorCode] = useState<string | null>(null);
   const archived = event.status === "ARCHIVED";
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  const requestedTab = searchParams.get("tab") ?? "";
+  const [tab, setTab] = useState(VALID_TABS.includes(requestedTab) ? requestedTab : "details");
+
+  const handleTabChange = (next: string | null) => {
+    if (!next) return;
+    setTab(next);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  function handleStatusChangeSuccess(data: { event: Event }) {
+    setEvent(data.event);
+    setRequestedStatus(null);
+    setStatusError(null);
+    setStatusErrorCode(null);
+    notifications.show({ color: "teal", message: `Event is now ${data.event.status}.` });
+  }
+
+  function handleStatusChangeError(error: Error) {
+    if (redirectOnAuthError(error, router)) return;
+    setStatusError(error instanceof ApiError ? (error.fieldError("status") ?? error.message) : "Something went wrong.");
+    setStatusErrorCode(error instanceof ApiError ? (error.code ?? null) : null);
+  }
 
   const statusMutation = useMutation({
     mutationFn: (status: EventStatus) => updateEventStatus(event.id, status),
-    onSuccess: (data: { event: Event }) => {
-      setEvent(data.event);
-      setRequestedStatus(null);
-      setStatusError(null);
-      notifications.show({ color: "teal", message: `Event is now ${data.event.status}.` });
-    },
-    onError: (error: Error) => {
-      if (redirectOnAuthError(error, router)) return;
-      setStatusError(error instanceof ApiError ? (error.fieldError("status") ?? error.message) : "Something went wrong.");
-    },
+    onSuccess: handleStatusChangeSuccess,
+    onError: handleStatusChangeError,
   });
 
+  // The one publish-blocker that isn't "go somewhere and fix it yourself" —
+  // the event's currency was set before a payment account existed (or
+  // before the org's current one), so there's nothing for the organizer to
+  // choose: sync it to the account's real currency and retry immediately.
+  const fixCurrencyAndPublishMutation = useMutation({
+    mutationFn: async () => {
+      const currency = await getOrganizationPaymentCurrency();
+      if (currency) {
+        await updateEvent(event.id, { currency_code: currency });
+      }
+      return updateEventStatus(event.id, "LIVE");
+    },
+    onSuccess: handleStatusChangeSuccess,
+    onError: handleStatusChangeError,
+  });
+
+  const advanceTab = (fromTab: string) => {
+    const next = nextTab(fromTab);
+    if (next) handleTabChange(next);
+  };
+
   const confirmation = requestedStatus ? statusConfirmation(event.status, requestedStatus) : null;
+  const blocker = requestedStatus === "LIVE" && statusErrorCode ? PUBLISH_BLOCKERS[statusErrorCode] : undefined;
 
   const requestStatusChange = (status: EventStatus) => {
     if (status === event.status) return;
     setStatusError(null);
+    setStatusErrorCode(null);
     setRequestedStatus(status);
   };
+
+  function closeStatusModal() {
+    setRequestedStatus(null);
+    setStatusError(null);
+    setStatusErrorCode(null);
+  }
+
+  function handleConfirmClick() {
+    if (blocker?.type === "tab") {
+      closeStatusModal();
+      handleTabChange(blocker.tab);
+      return;
+    }
+    if (blocker?.type === "link") {
+      closeStatusModal();
+      router.push(blocker.href);
+      return;
+    }
+    if (blocker?.type === "fix-currency") {
+      fixCurrencyAndPublishMutation.mutate();
+      return;
+    }
+    if (requestedStatus) statusMutation.mutate(requestedStatus);
+  }
 
   return (
     <Stack gap="xl">
       <Stack gap="xs">
-        <Group justify="space-between">
-          <Title order={2} fz={28}>
-            {event.title}
-          </Title>
-          <Group gap="sm">
-            <Badge color={STATUS_COLOR[event.status]} variant="light">
-              {event.status}
-            </Badge>
-          </Group>
-        </Group>
+        <Title order={2} fz={28}>
+          Event settings
+        </Title>
         <Group gap="xs">
           <Text size="sm" c="dimmed">
             Status:
@@ -179,56 +258,57 @@ export function EventManager({
       <Modal
         opened={confirmation !== null}
         onClose={() => {
-          if (!statusMutation.isPending) {
-            setRequestedStatus(null);
-            setStatusError(null);
-          }
+          if (!statusMutation.isPending && !fixCurrencyAndPublishMutation.isPending) closeStatusModal();
         }}
         title={confirmation?.title}
         centered
-        closeOnClickOutside={!statusMutation.isPending}
-        closeOnEscape={!statusMutation.isPending}
-        withCloseButton={!statusMutation.isPending}
+        closeOnClickOutside={!statusMutation.isPending && !fixCurrencyAndPublishMutation.isPending}
+        closeOnEscape={!statusMutation.isPending && !fixCurrencyAndPublishMutation.isPending}
+        withCloseButton={!statusMutation.isPending && !fixCurrencyAndPublishMutation.isPending}
       >
         <Stack gap="md">
           <Text size="sm">{confirmation?.body}</Text>
           {statusError && <Alert color="red">{statusError}</Alert>}
-          <Group justify="flex-end">
-            <Button variant="default" disabled={statusMutation.isPending} onClick={() => { setRequestedStatus(null); setStatusError(null); }}>
+          {/* Two buttons whose combined label width (esp. a blocker's
+              longer, action-specific label) can exceed a narrow modal on
+              mobile — a plain wrapping Group then drops the confirm button
+              onto its own right-aligned line below "Keep current status",
+              which reads as a broken layout. Below `xs`, stack both full
+              width instead, with the actionable one on top (visually
+              primary) via column-reverse; `xs` and up keeps the original
+              single-row, right-aligned layout. */}
+          <Flex direction={{ base: "column-reverse", xs: "row" }} justify="flex-end" gap="sm">
+            <Button
+              variant="default"
+              w={{ base: "100%", xs: "auto" }}
+              disabled={statusMutation.isPending || fixCurrencyAndPublishMutation.isPending}
+              onClick={closeStatusModal}
+            >
               Keep current status
             </Button>
             <Button
-              color={confirmation?.confirmColor}
-              loading={statusMutation.isPending}
-              onClick={() => requestedStatus && statusMutation.mutate(requestedStatus)}
+              color={blocker ? undefined : confirmation?.confirmColor}
+              w={{ base: "100%", xs: "auto" }}
+              loading={statusMutation.isPending || fixCurrencyAndPublishMutation.isPending}
+              onClick={handleConfirmClick}
             >
-              {confirmation?.confirmLabel}
+              {blocker?.label ?? confirmation?.confirmLabel}
             </Button>
-          </Group>
+          </Flex>
         </Stack>
       </Modal>
 
-      <Tabs defaultValue={VALID_TABS.includes(searchParams.get("tab") ?? "") ? searchParams.get("tab")! : "details"}>
-        <Tabs.List>
-          <Tabs.Tab value="details">Details</Tabs.Tab>
-          <Tabs.Tab value="date-time">Date &amp; Time</Tabs.Tab>
-          <Tabs.Tab value="location">Location &amp; Access</Tabs.Tab>
-          <Tabs.Tab value="media">Media</Tabs.Tab>
-          <Tabs.Tab value="ticket-setup">Ticket Setup</Tabs.Tab>
-          <Tabs.Tab value="complimentary">Complimentary</Tabs.Tab>
-          <Tabs.Tab value="questions">Questions</Tabs.Tab>
-          <Tabs.Tab value="content">Event page content</Tabs.Tab>
-          <Tabs.Tab value="terms">Terms &amp; Conditions</Tabs.Tab>
-        </Tabs.List>
+      <Tabs value={tab} onChange={handleTabChange}>
+        <ScrollableTabsBar tabs={TAB_DEFS} value={tab} onChange={handleTabChange} />
 
         <Tabs.Panel value="details" pt="lg">
-          <EventDetailsForm event={event} onUpdated={setEvent} disabled={archived} />
+          <EventDetailsForm event={event} onUpdated={setEvent} disabled={archived} onSaved={() => advanceTab("details")} />
         </Tabs.Panel>
         <Tabs.Panel value="date-time" pt="lg">
-          <EventDateTimeForm event={event} onUpdated={setEvent} disabled={archived} />
+          <EventDateTimeForm event={event} onUpdated={setEvent} disabled={archived} onSaved={() => advanceTab("date-time")} />
         </Tabs.Panel>
         <Tabs.Panel value="location" pt="lg">
-          <EventLocationForm event={event} onUpdated={setEvent} disabled={archived} />
+          <EventLocationForm event={event} onUpdated={setEvent} disabled={archived} onSaved={() => advanceTab("location")} />
         </Tabs.Panel>
         <Tabs.Panel value="media" pt="lg">
           <EventMediaEditor eventId={event.id} initialEvent={event} disabled={archived} />
@@ -243,7 +323,7 @@ export function EventManager({
           />
         </Tabs.Panel>
         <Tabs.Panel value="complimentary" pt="lg">
-          <ComplimentarySettings eventId={event.id} initialProgram={initialComplimentaryProgram} products={initialProducts} disabled={archived} />
+          <ComplimentarySettings eventId={event.id} initialProgram={initialComplimentaryProgram} products={initialProducts} disabled={archived} onSaved={() => advanceTab("complimentary")} />
         </Tabs.Panel>
         <Tabs.Panel value="questions" pt="lg">
           <QuestionsEditor eventId={event.id} initialQuestions={initialQuestions} disabled={archived} />
@@ -254,6 +334,9 @@ export function EventManager({
         <Tabs.Panel value="terms" pt="lg">
           <EventTermsEditor eventId={event.id} disabled={archived} />
         </Tabs.Panel>
+        <Tabs.Panel value="advanced" pt="lg">
+          <DeferredAssignmentCard eventId={event.id} event={event} sellsPaidTickets={sellsPaidTickets} />
+        </Tabs.Panel>
       </Tabs>
     </Stack>
   );
@@ -263,10 +346,12 @@ function EventDetailsForm({
   event,
   onUpdated,
   disabled,
+  onSaved,
 }: {
   event: Event;
   onUpdated: (event: Event) => void;
   disabled: boolean;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const taxonomies = useQuery<EventTaxonomies>({ queryKey: ["event-taxonomies"], queryFn: getEventTaxonomies });
@@ -285,24 +370,8 @@ function EventDetailsForm({
     validate: {
       title: (v) => (v.trim().length === 0 ? "Title is required" : null),
       description: (v) => (v.replace(/<[^>]*>/g, "").trim().length === 0 ? "Description is required" : null),
-      currency_code: (v) => (!v ? "Currency is required" : null),
     },
   });
-  // Suggested from the event's already-saved location (not live Location-tab
-  // typing — that's a separate form/tab). Dismissible, never auto-applied.
-  const suggestedCurrency = suggestCurrencyForCountryCode(event.location_details?.country);
-  // Tracks *which* currency was dismissed (not a plain boolean) so a
-  // later location change that suggests a different currency isn't
-  // silently suppressed by an earlier, unrelated dismissal.
-  const [dismissedCurrency, setDismissedCurrency] = useState<string | null>(null);
-  const showCurrencySuggestion =
-    !paymentCurrency.data &&
-    !!suggestedCurrency &&
-    suggestedCurrency !== form.values.currency_code &&
-    suggestedCurrency !== dismissedCurrency;
-  const suggestedCountryName = event.location_details?.country
-    ? (COUNTRIES_BY_CODE.get(event.location_details.country)?.name ?? event.location_details.country)
-    : "";
 
   const updateMutation = useMutation({
     mutationFn: (values: typeof form.values) => updateEvent(event.id, {
@@ -315,14 +384,14 @@ function EventDetailsForm({
       attribute_ids: values.attribute_ids.map(Number),
       currency_code: values.currency_code,
     }),
-    onSuccess: (data: { event: Event }) => { onUpdated(data.event); notifications.show({ color: "teal", message: "Event details updated." }); },
+    onSuccess: (data: { event: Event }) => { onUpdated(data.event); notifications.show({ color: "teal", message: "Event details updated." }); onSaved?.(); },
     onError: (error: Error) => handleFormError(error, form.setErrors, router),
   });
 
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <EventDetailsFields
               values={form.values}
@@ -337,7 +406,7 @@ function EventDetailsForm({
             {paymentCurrency.data ? (
               <TextInput
                 label="Currency"
-                value={`${event.currency_code} — set by your payment setup`}
+                value={`${paymentCurrency.data} — set by your payment setup`}
                 disabled
                 description={
                   <>
@@ -347,28 +416,20 @@ function EventDetailsForm({
                 }
               />
             ) : (
-              <CurrencySelector
+              <TextInput
                 label="Currency"
-                required
-                description="Every price on this event — tickets, tiers, checkout — is quoted in this currency. This is provisional until you set up payments."
-                {...form.getInputProps("currency_code")}
+                placeholder="Not set"
+                value=""
+                disabled
+                description={
+                  <>
+                    Set up payments to determine your event&apos;s currency.{" "}
+                    <Anchor component={Link} href="/organization/payments">
+                      Go to Payments
+                    </Anchor>
+                  </>
+                }
               />
-            )}
-            {showCurrencySuggestion && (
-              <Alert color="blue" variant="light">
-                This event is in {suggestedCountryName} — switch currency to{" "}
-                {CURRENCIES_BY_CODE.get(suggestedCurrency!)?.name ?? suggestedCurrency}?{" "}
-                <Button
-                  variant="subtle"
-                  size="compact-xs"
-                  onClick={() => form.setFieldValue("currency_code", suggestedCurrency!)}
-                >
-                  Switch to {suggestedCurrency}
-                </Button>
-                <Button variant="subtle" size="compact-xs" color="gray" onClick={() => setDismissedCurrency(suggestedCurrency)}>
-                  Dismiss
-                </Button>
-              </Alert>
             )}
             <MultiSelect searchable clearable label="Audience (optional)" description="Helps attendees discover events intended for them."
               data={(taxonomies.data?.audiences ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))} {...form.getInputProps("audience_ids")} />
@@ -383,16 +444,16 @@ function EventDetailsForm({
   );
 }
 
-function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpdated: (event: Event) => void; disabled: boolean }) {
+function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Event; onUpdated: (event: Event) => void; disabled: boolean; onSaved?: () => void }) {
   const router = useRouter();
   const start = event.start_date ? utcIsoToZonedParts(event.start_date, event.timezone) : { date: "", time: "" };
   const end = event.end_date ? utcIsoToZonedParts(event.end_date, event.timezone) : { date: "", time: "" };
   const form = useForm({
     initialValues: {
-      start_date: start.date,
-      start_time: start.time,
-      end_date: end.date,
-      end_time: end.time,
+      // One `<input type="datetime-local">` value per end — `YYYY-MM-DDTHH:mm`,
+      // wall-clock in the event's zone. Split back to date/time only at submit.
+      start_at: joinLocalDateTime(start),
+      end_at: joinLocalDateTime(end),
       // "" (not event.timezone) when never scheduled, so the mount effect
       // below can fill in the browser's zone without changing an
       // already-rendered value — flipping a rendered "UTC" to a guessed
@@ -402,13 +463,12 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
       timezone: event.start_date ? event.timezone : "",
     },
     validate: {
-      start_date: (v) => (!v ? "Start date is required" : null),
-      start_time: (v) => (!v ? "Start time is required" : null),
-      end_date: (v) => (!v ? "End date is required" : null),
+      start_at: (v) => (!v ? "Start date and time is required" : null),
       timezone: (v) => (!v ? "Timezone is required" : null),
-      // Safe as a string comparison: both ends share the one timezone.
-      end_time: (v, values) =>
-        !v ? "End time is required" : `${values.end_date} ${v}` <= `${values.start_date} ${values.start_time}` ? "End must be after start" : null,
+      // Both ends are wall-clock in the one timezone and share the
+      // `YYYY-MM-DDTHH:mm` shape, so a lexicographic compare is chronological.
+      end_at: (v, values) =>
+        !v ? "End date and time is required" : v <= values.start_at ? "End must be after start" : null,
     },
   });
   useEffect(() => {
@@ -417,28 +477,29 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setStartPart = (part: "start_date" | "start_time", value: string) => {
-    const nextStartDate = part === "start_date" ? value : form.values.start_date;
-    const nextStartTime = part === "start_time" ? value : form.values.start_time;
-    form.setFieldValue(part, value);
-    if (wallClockEndIsInvalid(nextStartDate, nextStartTime, form.values.end_date, form.values.end_time)) {
-      form.setFieldValue("end_date", "");
-      form.setFieldValue("end_time", "");
-    }
+  const onStartChange = (value: string) => {
+    form.setFieldValue("start_at", value);
+    // Drop an end that's now at or before the new start rather than leave a
+    // stale, invalid range sitting in the form.
+    if (form.values.end_at && form.values.end_at <= value) form.setFieldValue("end_at", "");
   };
 
   const updateMutation = useMutation({
-    mutationFn: (values: typeof form.values) =>
-      updateEvent(event.id, {
-        start_date: values.start_date,
-        start_time: values.start_time,
-        end_date: values.end_date,
-        end_time: values.end_time,
+    mutationFn: (values: typeof form.values) => {
+      const startParts = splitLocalDateTime(values.start_at);
+      const endParts = splitLocalDateTime(values.end_at);
+      return updateEvent(event.id, {
+        start_date: startParts.date,
+        start_time: startParts.time,
+        end_date: endParts.date,
+        end_time: endParts.time,
         timezone: values.timezone,
-      }),
+      });
+    },
     onSuccess: (data: { event: Event }) => {
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Date and time updated." });
+      onSaved?.();
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
@@ -455,23 +516,24 @@ function EventDateTimeForm({ event, onUpdated, disabled }: { event: Event; onUpd
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
-            <Group grow align="flex-start">
-              <TextInput type="date" label="Start date" {...form.getInputProps("start_date")} onChange={(event) => setStartPart("start_date", event.currentTarget.value)} />
-              <TextInput type="time" label="Start time" {...form.getInputProps("start_time")} onChange={(event) => setStartPart("start_time", event.currentTarget.value)} />
-            </Group>
-            <Group grow align="flex-start">
-              <TextInput type="date" label="End date" min={form.values.start_date || undefined} {...form.getInputProps("end_date")} />
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
               <TextInput
-                type="time"
-                label="End time"
-                min={minimumEndTime(form.values.start_date, form.values.start_time, form.values.end_date)}
-                disabled={form.values.start_date === form.values.end_date && form.values.start_time === "23:59"}
-                description={form.values.start_date === form.values.end_date && form.values.start_time === "23:59" ? "Choose a later end date." : undefined}
-                {...form.getInputProps("end_time")}
+                type="datetime-local"
+                label="Start"
+                withAsterisk
+                {...form.getInputProps("start_at")}
+                onChange={(e) => onStartChange(e.currentTarget.value)}
               />
-            </Group>
+              <TextInput
+                type="datetime-local"
+                label="End"
+                withAsterisk
+                min={form.values.start_at || undefined}
+                {...form.getInputProps("end_at")}
+              />
+            </SimpleGrid>
             <TimezoneSelector
               label="Event timezone"
               description="All times above are in this timezone, and that's how buyers will see them."
@@ -504,10 +566,12 @@ function EventLocationForm({
   event,
   onUpdated,
   disabled,
+  onSaved,
 }: {
   event: Event;
   onUpdated: (event: Event) => void;
   disabled: boolean;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const loc = event.location_details;
@@ -543,6 +607,7 @@ function EventLocationForm({
     onSuccess: (data: { event: Event }) => {
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Location updated." });
+      onSaved?.();
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
@@ -574,7 +639,7 @@ function EventLocationForm({
   return (
     <Card withBorder radius="lg" p="xl">
       <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
-        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0 }}>
+        <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <LocationFields
               values={form.values}

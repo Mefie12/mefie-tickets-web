@@ -79,3 +79,36 @@ export async function listOrganizerTransfers(): Promise<OrganizerTransfer[]> {
   const result = await request<{ organizer_transfers: OrganizerTransfer[] }>("/api/organization/payments/transfers");
   return result.organizer_transfers;
 }
+
+/** A dry run for the "Change payment country & currency" confirmation screen — see ShowPaymentAccountReplacementPreviewAction. Nothing here is written. */
+export type PaymentAccountReplacementPreview = {
+  can_self_service: boolean;
+  locked_event_ids: number[];
+  mutable_event_ids: number[];
+  live_event_ids_to_draft: number[];
+};
+
+export function getPaymentAccountReplacementPreview() {
+  return request<PaymentAccountReplacementPreview>("/api/organization/payments/replacement-preview");
+}
+
+export type ReplacePaymentAccountResult = {
+  payment_account: PaymentAccount;
+  migrated_event_ids: number[];
+  drafted_event_ids: number[];
+};
+
+/**
+ * Self-service only — the backend re-checks eligibility itself
+ * regardless of what the preview showed (PAYMENT_ACCOUNT_REPLACEMENT_
+ * REQUIRES_ADMIN, 403, if the current account has since gained real
+ * financial history). idempotencyKey should be generated once per
+ * attempt and reused across a retry of the same attempt, never
+ * regenerated on every call — see PaymentAccountService::provisionAdditional().
+ */
+export function replacePaymentAccount(legalCountry: string, currency: string, idempotencyKey: string) {
+  return request<ReplacePaymentAccountResult>("/api/organization/payments/replace", {
+    method: "POST",
+    body: { legal_country: legalCountry, currency, idempotency_key: idempotencyKey },
+  });
+}

@@ -122,3 +122,46 @@ export function fetchOrganizationWorkspace<T>(id: string, path: string, params: 
 export function revealOrganizationOrder(id: string, orderId: number, reason: string) {
   return request<{ order: Record<string, unknown> }>(`/api/admin/organizations/${id}/workspace/orders/${orderId}/reveal`, { method: 'POST', body: { reason } });
 }
+
+/** Country-only lookup for the "Replace payment account" form's currency picker — no organization context needed. */
+export function getAdminSupportedCurrencies(country: string): Promise<{ currencies: string[] }> {
+  return request<{ currencies: string[] }>(`/api/admin/payments/supported-currencies?country=${encodeURIComponent(country)}`);
+}
+
+/** Dry run for the "Replace payment account" confirmation screen — mirrors PaymentAccountReplacementPreview on the organizer side. Nothing here is written. */
+export type AdminPaymentAccountReplacementPreview = {
+  can_self_service: boolean;
+  locked_event_ids: number[];
+  mutable_event_ids: number[];
+  live_event_ids_to_draft: number[];
+};
+
+export function getAdminPaymentAccountReplacementPreview(id: string) {
+  return request<AdminPaymentAccountReplacementPreview>(`/api/admin/organizations/${id}/payments/replacement-preview`);
+}
+
+export type AdminReplacePaymentAccountResult = {
+  payment_account: Record<string, unknown>;
+  migrated_event_ids: number[];
+  drafted_event_ids: number[];
+};
+
+/**
+ * Admin-mediated payment account replacement — usable regardless of
+ * self-service eligibility (see ChangePaymentAccountModal on the
+ * organizer side for the self-service equivalent). idempotencyKey
+ * should be generated once per attempt and reused across a retry of
+ * that same attempt, never regenerated per call.
+ */
+export function replaceOrganizationPaymentAccount(
+  id: string,
+  legalCountry: string,
+  currency: string,
+  idempotencyKey: string,
+  reason: string,
+) {
+  return request<AdminReplacePaymentAccountResult>(`/api/admin/organizations/${id}/payments/replace`, {
+    method: "POST",
+    body: { legal_country: legalCountry, currency, idempotency_key: idempotencyKey, reason },
+  });
+}

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { Stack } from "@mantine/core";
+import { Button, Stack } from "@mantine/core";
+import { IconArrowLeft } from "@tabler/icons-react";
 import { backendRequest } from "@/lib/backend";
 import type { Event } from "@/lib/eventApi";
 import type { OrderDetail as OrderDetailType } from "@/lib/orderApi";
@@ -24,6 +25,16 @@ export default async function OrderDetailPage({
 
   return (
     <Stack gap="xl" maw={720}>
+      <Button
+        component="a"
+        href={`/events/${eventId}/orders`}
+        variant="subtle"
+        size="compact-sm"
+        leftSection={<IconArrowLeft size={14} />}
+        style={{ alignSelf: "flex-start" }}
+      >
+        Back to orders &amp; attendees
+      </Button>
       <OrderDetail
         eventId={Number(eventId)}
         event={eventResult.data.event}

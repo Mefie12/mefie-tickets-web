@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Alert, Badge, Card, Group, Stack, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Card, Group, Stack, Text, Title } from "@mantine/core";
 import { loadConnectAndInitialize } from "@stripe/connect-js";
 import { ConnectAccountManagement, ConnectAccountOnboarding, ConnectComponentsProvider } from "@stripe/react-connect-js";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/lib/paymentAccountApi";
 import { PaymentAccountSetupForm } from "@/components/PaymentAccountSetupForm";
 import { PendingEarningsCard } from "@/components/PendingEarningsCard";
+import { ChangePaymentAccountModal } from "@/components/ChangePaymentAccountModal";
 import { formatMinorAmount } from "@/lib/money";
 
 const publishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
@@ -26,6 +27,7 @@ export function PaymentsAndPayouts({
   defaultLegalCountry: string | null;
 }) {
   const [account, setAccount] = useState(initialAccount);
+  const [changingAccount, setChangingAccount] = useState(false);
   const disconnected = account?.account_status === "DISCONNECTED";
   // A HISTORICAL account is a permanently-rejected setup attempt (see
   // PaymentAccountService::provision()'s InvalidRequestException catch)
@@ -57,7 +59,15 @@ export function PaymentsAndPayouts({
     <Stack maw={900}>
       <Card withBorder radius="lg" p="xl">
         <Stack>
-          <Group justify="space-between"><Title order={2}>Payments &amp; Payouts</Title><Badge>{account.provider}</Badge></Group>
+          <Group justify="space-between">
+            <Title order={2}>Payments &amp; Payouts</Title>
+            <Group gap="sm">
+              <Badge>{account.provider}</Badge>
+              <Button variant="subtle" size="compact-sm" onClick={() => setChangingAccount(true)}>
+                Change payment country &amp; currency
+              </Button>
+            </Group>
+          </Group>
           <Group><Status label="Payouts" enabled={account.transfers_enabled} /><Badge color={account.account_status === "ACTIVE" ? "teal" : "orange"}>{account.account_status.replaceAll("_", " ")}</Badge></Group>
           <Text size="sm" c="dimmed">Legal country: {account.legal_country} · Environment: {account.environment} · Routing: {account.routing_status.replaceAll("_", " ")}</Text>
           <Text size="xs" c="dimmed">
@@ -94,6 +104,12 @@ export function PaymentsAndPayouts({
           )}
         </ConnectComponentsProvider>
       )}
+
+      <ChangePaymentAccountModal
+        opened={changingAccount}
+        onClose={() => setChangingAccount(false)}
+        onReplaced={(newAccount) => setAccount(newAccount)}
+      />
     </Stack>
   );
 }

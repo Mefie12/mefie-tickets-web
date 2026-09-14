@@ -20,6 +20,7 @@ import { notifications } from "@mantine/notifications";
 import { IconUserPlus } from "@tabler/icons-react";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import {
   ASSIGNABLE_ROLES,
   cancelInvitation,
@@ -151,7 +152,7 @@ export function TeamMembersTable({ initialRows, canEdit }: { initialRows: TeamRo
       </Group>
 
       <Card withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
-        <Table.ScrollContainer minWidth={700}>
+        <TableScrollShadow minWidth={700}>
         <Table verticalSpacing="sm" horizontalSpacing="md">
           <Table.Thead>
             <Table.Tr>
@@ -225,7 +226,7 @@ export function TeamMembersTable({ initialRows, canEdit }: { initialRows: TeamRo
             ))}
           </Table.Tbody>
         </Table>
-        </Table.ScrollContainer>
+        </TableScrollShadow>
       </Card>
 
       <Modal opened={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite an organizer">

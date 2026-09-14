@@ -1,5 +1,7 @@
+import { headers } from "next/headers";
+import { safeNext } from "@/lib/safeNext";
 import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/session";
+import { getCurrentOrganization, getCurrentUser } from "@/lib/session";
 import { AdminShell } from "@/components/AdminShell";
 
 /**
@@ -15,7 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const user = await getCurrentUser();
 
   if (!user) {
-    redirect("/login");
+    redirect(`/organizers/login?next=${encodeURIComponent(safeNext((await headers()).get("x-mefie-return-path"), "organizer", "/dashboard"))}`);
   }
 
   if (!user.email_verified_at) {
@@ -30,5 +32,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect("/distributor");
   }
 
-  return <AdminShell user={user}>{children}</AdminShell>;
+  const organization = await getCurrentOrganization();
+
+  return (
+    <AdminShell user={user} organization={organization}>
+      {children}
+    </AdminShell>
+  );
 }

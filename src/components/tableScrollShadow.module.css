@@ -1,0 +1,33 @@
+.shadowLeft,
+.shadowRight {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  z-index: 1;
+}
+
+.shadowLeft {
+  left: 0;
+  background: linear-gradient(to right, var(--mantine-color-body), transparent);
+}
+
+.shadowRight {
+  right: 0;
+  background: linear-gradient(to left, var(--mantine-color-body), transparent);
+}
+
+.shadowLeft[data-visible],
+.shadowRight[data-visible] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shadowLeft,
+  .shadowRight {
+    transition: none;
+  }
+}

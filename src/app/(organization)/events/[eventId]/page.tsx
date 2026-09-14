@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   Alert,
   Card,
@@ -16,20 +16,44 @@ import {
   Title,
 } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
-import { backendRequest } from "@/lib/backend";
+import { APP_URL, backendRequest } from "@/lib/backend";
+import { getCurrentOrganization, getEventById } from "@/lib/session";
 import { formatAmount } from "@/lib/money";
 import type { EventOverview } from "@/lib/overviewApi";
+import { PublicShareCard } from "@/components/PublicShareCard";
 
 export default async function EventOverviewPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params;
-  const result = await backendRequest<{ overview: EventOverview }>(`/api/events/${eventId}/overview`);
+  const [result, event, organization] = await Promise.all([
+    backendRequest<{ overview: EventOverview }>(`/api/events/${eventId}/overview`),
+    getEventById(eventId),
+    getCurrentOrganization(),
+  ]);
   if (result.status === 404) notFound();
+  // A transient auth failure (e.g. the session expiring between the layout's
+  // guard and this call) should bounce to login, not blow up with a runtime error.
+  if (result.status === 401 || result.status === 419) redirect("/organizers/login");
   if (result.status !== 200) throw new Error("Unable to load event overview.");
   const overview = result.data.overview;
   const attention = overview.requires_attention?.unanswered_required_attendee_questions;
 
   return (
     <Stack gap="xl">
+      {event && organization && (
+        <PublicShareCard
+          heading="Share this event"
+          variant="compact"
+          url={`${APP_URL}/${organization.slug}/${event.slug}`}
+          title={event.title}
+          text={`View ${event.title} and get tickets.`}
+          enabled={event.status === "LIVE"}
+          disabledExplanation={
+            event.status === "DRAFT"
+              ? "This is the future public URL. Sharing becomes available after publication."
+              : "Archived events are not publicly shareable. Restore and publish the event to enable sharing."
+          }
+        />
+      )}
       <Title order={3}>Overview</Title>
       {attention !== undefined && attention > 0 && <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="Requires attention">{attention} confirmed attendee{attention === 1 ? " has" : "s have"} unanswered required registration questions.</Alert>}
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>

@@ -3,18 +3,19 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Badge, Button, Card, Checkbox, Group, Select, SimpleGrid, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Badge, Button, Card, Checkbox, Group, Modal, Select, SimpleGrid, Stack, Table, Text, Textarea, TextInput, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconAlertCircle, IconCheck, IconPlus, IconTicket, IconTrash } from "@tabler/icons-react";
 import { isValidPhoneNumber } from "libphonenumber-js";
 import type { AnswerValue } from "@/lib/checkoutApi";
-import { issueComplimentaryTickets, listDirectComplimentaryIssues, type ComplimentaryProgram, type DirectComplimentaryIssue } from "@/lib/complimentaryApi";
+import { issueComplimentaryTickets, listDirectComplimentaryIssues, voidComplimentaryTicket, type ComplimentaryProgram, type DirectComplimentaryIssue } from "@/lib/complimentaryApi";
 import type { Product } from "@/lib/productApi";
 import type { Question } from "@/lib/questionApi";
 import { ApiError } from "@/lib/authApi";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
 import { PhoneInput } from "@/components/PhoneInput";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { ComplimentaryDistributorManager } from "@/components/ComplimentaryDistributorManager";
 import { complimentaryInventory, poolLineKey } from "@/lib/complimentaryInventory";
 
@@ -109,6 +110,25 @@ export function ComplimentaryTicketsManager({ eventId, initialProgram, products,
 
   function patchAttendee(index: number, patch: Partial<AttendeeDraft>) { setAttendees((current) => current.map((a, i) => i === index ? { ...a, ...patch } : a)); }
 
+  const [voidTarget, setVoidTarget] = useState<{
+    order: DirectComplimentaryIssue;
+    ticket: DirectComplimentaryIssue["ticket_assignments"][number];
+  } | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+
+  const voidMutation = useMutation({
+    mutationFn: ({ orderId, ticketId, reason }: { orderId: number; ticketId: number; reason: string }) =>
+      voidComplimentaryTicket(eventId, orderId, ticketId, reason),
+    onSuccess: () => {
+      notifications.show({ color: "teal", icon: <IconCheck size={16} />, message: "Complimentary ticket voided — its capacity is back in the pool." });
+      queryClient.invalidateQueries({ queryKey: ["direct-complimentary-issues", eventId] });
+      refreshProgram();
+      setVoidTarget(null);
+      setVoidReason("");
+    },
+    onError: showError,
+  });
+
   const totalReserved = program.pool_lines.reduce((sum, line) => sum + line.quantity_reserved, 0);
   const totalAvailable = program.pool_lines.reduce((sum, line) => sum + line.quantity_available, 0);
 
@@ -134,15 +154,37 @@ export function ComplimentaryTicketsManager({ eventId, initialProgram, products,
         <SimpleGrid cols={{ base: 1, sm: 2 }}><TextInput required label="First name" error={fieldErrors[`attendees.${index}.first_name`]} value={attendee.first_name} onChange={(e) => patchAttendee(index, { first_name: e.currentTarget.value })} /><TextInput required label="Last name" error={fieldErrors[`attendees.${index}.last_name`]} value={attendee.last_name} onChange={(e) => patchAttendee(index, { last_name: e.currentTarget.value })} /><TextInput required type="email" label="Email" error={fieldErrors[`attendees.${index}.email`]} value={attendee.email} onChange={(e) => patchAttendee(index, { email: e.currentTarget.value })} /><PhoneInput label="Phone (optional)" value={attendee.phone} onChange={(phone) => patchAttendee(index, { phone })} /></SimpleGrid>
         {attendeeQuestions.map((question) => <EditableQuestionField key={question.id} question={question} value={attendee.answers[question.id]} onChange={(answer) => patchAttendee(index, { answers: { ...attendee.answers, [question.id]: answer } })} />)}
       </Stack></Card>)}
-      {issueSummary.length > 0 && <Card withBorder radius="md" p={0}><Stack gap={0}><Group justify="space-between" px="md" py="sm"><Stack gap={0}><Text fw={600} size="sm">Issuance summary</Text><Text size="xs" c="dimmed">Review how this issuance will use the complimentary balance.</Text></Stack><Badge variant="light" color={capacityExceeded ? "orange" : "gray"}>{attendees.length} ticket{attendees.length === 1 ? "" : "s"}</Badge></Group><Table.ScrollContainer minWidth={560}><Table verticalSpacing="xs" horizontalSpacing="md"><Table.Thead><Table.Tr><Table.Th>Ticket / option</Table.Th><Table.Th ta="right">Issuing</Table.Th><Table.Th ta="right">Available</Table.Th><Table.Th ta="right">After issuance</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{issueSummary.map((row) => { const exceeded = row.quantity > row.available; return <Table.Tr key={row.key}><Table.Td><Text size="sm" fw={500}>{row.item.label}</Text></Table.Td><Table.Td ta="right"><Badge variant="light" color={exceeded ? "orange" : "blue"}>{row.quantity}</Badge></Table.Td><Table.Td ta="right"><Text size="sm" c="dimmed">{row.available}</Text></Table.Td><Table.Td ta="right"><Text size="sm" fw={500} c={exceeded ? "orange" : undefined}>{Math.max(0, row.available - row.quantity)}</Text></Table.Td></Table.Tr>; })}</Table.Tbody></Table></Table.ScrollContainer>{capacityExceeded && <Alert m="md" mt="xs" color="orange" variant="light" icon={<IconAlertCircle size={16} />}>Reduce the attendees assigned to an option that exceeds its available complimentary balance.</Alert>}</Stack></Card>}
+      {issueSummary.length > 0 && <Card withBorder radius="md" p={0}><Stack gap={0}><Group justify="space-between" px="md" py="sm"><Stack gap={0}><Text fw={600} size="sm">Issuance summary</Text><Text size="xs" c="dimmed">Review how this issuance will use the complimentary balance.</Text></Stack><Badge variant="light" color={capacityExceeded ? "orange" : "gray"}>{attendees.length} ticket{attendees.length === 1 ? "" : "s"}</Badge></Group><TableScrollShadow minWidth={560}><Table verticalSpacing="xs" horizontalSpacing="md"><Table.Thead><Table.Tr><Table.Th>Ticket / option</Table.Th><Table.Th ta="right">Issuing</Table.Th><Table.Th ta="right">Available</Table.Th><Table.Th ta="right">After issuance</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{issueSummary.map((row) => { const exceeded = row.quantity > row.available; return <Table.Tr key={row.key}><Table.Td><Text size="sm" fw={500}>{row.item.label}</Text></Table.Td><Table.Td ta="right"><Badge variant="light" color={exceeded ? "orange" : "blue"}>{row.quantity}</Badge></Table.Td><Table.Td ta="right"><Text size="sm" c="dimmed">{row.available}</Text></Table.Td><Table.Td ta="right"><Text size="sm" fw={500} c={exceeded ? "orange" : undefined}>{Math.max(0, row.available - row.quantity)}</Text></Table.Td></Table.Tr>; })}</Table.Tbody></Table></TableScrollShadow>{capacityExceeded && <Alert m="md" mt="xs" color="orange" variant="light" icon={<IconAlertCircle size={16} />}>Reduce the attendees assigned to an option that exceeds its available complimentary balance.</Alert>}</Stack></Card>}
       <Group justify="space-between"><Button variant="light" leftSection={<IconPlus size={16} />} disabled={attendees.length >= 50} onClick={() => setAttendees((a) => [...a, emptyAttendee()])}>Add attendee</Button><Checkbox label="Email each attendee their ticket after issuance" description={!emailTickets ? "Tickets will be created, but attendees will not receive an email." : undefined} checked={emailTickets} onChange={(e) => setEmailTickets(e.currentTarget.checked)} /></Group>
       <Group justify="flex-end"><Button disabled={program.status !== "ACTIVE" || deadlinePassed || capacityExceeded} loading={issueMutation.isPending} onClick={submitIssue}>Issue {attendees.length} ticket{attendees.length === 1 ? "" : "s"}</Button></Group>
     </Stack></Card>
 
-    <Card withBorder radius="lg" p="lg"><Stack gap="md"><Text fw={700}>Recent direct issuances</Text>{recentIssues.isLoading && <Text size="sm" c="dimmed">Loading recent issuances…</Text>}{recentIssues.data?.length === 0 && <Text size="sm" c="dimmed">No direct complimentary tickets have been issued yet.</Text>}{recentIssues.data?.map((order) => <Group key={order.id} justify="space-between" align="flex-start"><Stack gap={0}><Button component={Link} href={`/events/${eventId}/orders/${order.id}`} variant="subtle" size="compact-sm" px={0}>{order.short_id}</Button><Text size="xs" c="dimmed">{new Date(order.created_at).toLocaleString()} · {order.issued_by ? `${order.issued_by.first_name} ${order.issued_by.last_name}` : "Unknown issuer"}</Text><Text size="sm">{order.items.map((item) => `${item.quantity} × ${item.ticket_display_name}`).join(", ")}</Text></Stack><Stack gap={2} align="flex-end"><Badge variant="light" color={deliveryColor(order)} title={deliveryDescription(order)}>{deliveryLabel(order)}</Badge>{order.delivery_summary_status === "WAITING_FOR_WORKER" && <Text size="xs" c="dimmed" ta="right">Waiting longer than expected</Text>}</Stack></Group>)}</Stack></Card>
+    <Card withBorder radius="lg" p="lg"><Stack gap="md"><Text fw={700}>Recent direct issuances</Text>{recentIssues.isLoading && <Text size="sm" c="dimmed">Loading recent issuances…</Text>}{recentIssues.data?.length === 0 && <Text size="sm" c="dimmed">No direct complimentary tickets have been issued yet.</Text>}{recentIssues.data?.map((order) => <Stack key={order.id} gap="xs">
+  <Group justify="space-between" align="flex-start"><Stack gap={0}><Button component={Link} href={`/events/${eventId}/orders/${order.id}`} variant="subtle" size="compact-sm" px={0}>{order.short_id}</Button><Text size="xs" c="dimmed">{new Date(order.created_at).toLocaleString()} · {order.issued_by ? `${order.issued_by.first_name} ${order.issued_by.last_name}` : "Unknown issuer"}</Text><Text size="sm">{order.items.map((item) => `${item.quantity} × ${item.ticket_display_name}`).join(", ")}</Text></Stack><Stack gap={2} align="flex-end"><Badge variant="light" color={deliveryColor(order)} title={deliveryDescription(order)}>{deliveryLabel(order)}</Badge>{order.delivery_summary_status === "WAITING_FOR_WORKER" && <Text size="xs" c="dimmed" ta="right">Waiting longer than expected</Text>}</Stack></Group>
+  {order.ticket_assignments.length > 0 && <Stack gap={4} pl="sm" style={{ borderLeft: "2px solid var(--mantine-color-gray-3)" }}>{order.ticket_assignments.map((ticket) => <Group key={ticket.id} justify="space-between" gap="xs" wrap="nowrap">
+    <Text size="xs" c={ticket.voided_at ? "dimmed" : undefined} td={ticket.voided_at ? "line-through" : undefined} style={{ minWidth: 0 }} truncate>{ticket.attendee ? `${ticket.attendee.first_name} ${ticket.attendee.last_name}` : ticket.short_id}{ticket.attendee?.email ? ` · ${ticket.attendee.email}` : ""}</Text>
+    {ticket.voided_at ? <Badge size="xs" variant="light" color="gray">Void</Badge>
+      : ticket.is_checked_in ? <Badge size="xs" variant="light" color="teal">Checked in</Badge>
+      : <Button size="compact-xs" variant="subtle" color="red" loading={voidMutation.isPending && voidMutation.variables?.ticketId === ticket.id} onClick={() => { setVoidReason(""); setVoidTarget({ order, ticket }); }}>Void</Button>}
+  </Group>)}</Stack>}
+</Stack>)}</Stack></Card>
 
     <Card withBorder radius="lg" p="lg"><ComplimentaryDistributorManager eventId={eventId} program={program} products={products} onProgramChange={refreshProgram} /></Card>
     </>}
+
+    <Modal opened={voidTarget !== null} onClose={() => { if (!voidMutation.isPending) setVoidTarget(null); }} title="Void this complimentary ticket?" centered>
+      {voidTarget && <Stack gap="md">
+        <Text size="sm">
+          {voidTarget.ticket.attendee ? `${voidTarget.ticket.attendee.first_name} ${voidTarget.ticket.attendee.last_name}` : voidTarget.ticket.short_id}&apos;s
+          pass stops working immediately and any unsent ticket email is cancelled. The reserved capacity returns to your complimentary pool — it is not released to public sale. This cannot be undone.
+        </Text>
+        <Textarea label="Reason (optional)" description="Recorded in the activity log." autosize minRows={2} maxLength={500} value={voidReason} onChange={(e) => setVoidReason(e.currentTarget.value)} />
+        <Group justify="flex-end">
+          <Button variant="subtle" onClick={() => setVoidTarget(null)} disabled={voidMutation.isPending}>Keep it</Button>
+          <Button color="red" loading={voidMutation.isPending} onClick={() => voidMutation.mutate({ orderId: voidTarget.order.id, ticketId: voidTarget.ticket.id, reason: voidReason })}>Void ticket</Button>
+        </Group>
+      </Stack>}
+    </Modal>
   </Stack>;
 }
 

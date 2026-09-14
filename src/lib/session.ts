@@ -1,6 +1,8 @@
 import { cache } from "react";
 import { backendRequest } from "@/lib/backend";
 import type { CurrentUser, Role } from "@/lib/authApi";
+import type { Event } from "@/lib/eventApi";
+import type { Organization } from "@/lib/organizationApi";
 import type { TeamRow } from "@/lib/teamApi";
 
 /**
@@ -40,4 +42,31 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
       : null;
 
   return { ...user, role };
+});
+
+/**
+ * Cached per request so the event layout's guard and the pages under it
+ * (e.g. Overview's "Share this event" card) share one GET /api/events/{id}
+ * on the single-process dev API instead of each fetching it separately.
+ */
+export const getEventById = cache(async (id: string): Promise<Event | null> => {
+  const result = await backendRequest<{ event: Event }>(`/api/events/${id}`);
+  return result.status === 200 ? result.data.event : null;
+});
+
+/** The signed-in organizer's current organization — name + slug + logo for the public navbar. */
+export type NavOrganization = { name: string; slug: string; logo_url: string | null };
+
+/**
+ * Cached so the public site header (which already resolves getCurrentUser)
+ * can add the org's branding without a second uncached round-trip.
+ * Returns null for anonymous visitors and distributor-only accounts.
+ */
+export const getCurrentOrganization = cache(async (): Promise<NavOrganization | null> => {
+  const result = await backendRequest<{ organization: Organization | null }>("/api/organization");
+  if (result.status !== 200 || !result.data.organization) return null;
+
+  const { name, slug, logo_url } = result.data.organization;
+
+  return { name, slug, logo_url };
 });

@@ -108,13 +108,29 @@ function emptyTier(): TierFormValue {
   };
 }
 
-function HelpFieldLabel({ htmlFor, children, help }: { htmlFor: string; children: ReactNode; help: ReactNode }) {
+function HelpFieldLabel({
+  htmlFor,
+  children,
+  help,
+  required,
+}: {
+  htmlFor: string;
+  children: ReactNode;
+  help: ReactNode;
+  required?: boolean;
+}) {
   const [opened, setOpened] = useState(false);
 
   return (
     <Group gap={4} wrap="nowrap">
       <Text component="label" htmlFor={htmlFor} size="sm" fw={500}>
         {children}
+        {required && (
+          <Text component="span" c="var(--mantine-color-error)" aria-hidden="true">
+            {" "}
+            *
+          </Text>
+        )}
       </Text>
       <Popover
         opened={opened}
@@ -470,6 +486,7 @@ function ProductFormModal({
         <Stack>
           <Select
             label="Pricing type"
+            withAsterisk
             data={
               product?.type === "FREE"
                 ? [{ value: "FREE", label: "Free (legacy)", disabled: true }, ...PRICING_OPTIONS]
@@ -482,6 +499,7 @@ function ProductFormModal({
             <Stack gap={4}>
               <HelpFieldLabel
                 htmlFor="ticket-group-title"
+                required
                 help="The group title describes the sales phase or ticket collection. Examples include Early Bird Ticket, Late Admission, Door Sales, and Weekend Pass. Buyers will see it together with their selected option, such as Early Bird Ticket — Standard."
               >
                 Ticket group title
@@ -493,7 +511,7 @@ function ProductFormModal({
               />
             </Stack>
           ) : (
-            <TextInput label="Ticket title" placeholder="General Admission" {...form.getInputProps("title")} />
+            <TextInput label="Ticket title" withAsterisk placeholder="General Admission" {...form.getInputProps("title")} />
           )}
 
           {form.values.type === "REGISTRATION" && (
@@ -510,6 +528,7 @@ function ProductFormModal({
           {form.values.type === "PAID" && (
             <NumberInput
               label="Price"
+              withAsterisk
               prefix={currencySymbol(eventCurrency)}
               min={0}
               decimalScale={2}
@@ -519,7 +538,8 @@ function ProductFormModal({
 
           <NumberInput
             label="Total quantity available"
-            description="Leave blank for unlimited"
+            withAsterisk={form.values.type === "TIERED"}
+            description={form.values.type === "TIERED" ? "Required — the cap across all ticket options in this group." : "Leave blank for unlimited"}
             min={0}
             clampBehavior="blur"
             {...form.getInputProps("quantity_available")}
@@ -595,6 +615,7 @@ function ProductFormModal({
                     <Stack gap={4}>
                       <HelpFieldLabel
                         htmlFor={`ticket-option-name-${index}`}
+                        required
                         help="The option describes what the buyer receives within this ticket group. Examples include General Admission, Standard, Standard+, VIP, Student, and Balcony."
                       >
                         Ticket option name
@@ -607,6 +628,7 @@ function ProductFormModal({
                     </Stack>
                     <NumberInput
                       label="Price"
+                      withAsterisk
                       prefix={currencySymbol(eventCurrency)}
                       min={0}
                       decimalScale={2}
@@ -635,6 +657,7 @@ function ProductFormModal({
                     </Group>
                     <NumberInput
                       label="Option capacity"
+                      withAsterisk
                       description="Required. You can increase it later within the ticket group capacity."
                       min={0}
                       clampBehavior="blur"

@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Badge, Card, Group, Pagination, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
 import { IconSearch } from "@tabler/icons-react";
 import { redirectOnAdminAuthError } from "@/lib/adminAuthErrorRedirect";
+import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { listAdminUsers, type AdminUser } from "@/lib/platformUserApi";
 import type { PageMeta } from "@/lib/platformOrganizationApi";
 
@@ -64,7 +65,7 @@ export function UsersTable({ initialUsers, initialMeta }: { initialUsers: AdminU
       </Group>
 
       <Card withBorder radius="lg" p={0} style={{ overflow: "hidden" }}>
-        <Table.ScrollContainer minWidth={700}>
+        <TableScrollShadow minWidth={700}>
           <Table verticalSpacing="sm" horizontalSpacing="md">
             <Table.Thead>
               <Table.Tr>
@@ -102,7 +103,7 @@ export function UsersTable({ initialUsers, initialMeta }: { initialUsers: AdminU
               ))}
             </Table.Tbody>
           </Table>
-        </Table.ScrollContainer>
+        </TableScrollShadow>
       </Card>
 
       {meta.last_page > 1 && (

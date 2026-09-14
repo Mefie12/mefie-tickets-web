@@ -33,7 +33,7 @@ export default function ForgotPasswordPage() {
       <AuthLayout title="Check your email" subtitle="If an account exists for that email, we've sent a password reset link.">
         <Stack>
           <Text size="sm" ta="center" c="dimmed">
-            <Anchor component={Link} href="/login">
+            <Anchor component={Link} href="/organizers/login">
               Back to login
             </Anchor>
           </Text>
@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
             Send reset link
           </Button>
           <Text size="sm" ta="center" c="dimmed">
-            <Anchor component={Link} href="/login">
+            <Anchor component={Link} href="/organizers/login">
               Back to login
             </Anchor>
           </Text>

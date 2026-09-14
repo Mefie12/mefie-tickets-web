@@ -1,0 +1,166 @@
+.main {
+  min-width: 0;
+}
+
+/*
+ * Desktop: the sidebar reads as a floating inset card (BMN reference) that
+ * spans the full viewport height (layout="alt") — 12px inset all round,
+ * 20px radius, its own surface. `margin` offsets the fixed navbar (top:0
+ * under layout="alt") to the inset position.
+ */
+@media (min-width: 48em) {
+  .navbar {
+    margin: 12px 0 12px 12px;
+    height: calc(100dvh - 24px);
+    border: 1px solid var(--mantine-color-default-border);
+    border-radius: 20px;
+    background-color: var(--mantine-color-default);
+    box-shadow: var(--mantine-shadow-xs);
+  }
+
+  /*
+   * The header (layout="alt" offsets it by the raw navbar width) and the
+   * main content both need to clear the card's 12px left inset plus a
+   * gutter — 12px for the header (matches BMN's grid gap), 16px for content.
+   */
+  .header {
+    inset-inline-start: calc(var(--app-shell-navbar-offset, 0rem) + 24px);
+    background-color: var(--mantine-color-body);
+  }
+
+  .main {
+    padding-inline-start: calc(var(--app-shell-navbar-offset, 0rem) + 28px);
+  }
+}
+
+/*
+ * Mobile: a bounded drawer rather than a full-bleed panel, so the dimmed
+ * backdrop stays visible as a clear dismiss affordance. Snaps open/closed —
+ * a `transform` tween to `none` stalls under dev re-renders.
+ *
+ * AppShell's own show/hide transform proved unreliable (it stopped clearing
+ * the hidden transform once layout="alt" was in play), so the open state is
+ * driven directly by `.navbarOpen`, toggled from `mobileOpened`. Closed, the
+ * navbar keeps AppShell's hidden transform and the synced width var parks it
+ * fully off screen.
+ */
+@media (max-width: 47.99em) {
+  .navbar {
+    --app-shell-navbar-width: min(20rem, 100vw - 2rem);
+    width: var(--app-shell-navbar-width);
+  }
+
+  .navbarOpen {
+    transform: none !important;
+  }
+}
+
+/* Navbar column: brand card / scrolling nav / account card, stacked. */
+.navbar {
+  gap: 12px;
+}
+
+.navScroll {
+  min-height: 0;
+}
+
+/*
+ * Active item — matches the event-taxonomy selected-row style: brand-tinted
+ * fill, a full accent border, a 3px inset left accent bar, and an accent
+ * icon. Every item carries a transparent border so activating one doesn't
+ * shift layout.
+ */
+.navbar :global(.mantine-NavLink-root) {
+  min-height: 40px;
+  border-radius: var(--mantine-radius-md);
+  border: 1px solid transparent;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.navbar :global(.mantine-NavLink-root:hover) {
+  border-color: var(--mantine-primary-color-filled);
+}
+
+.navbar :global(.mantine-NavLink-root[data-active]) {
+  background-color: var(--mantine-color-brand-light);
+  border-color: var(--mantine-primary-color-filled);
+  box-shadow: inset 3px 0 0 var(--mantine-primary-color-filled);
+  color: var(--mantine-color-text);
+}
+
+.navbar :global(.mantine-NavLink-root[data-active] .mantine-NavLink-section) {
+  color: var(--mantine-primary-color-filled);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navbar :global(.mantine-NavLink-root) {
+    transition: none;
+  }
+}
+
+/* Brand card (top of sidebar) — logo + name + sublabel, BMN workspace card. */
+.brandCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--mantine-color-default-border);
+  background-color: var(--mantine-color-body);
+}
+
+.brandCard[data-accent] {
+  border-color: transparent;
+  background-color: var(--mantine-primary-color-light);
+}
+
+.brandCard[data-collapsed] {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.brandLogo {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+/* Account card (bottom of sidebar) — avatar + name + email, opens the menu. */
+.accountCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  width: 100%;
+  padding: 8px;
+  border-radius: 16px;
+  border: 1px solid var(--mantine-color-default-border);
+}
+
+.accountCard:hover {
+  background-color: var(--mantine-color-default-hover);
+}
+
+.accountCard[data-collapsed] {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.accountText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+  text-align: left;
+}

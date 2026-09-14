@@ -10,6 +10,7 @@ import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { computeBuyerCosts } from "@/lib/fees";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
+import { LegalDocumentLinksLine } from "@/components/LegalDocumentLinks";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { PhoneInput } from "@/components/PhoneInput";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
@@ -90,8 +91,21 @@ export function CheckoutDetailsForm({
   const [phone, setPhone] = useState("");
   const [orderAnswers, setOrderAnswers] = useState<Record<number, AnswerValue>>({});
   const deferred = event.deferred_assignment_enabled;
+  // Entering attendee details at checkout hands the buyer the authority to
+  // accept the admission terms on each attendee's behalf — only valid when
+  // the event's acceptance policy is PURCHASER_GROUP. GUARDIAN_MINOR and
+  // ATTENDEE_PERSONAL require the guardian/attendee themselves to accept,
+  // which can only happen after assignment (portal / personal link), so
+  // those events must ship every unit "later" (docs/17 §5.3, §7.1, §7.3) —
+  // offering "now" for them is what the backend's 422 on this exact form
+  // was catching (OrderService::assertInlineAttendeesWithinItemQuantities).
+  const inlineAssignmentOffered = deferred && event.acceptance_policy === "PURCHASER_GROUP";
   // "later" = ship every unit BUYER_HELD, no attendee entry now; "now" =
   // enter (some or all) attendees at checkout via the accordion below.
+  // Keyed on `deferred` alone (not `inlineAssignmentOffered`): a
+  // non-PURCHASER_GROUP deferred event must still default to — and, since
+  // its picker below never renders, stay locked on — "later". Only a
+  // genuinely non-deferred event (no BUYER_HELD state to ship to) forces "now".
   const [assignMode, setAssignMode] = useState<"now" | "later">(deferred ? "later" : "now");
   const [attendees, setAttendees] = useState<AttendeeSlot[]>(() => buildAttendeeSlots(cartItems, deferred));
   const [notifyAttendees, setNotifyAttendees] = useState(true);
@@ -224,7 +238,7 @@ export function CheckoutDetailsForm({
     <Stack gap="xl">
       <Stack gap="md">
         <Title order={2} fz={22}>
-          Your details
+          1. Buyer Details
         </Title>
         {/* Container query, not a viewport breakpoint: the checkout is a
             ~340px sticky sidebar on desktop and full-width on mobile, so
@@ -233,11 +247,12 @@ export function CheckoutDetailsForm({
             comfortable tap target. Email and phone always get their own
             row (phone needs the width for its country-code selector). */}
         <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
-          <TextInput label="First name" autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
-          <TextInput label="Last name" autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
+          <TextInput label="First name" withAsterisk autoComplete="given-name" value={firstName} onChange={(e) => setFirstName(e.currentTarget.value)} />
+          <TextInput label="Last name" withAsterisk autoComplete="family-name" value={lastName} onChange={(e) => setLastName(e.currentTarget.value)} />
         </SimpleGrid>
         <TextInput
           label="Email"
+          withAsterisk
           type="email"
           inputMode="email"
           autoComplete="email"
@@ -264,7 +279,7 @@ export function CheckoutDetailsForm({
       <Stack gap="md">
         <Divider label="Attendees" labelPosition="left" />
 
-        {deferred && (
+        {inlineAssignmentOffered && (
           <Radio.Group
             value={assignMode}
             onChange={(value) => setAssignMode(value as "now" | "later")}
@@ -333,6 +348,7 @@ export function CheckoutDetailsForm({
                     <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm">
                       <TextInput
                         label="First name"
+                        withAsterisk
                         size="sm"
                         autoComplete="off"
                         value={attendee.first_name}
@@ -340,6 +356,7 @@ export function CheckoutDetailsForm({
                       />
                       <TextInput
                         label="Last name"
+                        withAsterisk
                         size="sm"
                         autoComplete="off"
                         value={attendee.last_name}
@@ -405,7 +422,7 @@ export function CheckoutDetailsForm({
             label={
               <>
                 I have read and accept the{" "}
-                <TermsAndConditionsLink eventId={event.id} terms={event.terms} label="Terms & Conditions" />
+                <TermsAndConditionsLink document={event.terms} pdfUrl={`/api/public/events/${event.id}/terms/pdf`} label="Terms & Conditions" />
               </>
             }
             checked={termsAccepted}
@@ -413,6 +430,9 @@ export function CheckoutDetailsForm({
           />
         </Stack>
       )}
+
+      {/* Platform-wide checkout disclosures (e.g. Refund Policy) — separate from the event's own required Terms & Conditions above. Renders nothing when no document is attached. */}
+      <LegalDocumentLinksLine placement="ticket-checkout" />
 
       {termsVersionChanged && (
         <Alert color="orange" title="Terms & Conditions updated">
