@@ -164,6 +164,30 @@ export function EventMediaEditor({
     onError: handleError,
   });
 
+  // The backend endpoint takes one image per request, so a multi-file drop
+  // is uploaded one at a time. `remainingGallerySlots` is also the
+  // Dropzone's `maxFiles` — without it, selecting more files at once than
+  // the gallery has room for made react-dropzone reject the *entire*
+  // selection (not just the excess), which read to the organizer as
+  // uploading multiple images simply failing outright.
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+
+  async function handleGalleryFiles(files: File[]) {
+    setUploadingGallery(true);
+    try {
+      for (const file of files.slice(0, remainingGallerySlots)) {
+        try {
+          await uploadGalleryMutation.mutateAsync(file);
+        } catch {
+          // Already surfaced via the mutation's onError; keep going so one
+          // bad file (wrong format, too large) doesn't block the rest.
+        }
+      }
+    } finally {
+      setUploadingGallery(false);
+    }
+  }
+
   const deleteGalleryMutation = useMutation({
     mutationFn: (mediaId: number) => deleteEventGalleryImage(eventId, mediaId),
     onSuccess: (data: { event: Event }) => {
@@ -195,7 +219,8 @@ export function EventMediaEditor({
   }
 
   const gallery = event.gallery;
-  const galleryFull = gallery.length >= MAX_GALLERY_IMAGES;
+  const remainingGallerySlots = MAX_GALLERY_IMAGES - gallery.length;
+  const galleryFull = remainingGallerySlots <= 0;
 
   return (
     <Stack gap="xl">
@@ -335,16 +360,27 @@ export function EventMediaEditor({
 
         {!disabled && !galleryFull && (
           <Dropzone
-            onDrop={(files) => files[0] && uploadGalleryMutation.mutate(files[0])}
-            onReject={() => notifications.show({ color: "red", message: "That file can't be added to the gallery." })}
+            onDrop={(files) => void handleGalleryFiles(files)}
+            onReject={() =>
+              notifications.show({
+                color: "red",
+                message:
+                  remainingGallerySlots === 1
+                    ? "That file can't be added to the gallery."
+                    : `Those files can't be added to the gallery — you can add up to ${remainingGallerySlots} more.`,
+              })
+            }
             maxSize={MAX_SIZE_BYTES}
             accept={IMAGE_MIME_TYPE}
-            maxFiles={1}
-            loading={uploadGalleryMutation.isPending}
+            maxFiles={remainingGallerySlots}
+            loading={uploadingGallery}
           >
             <Group justify="center" gap="xl" mih={80} style={{ pointerEvents: "none" }}>
               <IconPhoto size={24} opacity={0.5} />
-              <Text size="sm">Drag an image here, or click to browse</Text>
+              <Text size="sm">
+                Drag {remainingGallerySlots === 1 ? "an image" : "images"} here, or click to browse
+                {remainingGallerySlots > 1 && ` (up to ${remainingGallerySlots} more)`}
+              </Text>
             </Group>
           </Dropzone>
         )}
