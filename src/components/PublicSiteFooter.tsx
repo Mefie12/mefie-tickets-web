@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Box, Container, Divider, Flex, Group, SimpleGrid, Stack, Text } from "@mantine/core";
-import { IconTicket } from "@tabler/icons-react";
 import { PrivacyChoicesLink } from "@/components/privacy/PrivacyChoicesLink";
+import { MefieLogo } from "@/components/MefieLogo";
 
 const LINK_STYLE = { color: "var(--mantine-color-dimmed)", fontSize: "var(--mantine-font-size-sm)", textDecoration: "none" } as const;
 
@@ -21,10 +21,7 @@ export function PublicSiteFooter() {
         <Stack gap="lg">
           <Flex direction={{ base: "column", xl: "row" }} justify="space-between" align={{ base: "flex-start", xl: "center" }} gap="lg">
             <Stack gap="xs">
-              <Group gap="xs">
-                <IconTicket size={20} />
-                <Text fw={800}>Mefie Tickets</Text>
-              </Group>
+              <MefieLogo h={24} />
               <Text c="dimmed" size="sm">
                 Discover experiences worth showing up for.
               </Text>

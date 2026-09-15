@@ -14,6 +14,7 @@ import {
   IconUserCircle,
   IconUsers,
   IconCreditCard,
+  IconWorld,
 } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import type { NavOrganization, SessionUser } from "@/lib/session";
@@ -101,6 +102,10 @@ export function AdminShell({
       </Menu.Item>
       <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
         Privacy choices
+      </Menu.Item>
+      <Menu.Divider />
+      <Menu.Item component={Link} href="/discover" leftSection={<IconWorld size={16} />}>
+        Exit to website
       </Menu.Item>
       <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => logoutMutation.mutate()}>
         Log out
