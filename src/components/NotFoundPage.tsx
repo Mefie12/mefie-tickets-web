@@ -1,8 +1,9 @@
 "use client";
 
-import { Button, Container, Group, Stack, Text, Title } from "@mantine/core";
-import { IconTicket, IconTicketOff } from "@tabler/icons-react";
+import { Button, Container, Stack, Text, Title } from "@mantine/core";
+import { IconTicketOff } from "@tabler/icons-react";
 import Link from "next/link";
+import { MefieLogo } from "@/components/MefieLogo";
 
 /**
  * Mirrors AuthLayout's composition (same wordmark row, same
@@ -15,12 +16,7 @@ export function NotFoundPage({ homeHref, homeLabel }: { homeHref: string; homeLa
   return (
     <Container size="xs" py={100}>
       <Stack gap="xl" align="center">
-        <Group gap="xs" justify="center">
-          <IconTicket size={22} />
-          <Text size="sm" c="dimmed" fw={500}>
-            Mefie Tickets
-          </Text>
-        </Group>
+        <MefieLogo h={22} />
 
         <IconTicketOff size={64} stroke={1.5} opacity={0.6} />
 

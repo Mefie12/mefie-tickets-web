@@ -162,11 +162,10 @@ export function ConsoleShell({
             </ActionIcon>
           </Group>
 
-          {headerEnd && (
-            <Group gap="sm" wrap="nowrap">
-              {headerEnd}
-            </Group>
-          )}
+          <Group gap="sm" wrap="nowrap">
+            {headerEnd}
+            <HeaderAccountMenu account={account} />
+          </Group>
         </Group>
       </AppShell.Header>
 
@@ -255,6 +254,27 @@ function AccountCard({ account, collapsed }: { account: ConsoleAccount; collapse
               <IconChevronRight size={16} style={{ flexShrink: 0, opacity: 0.6 }} />
             </>
           )}
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>{account.menuItems}</Menu.Dropdown>
+    </Menu>
+  );
+}
+
+/**
+ * The same account menu also lives in the header, top-right — a second,
+ * always-visible entry point that doesn't require the sidebar to be open
+ * (or, on mobile, the drawer to be pulled out) just to log out or leave
+ * the console.
+ */
+function HeaderAccountMenu({ account }: { account: ConsoleAccount }) {
+  return (
+    <Menu position="bottom-end" withArrow shadow="md" width={230}>
+      <Menu.Target>
+        <UnstyledButton aria-label="Account menu">
+          <Avatar radius="xl" size={32} color={account.avatarColor}>
+            {account.initials}
+          </Avatar>
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>{account.menuItems}</Menu.Dropdown>

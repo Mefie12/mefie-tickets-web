@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { AppShell, Avatar, Container, Group, Menu, Text, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconLogout, IconLogout2, IconShieldLock, IconTicket } from "@tabler/icons-react";
+import { IconChevronDown, IconLogout, IconLogout2, IconShieldLock } from "@tabler/icons-react";
 import { portalLogout, portalLogoutAll } from "@/lib/portalApi";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { MefieLogo } from "@/components/MefieLogo";
 
 /**
  * Shell for the consumer ticket portal (`/tickets`). Deliberately its
@@ -39,8 +40,10 @@ export function ConsumerPortalShell({
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="xs">
-            <IconTicket size={20} />
-            <Text fw={700}>My tickets</Text>
+            <MefieLogo h={22} />
+            <Text fw={700} c="dimmed">
+              My tickets
+            </Text>
           </Group>
           <Group gap="sm" wrap="nowrap">
             <ThemeToggle />

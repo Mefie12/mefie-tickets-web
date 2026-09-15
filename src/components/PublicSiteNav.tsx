@@ -15,10 +15,11 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { IconBuildingStore, IconChevronDown, IconInfoCircle, IconLogin, IconTicket } from "@tabler/icons-react";
+import { IconBuildingStore, IconChevronDown, IconInfoCircle, IconLogin } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import { portalLogout, portalLogoutAll } from "@/lib/portalApi";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { MefieLogo } from "@/components/MefieLogo";
 import {
   AccountIdentity,
   buildAccountSections,
@@ -92,11 +93,8 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
       >
         <Container size="xl">
           <Group h={68} justify="space-between" wrap="nowrap">
-            <Link href="/" style={{ textDecoration: "none", color: "inherit" }}>
-              <Group gap="xs" wrap="nowrap">
-                <IconTicket size={23} />
-                <Text fw={800}>Mefie Tickets</Text>
-              </Group>
+            <Link href="/" aria-label="Mefie Tickets">
+              <MefieLogo h={28} />
             </Link>
 
             <Group visibleFrom="md" gap="xs" wrap="nowrap">

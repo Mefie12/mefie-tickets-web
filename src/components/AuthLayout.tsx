@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Box, Container, Group, Paper, Stack, Text } from "@mantine/core";
-import { IconTicket } from "@tabler/icons-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { MefieLogo } from "@/components/MefieLogo";
+import { brandTextColor } from "@/theme";
 
 export function AuthLayout({
   title,
@@ -18,22 +19,13 @@ export function AuthLayout({
     <Container size="xs" py={80}>
       <Stack gap="xl">
         <Group justify="center">
-          <Link
-            href="/"
-            aria-label="Mefie Tickets home"
-            style={{ textDecoration: "none", color: "inherit" }}
-          >
-            <Group gap="xs">
-              <IconTicket size={22} />
-              <Text size="sm" c="dimmed" fw={500}>
-                Mefie Tickets
-              </Text>
-            </Group>
+          <Link href="/" aria-label="Mefie Tickets home">
+            <MefieLogo h={24} />
           </Link>
         </Group>
 
         <Stack gap={4} align="center">
-          <Text component="h1" fz={28} fw={800} ta="center">
+          <Text component="h1" c={brandTextColor} fz={28} fw={800} ta="center">
             {title}
           </Text>
           {subtitle && (
