@@ -1,0 +1,75 @@
+.terms {
+  padding: 16px 32px;
+  border-radius: 8px;
+  background: #f5f6f8;
+}
+
+.legalDisclosures {
+  gap: 8px;
+}
+
+.platformLegalNotice {
+  padding: 12px 32px;
+  border-radius: 8px;
+  background: #f5f6f8;
+  color: #20294b;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.termsBody {
+  align-items: center;
+}
+
+.termsInput {
+  background: transparent;
+  border-color: #91a9cc;
+  cursor: pointer;
+}
+
+.termsInput:checked {
+  background: #93c01f;
+  border-color: #93c01f;
+}
+
+.termsLabel {
+  padding-inline-start: 22px;
+  color: #20294b;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.termsLink {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #93c01f;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.termsLink:focus-visible {
+  outline: 2px solid #93c01f;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+@media (max-width: 480px) {
+  .terms {
+    padding: 16px;
+  }
+
+  .platformLegalNotice {
+    padding: 12px 16px;
+  }
+
+  .termsLabel {
+    padding-inline-start: 14px;
+  }
+}

@@ -14,6 +14,7 @@ import { LegalDocumentLinksLine } from "@/components/LegalDocumentLinks";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { PhoneInput } from "@/components/PhoneInput";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
+import classes from "./checkoutDetailsForm.module.css";
 
 type CartLine = { product_id: number; ticket_option_id: number | null; product_title: string; quantity: number };
 
@@ -415,24 +416,27 @@ export function CheckoutDetailsForm({
         )}
       </Stack>
 
-      {termsRequired && event.terms && (
-        <Stack gap="xs">
-          <Divider label="Terms & Conditions" labelPosition="left" />
+      <Stack className={classes.legalDisclosures} gap={8}>
+        {termsRequired && event.terms && (
           <Checkbox
+            classNames={{ root: classes.terms, body: classes.termsBody, input: classes.termsInput, label: classes.termsLabel }}
+            size="md"
+            radius="xs"
+            color="#93C01F"
             label={
               <>
-                I have read and accept the{" "}
-                <TermsAndConditionsLink document={event.terms} pdfUrl={`/api/public/events/${event.id}/terms/pdf`} label="Terms & Conditions" />
+                I have read and accepted this organizer&apos;s{" "}
+                <TermsAndConditionsLink document={event.terms} pdfUrl={`/api/public/events/${event.id}/terms/pdf`} label="Terms & Conditions" className={classes.termsLink} />
               </>
             }
             checked={termsAccepted}
             onChange={(e) => setTermsAccepted(e.currentTarget.checked)}
           />
-        </Stack>
-      )}
+        )}
 
-      {/* Platform-wide checkout disclosures (e.g. Refund Policy) — separate from the event's own required Terms & Conditions above. Renders nothing when no document is attached. */}
-      <LegalDocumentLinksLine placement="ticket-checkout" />
+        {/* Platform-wide checkout disclosures (e.g. Refund Policy). */}
+        <LegalDocumentLinksLine placement="ticket-checkout" className={classes.platformLegalNotice} linkClassName={classes.termsLink} />
+      </Stack>
 
       {termsVersionChanged && (
         <Alert color="orange" title="Terms & Conditions updated">
