@@ -4,7 +4,7 @@ import { Fragment, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Text } from "@mantine/core";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
-import { getLegalDocumentsForPlacement, type LegalDocumentPlacementSlug } from "@/lib/legalDocumentsApi";
+import { getLegalDocumentsForPlacement, type LegalDocumentPlacementSlug, type PublicLegalDocument } from "@/lib/legalDocumentsApi";
 
 const listFormatter = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
 
@@ -18,10 +18,13 @@ const listFormatter = new Intl.ListFormat("en", { style: "long", type: "conjunct
 export function LegalDocumentLinks({
   placement,
   fallback,
+  linkClassName,
 }: {
   placement: LegalDocumentPlacementSlug;
   /** Rendered while loading or if the placement has zero published documents. `null` renders nothing at all. */
   fallback: ReactNode | null;
+  /** Optional visual treatment for links at the consuming surface. */
+  linkClassName?: string;
 }) {
   const query = useQuery({
     queryKey: ["legal-documents", "placement", placement],
@@ -34,6 +37,11 @@ export function LegalDocumentLinks({
     return <>{fallback}</>;
   }
 
+  return <LegalDocumentLinkList documents={documents} linkClassName={linkClassName} />;
+}
+
+/** Presentational counterpart for consumers that already fetched a placement's documents. */
+function LegalDocumentLinkList({ documents, linkClassName }: { documents: PublicLegalDocument[]; linkClassName?: string }) {
   const parts = listFormatter.formatToParts(documents.map((document) => document.name));
 
   return (
@@ -50,6 +58,7 @@ export function LegalDocumentLinks({
             document={document}
             pdfUrl={`/api/public/legal-documents/${document.slug}/pdf`}
             label={document.name}
+            className={linkClassName}
           />
         );
       })}
@@ -62,7 +71,15 @@ export function LegalDocumentLinks({
  * (e.g. checkout's Refund Policy) — renders nothing at all, not even the
  * surrounding sentence, when the placement has zero published documents.
  */
-export function LegalDocumentLinksLine({ placement }: { placement: LegalDocumentPlacementSlug }) {
+export function LegalDocumentLinksLine({
+  placement,
+  className,
+  linkClassName,
+}: {
+  placement: LegalDocumentPlacementSlug;
+  className?: string;
+  linkClassName?: string;
+}) {
   const query = useQuery({
     queryKey: ["legal-documents", "placement", placement],
     queryFn: () => getLegalDocumentsForPlacement(placement),
@@ -71,8 +88,8 @@ export function LegalDocumentLinksLine({ placement }: { placement: LegalDocument
   if (!query.data || query.data.length === 0) return null;
 
   return (
-    <Text size="xs" c="dimmed">
-      This purchase is also subject to our <LegalDocumentLinks placement={placement} fallback={null} />.
+    <Text className={className}>
+      This purchase is also subject to the platform&apos;s <LegalDocumentLinkList documents={query.data} linkClassName={linkClassName} />.
     </Text>
   );
 }

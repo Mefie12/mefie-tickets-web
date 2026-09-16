@@ -23,10 +23,12 @@ export function TermsAndConditionsLink({
   document,
   pdfUrl,
   label = "View Terms & Conditions",
+  className,
 }: {
   document: LinkableDocument;
   pdfUrl: string;
   label?: string;
+  className?: string;
 }) {
   const [opened, setOpened] = useState(false);
 
@@ -35,6 +37,7 @@ export function TermsAndConditionsLink({
       <Text
         size="sm"
         component="a"
+        className={className}
         href={pdfUrl}
         target="_blank"
         rel="noopener noreferrer"
@@ -52,6 +55,7 @@ export function TermsAndConditionsLink({
       <Text
         size="sm"
         component="button"
+        className={className}
         type="button"
         onClick={(e) => {
           e.stopPropagation();
