@@ -1,13 +1,16 @@
 import { Box, Group, Image, Stack, Text, Title } from "@mantine/core";
+import classes from "./discoverHero.module.css";
 
 /**
- * Static copy for v1 — not admin-configurable. The spotlight photo is
- * hidden below `md` per the Figma mobile frame (no room, and the hero
- * gets much shorter on small screens).
+ * Static copy for v1 — not admin-configurable. `md` and up shows the
+ * photo in its own card beside the copy; below that there's no room for
+ * a separate card, so the same photo becomes the section's own
+ * background instead (see discoverHero.module.css) rather than
+ * disappearing entirely.
  */
 export function DiscoverHero() {
   return (
-    <Box bg="navy.9" py={{ base: 20, md: 40 }} px={{ base: 16, md: 64 }}>
+    <Box className={classes.hero} py={{ base: 20, md: 40 }} px={{ base: 16, md: 64 }}>
       <Group justify="center" align="center" gap={48} wrap="nowrap" maw={1312} mx="auto">
         <Stack gap={12} style={{ flex: 1 }}>
           <Text size="sm" c="lime.5" fw={500} tt="uppercase">
@@ -21,7 +24,7 @@ export function DiscoverHero() {
           </Text>
         </Stack>
         <Box visibleFrom="md" style={{ flexShrink: 0, width: 430, height: 260, borderRadius: 24, overflow: "hidden" }}>
-          <Image src="/images/discover-hero.png" alt="" h="100%" fit="cover" />
+          <Image src="/images/discover-hero.jpg" alt="" h="100%" fit="cover" />
         </Box>
       </Group>
     </Box>

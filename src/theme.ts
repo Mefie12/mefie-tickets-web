@@ -1,50 +1,42 @@
 import { createTheme, type MantineColorsTuple } from "@mantine/core";
 
 /**
- * Mefie Tickets brand palette — sourced from the Discover Events Figma
- * file's published variables (Color/Primitive/Accent, Color/Primitive/Grey,
- * Color/Surface/*, Color/Text/*, Color/Border/*), replacing the earlier
- * placeholder violet palette now that a real design system exists.
+ * Mefie Tickets brand palette. `brand.8`/`brand.9` are the two exact
+ * navy shades from Mefie's brand guidelines (also the logo wordmark's
+ * ink color) — `.8` for text (headings, links), `.9` for solid fills
+ * (buttons, badges, the discover hero background). 0-7 are generated
+ * tints of the same hue for lighter surfaces/variants; nothing outside
+ * `.8`/`.9` is a guideline-specified value.
  */
 const brand: MantineColorsTuple = [
-  "#eff6ff",
-  "#dbeafe",
-  "#bfdbfe",
-  "#93c5fd",
-  "#60a5fa",
-  "#3b82f6",
-  "#2563eb",
-  "#1d4ed8",
-  "#1e40af",
-  "#1e3a8a",
+  "#f1f6fb",
+  "#d7e6f4",
+  "#b3cee8",
+  "#85b0d8",
+  "#5892c9",
+  "#3977b1",
+  "#2f6190",
+  "#264e73",
+  "#1c3c59",
+  "#152b40",
 ];
 
-/** The Discover hero's dark background — Color/Primitive/Accent/900. */
-const navy: MantineColorsTuple = [
-  "#e8ecf7",
-  "#c6d0ea",
-  "#a2b1dc",
-  "#7c91cd",
-  "#5a76c0",
-  "#3f61b8",
-  "#2f55b4",
-  "#22459f",
-  "#1a3890",
-  "#1e3a8a",
-];
-
-/** The hero eyebrow/accent highlight — used sparingly, never as a text color on white. */
+/**
+ * The eyebrow/accent green — `.5` is Mefie's exact brand green (also the
+ * logo's "TICKET" ink color). 0-4/6-9 are generated tints/shades of the
+ * same hue; never use this as a text color on white (fails contrast).
+ */
 const lime: MantineColorsTuple = [
-  "#fbffe8",
-  "#f4ffc7",
-  "#ecffa3",
-  "#e4ff7d",
-  "#dfff60",
-  "#d8ff72",
-  "#c8ef5e",
-  "#b0d64c",
-  "#98bd3d",
-  "#7fa32c",
+  "#f9fdef",
+  "#f2fbdb",
+  "#e8f8bf",
+  "#daf39b",
+  "#c8eb70",
+  "#93c01f",
+  "#86af1d",
+  "#729518",
+  "#5e7a15",
+  "#495f11",
 ];
 
 /** Color/Primitive/Grey — the app's neutral scale for text/surfaces/borders. */
@@ -61,15 +53,27 @@ const grey: MantineColorsTuple = [
   "#171717",
 ];
 
+/**
+ * Brand text-navy (`.8`), swapped for a lighter tint (`.3`) in dark mode
+ * where `.8` reads as near-invisible low-contrast grey-blue. Exported for
+ * the handful of headings styled as `Text component="h1"` instead of
+ * `Title` (which gets this from `components.Title.defaultProps` below),
+ * so they don't each hand-roll the same `light-dark()` string.
+ */
+export const brandTextColor = "light-dark(var(--mantine-color-brand-8), var(--mantine-color-brand-3))";
+
 export const theme = createTheme({
   primaryColor: "brand",
   colors: {
     brand,
-    navy,
     lime,
     grey,
   },
-  primaryShade: { light: 6, dark: 5 },
+  // Fills (buttons, badges, avatars) use `.9` — the darker brand navy.
+  // Dark mode stays on a lighter `.6` so filled elements still stand out
+  // against an already-dark app background, mirroring the previous
+  // scale's light/dark split.
+  primaryShade: { light: 9, dark: 6 },
   defaultRadius: "md",
   fontFamily:
     "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
@@ -80,7 +84,7 @@ export const theme = createTheme({
   },
   defaultGradient: {
     from: "brand.6",
-    to: "navy.9",
+    to: "brand.9",
     deg: 135,
   },
   components: {
@@ -92,6 +96,17 @@ export const theme = createTheme({
     Card: {
       defaultProps: {
         radius: "lg",
+      },
+    },
+    // Headings and links use the brand text-navy (see brandTextColor).
+    Title: {
+      defaultProps: {
+        c: brandTextColor,
+      },
+    },
+    Anchor: {
+      defaultProps: {
+        c: brandTextColor,
       },
     },
   },

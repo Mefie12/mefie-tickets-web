@@ -24,6 +24,7 @@ import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, changeEmail, type CurrentUser, updateCurrentUser } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import type { SessionUser } from "@/lib/session";
+import { brandTextColor } from "@/theme";
 
 export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
   const [user, setUser] = useState(initialUser);
@@ -53,7 +54,7 @@ export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
   return (
     <Container size="sm" py="xl">
       <Stack gap="xl">
-        <Text component="h1" fz={28} fw={800}>
+        <Text component="h1" c={brandTextColor} fz={28} fw={800}>
           Account settings
         </Text>
 
