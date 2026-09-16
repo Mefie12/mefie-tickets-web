@@ -22,9 +22,9 @@ import {
 } from "@mantine/core";
 import { IconCamera, IconPhoto } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import { CountrySelector } from "@/components/CountrySelector";
 import { PhoneInput } from "@/components/PhoneInput";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import {
@@ -69,7 +69,7 @@ export function OrganizationSettingsForm({
     validate: {
       name: (v) => (v.trim().length === 0 ? "Name is required" : null),
       email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? null : "Enter a valid email"),
-      phone: (v) => (v.trim() && !isValidPhoneNumber(v) ? "Enter a valid phone number" : null),
+      phone: (v) => (v.trim() && !isValidInternationalPhoneNumber(v) ? "Enter a valid phone number" : null),
     },
   });
 

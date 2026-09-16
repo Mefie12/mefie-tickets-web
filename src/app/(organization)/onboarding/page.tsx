@@ -15,12 +15,12 @@ import {
 } from "@mantine/core";
 import { IconCamera } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { updateOrganization, uploadOrganizationLogo } from "@/lib/organizationApi";
 import { InviteOrganizerForm } from "@/components/InviteOrganizerForm";
 import { PhoneInput } from "@/components/PhoneInput";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 import { OnboardingJourney } from "@/components/OnboardingJourney";
 import { PaymentAccountSetupForm } from "@/components/PaymentAccountSetupForm";
 import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
@@ -136,7 +136,7 @@ function ProfileStep({ onDone }: { onDone: () => void }) {
   }
 
   function handleContinue() {
-    if (phone.trim() && !isValidPhoneNumber(phone)) {
+    if (phone.trim() && !isValidInternationalPhoneNumber(phone)) {
       notifications.show({ color: "red", message: "Enter a valid phone number, or leave it blank." });
       return;
     }
