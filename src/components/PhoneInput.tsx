@@ -33,9 +33,10 @@ const COUNTRY_SELECT_DATA: ComboboxItem[] = DIAL_COUNTRIES.map((c) => ({ value: 
  * Value/onChange operate on a single E.164 string ("+447911123456" or
  * ""), so this drops into every existing `phone: string` /
  * `phone?: string | null` call site with zero wire-shape changes — same
- * role `CountrySelector` plays for `country`. Browser locale chooses a
- * convenient initial country when it includes a supported region, but users
- * can always select another country.
+ * role `CountrySelector` plays for `country`. Required phone fields use the
+ * browser locale as a convenient initial country; optional fields remain
+ * blank until the user starts entering a number. Users can always choose a
+ * different country.
  */
 export function PhoneInput({
   value,
@@ -66,7 +67,7 @@ export function PhoneInput({
     () => browserCountryCode(DIAL_COUNTRY_CODES),
     () => null,
   );
-  const activeCountry = country ?? (value || national ? null : browserDefaultCountry);
+  const activeCountry = country ?? (required && !value && !national ? browserDefaultCountry : null);
   // Tracks the last E.164 value *we* emitted, so a `value` prop that
   // merely echoes our own onChange doesn't re-parse and clobber
   // in-progress typing — only a genuinely external change (form reset,
