@@ -75,6 +75,10 @@ export type PublicTicketOption = {
   is_available: boolean;
   status: "AVAILABLE" | "SOLD_OUT" | "COMING_SOON" | "SALE_ENDED" | "PAUSED";
   quantity_remaining: number;
+  // True once remaining stock is under 35% of what was originally made
+  // available for this tier — gates whether "X remaining" is worth
+  // showing at all (see TicketSelector).
+  is_low_stock: boolean;
   max_attendees_per_registration: number | null;
 };
 
@@ -91,6 +95,8 @@ export type PublicProduct = {
   starts_at: string | null;
   ends_at: string | null;
   quantity_remaining: number | null;
+  // See PublicTicketOption.is_low_stock — same rule, non-TIERED products.
+  is_low_stock: boolean;
   // Only present for non-TIERED products — TIERED carries this per-tier
   // instead (see PublicProductTier), since the cap can differ by tier.
   max_attendees_per_registration?: number | null;
