@@ -6,7 +6,6 @@ import { cheapestPriceLabel, TICKET_DELIVERY_NOTE } from "@/lib/publicEventApi";
 import type { PublicEventSeries } from "@/lib/publicEventSeriesApi";
 import { staticMapImageUrl } from "@/lib/mapbox";
 import { EventTicketPanel } from "@/components/EventTicketPanel";
-import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { EventHeroGallery } from "@/components/EventHeroGallery";
 import { EventGallery } from "@/components/EventGallery";
 import { EventTopActions } from "@/components/EventTopActions";
@@ -237,14 +236,6 @@ export function PublicEventSeriesView({ series, publicOccurrenceId }: { series: 
                 </Paper>
               )}
 
-              {occurrence.terms && (
-                <Group gap={6}>
-                  <Text size="sm" fw={600}>
-                    Terms &amp; Conditions
-                  </Text>
-                  <TermsAndConditionsLink document={occurrence.terms} pdfUrl={`/api/public/events/${occurrence.id}/terms/pdf`} />
-                </Group>
-              )}
             </Stack>
           </GridCol>
 
