@@ -8,7 +8,6 @@ import { cheapestPriceLabel, TICKET_DELIVERY_NOTE } from "@/lib/publicEventApi";
 import { getPublicEvent, getPublicSeries } from "@/lib/publicEventFetchers";
 import { staticMapImageUrl } from "@/lib/mapbox";
 import { EventTicketPanel } from "@/components/EventTicketPanel";
-import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { EventHeroGallery } from "@/components/EventHeroGallery";
@@ -244,14 +243,6 @@ export default async function PublicEventPage({
                 </Paper>
               )}
 
-              {event.terms && (
-                <Group gap={6}>
-                  <Text size="sm" fw={600}>
-                    Terms &amp; Conditions
-                  </Text>
-                  <TermsAndConditionsLink document={event.terms} pdfUrl={`/api/public/events/${event.id}/terms/pdf`} />
-                </Group>
-              )}
             </Stack>
           </GridCol>
 
