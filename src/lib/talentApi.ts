@@ -39,7 +39,28 @@ export const TALENT_ROLES: { value: TalentRole; label: string }[] = [
   { value: "OTHER", label: "Other" },
 ];
 
-export type SocialLinkProvider = "WEBSITE" | "INSTAGRAM" | "TIKTOK" | "YOUTUBE" | "SPOTIFY" | "SOUNDCLOUD" | "FACEBOOK" | "X";
+export type SocialLinkProvider =
+  | "WEBSITE" | "INSTAGRAM" | "TIKTOK" | "YOUTUBE" | "SPOTIFY" | "SOUNDCLOUD"
+  | "FACEBOOK" | "X" | "APPLE_MUSIC";
+
+/**
+ * Single source of truth for the social-link provider dropdown — the
+ * organizer lineup editor (`ContentSectionsEditor`) and the public event
+ * page (`PublicContentSections`, for icon-button aria-labels) both derive
+ * their option/label maps from this. Mirrors `App\Enums\SocialLinkProvider`
+ * on the API. Alphabetical by label.
+ */
+export const SOCIAL_LINK_PROVIDERS: { value: SocialLinkProvider; label: string }[] = [
+  { value: "APPLE_MUSIC", label: "Apple Music" },
+  { value: "FACEBOOK", label: "Facebook" },
+  { value: "INSTAGRAM", label: "Instagram" },
+  { value: "SOUNDCLOUD", label: "SoundCloud" },
+  { value: "SPOTIFY", label: "Spotify" },
+  { value: "TIKTOK", label: "TikTok" },
+  { value: "WEBSITE", label: "Website" },
+  { value: "X", label: "X" },
+  { value: "YOUTUBE", label: "YouTube" },
+];
 
 export type SocialLink = { provider: SocialLinkProvider; url: string };
 

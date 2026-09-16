@@ -84,7 +84,8 @@ export function EventVenueCard({
             href={navigationUrl}
             target="_blank"
             rel="noopener noreferrer"
-            variant="filled"
+            variant="white"
+            color="brand"
             radius="md"
             size="sm"
             pos="absolute"

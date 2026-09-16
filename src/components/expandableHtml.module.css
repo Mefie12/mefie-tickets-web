@@ -1,0 +1,36 @@
+.content {
+  transition: max-height 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/*
+ * Bottom fade-out overlay, shown only while collapsed — replaces a
+ * mask-image approach (animating mask-image directly has inconsistent
+ * cross-browser support; opacity transitions are universally reliable).
+ * Fades toward the page's own background color, since this content sits
+ * directly on the page body in both current usages — if ExpandableHtml
+ * is ever reused inside a colored Card/Paper, this end color needs to
+ * match that container instead.
+ */
+.fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 106px;
+  background: linear-gradient(to bottom, transparent, var(--mantine-color-body) 90%);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fade[data-visible] {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content,
+  .fade {
+    transition: none;
+  }
+}

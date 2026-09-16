@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ActionIcon, Anchor, Avatar, Button, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import {
+  IconBrandApple,
   IconBrandFacebook,
   IconBrandInstagram,
   IconBrandSoundcloud,
@@ -15,12 +16,19 @@ import {
   IconWorld,
 } from "@tabler/icons-react";
 import type { PublicContentSection, PublicLineupItem } from "@/lib/publicEventApi";
-import { TALENT_ROLES } from "@/lib/talentApi";
+import { SOCIAL_LINK_PROVIDERS, TALENT_ROLES } from "@/lib/talentApi";
 
 const ROLE_LABELS: Record<string, string> = Object.fromEntries(
   TALENT_ROLES.map((r) => [r.value, r.label]),
 );
 
+const SOCIAL_LINK_LABELS: Record<string, string> = Object.fromEntries(
+  SOCIAL_LINK_PROVIDERS.map((p) => [p.value, p.label]),
+);
+
+// Tabler has no dedicated Apple Music glyph — the plain Apple brand mark
+// is the closest available and reads fine paired with the "Apple Music"
+// label already carried in the link's aria-label.
 const SOCIAL_ICONS: Record<string, typeof IconWorld> = {
   WEBSITE: IconWorld,
   INSTAGRAM: IconBrandInstagram,
@@ -30,11 +38,12 @@ const SOCIAL_ICONS: Record<string, typeof IconWorld> = {
   SOUNDCLOUD: IconBrandSoundcloud,
   FACEBOOK: IconBrandFacebook,
   X: IconBrandX,
+  APPLE_MUSIC: IconBrandApple,
 };
 
 /** Renders after the event description/gallery — see docs/15_event_content_sections_plan.md. Hidden sections are already filtered server-side. */
 export function PublicContentSections({ sections }: { sections: PublicContentSection[] }) {
-  const visible = sections.filter((s) => s.type === "LINEUP" || s.custom_cards.length > 0);
+  const visible = sections.filter((s) => (s.type === "LINEUP" ? s.lineup_items.length > 0 : s.custom_cards.length > 0));
   if (visible.length === 0) return null;
 
   return (
@@ -70,14 +79,6 @@ export function PublicContentSections({ sections }: { sections: PublicContentSec
  * headliner items get a slightly larger card and avatar.
  */
 function LineupSection({ items }: { items: PublicLineupItem[] }) {
-  if (items.length === 0) {
-    return (
-      <Text size="sm" c="dimmed" fs="italic">
-        Lineup TBA
-      </Text>
-    );
-  }
-
   return (
     <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
       {items.map((item) => (
@@ -131,6 +132,7 @@ function TalentCard({ item }: { item: PublicLineupItem }) {
           <Group gap={4} justify="center">
             {item.social_links.map((link) => {
               const Icon = SOCIAL_ICONS[link.provider] ?? IconWorld;
+              const label = SOCIAL_LINK_LABELS[link.provider] ?? link.provider;
               return (
                 <ActionIcon
                   key={link.provider}
@@ -140,7 +142,7 @@ function TalentCard({ item }: { item: PublicLineupItem }) {
                   rel="noopener noreferrer"
                   variant="subtle"
                   color="gray"
-                  aria-label={`${item.display_name} on ${link.provider.toLowerCase()} (opens in a new tab)`}
+                  aria-label={`${item.display_name} on ${label} (opens in a new tab)`}
                 >
                   <Icon size={16} />
                 </ActionIcon>
