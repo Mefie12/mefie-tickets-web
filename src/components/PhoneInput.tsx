@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Group, Input, Select, Text, TextInput } from "@mantine/core";
 import type { ComboboxItem, ComboboxParsedItem } from "@mantine/core";
 import { AsYouType, getCountryCallingCode, parsePhoneNumberFromString } from "libphonenumber-js";
 import type { CountryCode } from "libphonenumber-js";
 import { COUNTRIES } from "@/lib/countries";
+import { browserCountryCode, normalizePhoneNumber } from "@/lib/phone";
 
 type DialCountry = { code: CountryCode; name: string; flag: string; dialCode: string };
 
@@ -24,6 +25,7 @@ const DIAL_COUNTRIES: DialCountry[] = COUNTRIES.flatMap((c) => {
   }
 });
 const DIAL_COUNTRIES_BY_CODE: Map<string, DialCountry> = new Map(DIAL_COUNTRIES.map((c) => [c.code, c]));
+const DIAL_COUNTRY_CODES = new Set(DIAL_COUNTRIES_BY_CODE.keys());
 const COUNTRY_SELECT_DATA: ComboboxItem[] = DIAL_COUNTRIES.map((c) => ({ value: c.code, label: `+${c.dialCode}` }));
 
 /**
@@ -31,8 +33,9 @@ const COUNTRY_SELECT_DATA: ComboboxItem[] = DIAL_COUNTRIES.map((c) => ({ value: 
  * Value/onChange operate on a single E.164 string ("+447911123456" or
  * ""), so this drops into every existing `phone: string` /
  * `phone?: string | null` call site with zero wire-shape changes — same
- * role `CountrySelector` plays for `country`. No pre-selected default,
- * matching `CountrySelector`'s convention.
+ * role `CountrySelector` plays for `country`. Browser locale chooses a
+ * convenient initial country when it includes a supported region, but users
+ * can always select another country.
  */
 export function PhoneInput({
   value,
@@ -56,6 +59,14 @@ export function PhoneInput({
   const initial = value ? parsePhoneNumberFromString(value) : undefined;
   const [country, setCountry] = useState<CountryCode | null>(initial?.country ?? null);
   const [national, setNational] = useState<string>(initial ? initial.formatNational() : (value ?? ""));
+  // `useSyncExternalStore` makes the browser-only locale available after
+  // hydration without a state-setting effect or a server/client mismatch.
+  const browserDefaultCountry = useSyncExternalStore(
+    () => () => {},
+    () => browserCountryCode(DIAL_COUNTRY_CODES),
+    () => null,
+  );
+  const activeCountry = country ?? (value || national ? null : browserDefaultCountry);
   // Tracks the last E.164 value *we* emitted, so a `value` prop that
   // merely echoes our own onChange doesn't re-parse and clobber
   // in-progress typing — only a genuinely external change (form reset,
@@ -71,7 +82,7 @@ export function PhoneInput({
   }, [value]);
 
   function emit(nextCountry: CountryCode | null, nextNational: string) {
-    const e164 = nextCountry && nextNational.trim() ? (parsePhoneNumberFromString(nextNational, nextCountry)?.number ?? "") : "";
+    const e164 = nextCountry && nextNational.trim() ? normalizePhoneNumber(nextNational, nextCountry) : "";
     lastEmitted.current = e164;
     onChange(e164);
   }
@@ -83,19 +94,19 @@ export function PhoneInput({
   }
 
   function handleNationalChange(raw: string) {
-    const formatted = country ? new AsYouType(country).input(raw) : raw;
+    const formatted = activeCountry ? new AsYouType(activeCountry).input(raw) : raw;
     setNational(formatted);
-    emit(country, formatted);
+    emit(activeCountry, formatted);
   }
 
   return (
     <Input.Wrapper label={label} required={required} error={error} size={size}>
       <Group gap={6} wrap="nowrap" align="flex-start" w="100%">
         <Select
-          aria-label="Country code"
+          aria-label="Country or calling code"
           placeholder="Code"
           data={COUNTRY_SELECT_DATA}
-          value={country}
+          value={activeCountry}
           onChange={handleCountryChange}
           disabled={disabled}
           error={!!error}
@@ -114,7 +125,7 @@ export function PhoneInput({
           rightSectionWidth={26}
           onFocus={(event) => event.currentTarget.select()}
           nothingFoundMessage="No matching country"
-          leftSection={country ? <span aria-hidden="true">{DIAL_COUNTRIES_BY_CODE.get(country)?.flag}</span> : undefined}
+          leftSection={activeCountry ? <span aria-hidden="true">{DIAL_COUNTRIES_BY_CODE.get(activeCountry)?.flag}</span> : undefined}
           filter={({ options, search }) => {
             const query = search.trim().replace(/^\+/, "").toLowerCase();
             if (!query) return options;
@@ -142,7 +153,7 @@ export function PhoneInput({
         />
         <TextInput
           aria-label={typeof label === "string" ? label : "Phone number"}
-          placeholder={placeholder ?? "Phone number"}
+          placeholder={placeholder ?? (activeCountry ? "Local phone number" : "Phone number")}
           type="tel"
           inputMode="tel"
           size={size}

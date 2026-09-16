@@ -5,10 +5,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Accordion, Alert, Badge, Button, Group, Modal, NumberInput, SimpleGrid, Stack, Table, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconMailForward, IconPlus, IconUserShare } from "@tabler/icons-react";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import { createComplimentaryAllocation, listComplimentaryAllocations, manageComplimentaryAllocation, type ComplimentaryProgram } from "@/lib/complimentaryApi";
 import type { Product } from "@/lib/productApi";
 import { PhoneInput } from "@/components/PhoneInput";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 import { complimentaryInventory, poolLineKey } from "@/lib/complimentaryInventory";
 
 type Action = "resend" | "revoke" | "suspend" | "resume" | "close";
@@ -40,7 +40,7 @@ export function ComplimentaryDistributorManager({ eventId, program, products, on
   });
   function submit() {
     if (!name.trim() || !/^\S+@\S+\.\S+$/.test(email)) return notifications.show({ color: "red", message: "Enter a name and valid email." });
-    if (phone && !isValidPhoneNumber(phone)) return notifications.show({ color: "red", message: "Enter a valid phone number or leave it blank." });
+    if (phone && !isValidInternationalPhoneNumber(phone)) return notifications.show({ color: "red", message: "Enter a valid phone number or leave it blank." });
     if (!Object.values(quantities).some((value) => value > 0)) return notifications.show({ color: "red", message: "Allocate at least one ticket." });
     if (overAllocated) return notifications.show({ color: "red", message: "Reduce quantities that exceed the available complimentary balance." });
     create.mutate();

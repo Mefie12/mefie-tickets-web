@@ -7,7 +7,6 @@ import { Alert, Badge, Button, Card, Checkbox, Group, Modal, Select, SimpleGrid,
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { IconAlertCircle, IconCheck, IconPlus, IconTicket, IconTrash } from "@tabler/icons-react";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import type { AnswerValue } from "@/lib/checkoutApi";
 import { issueComplimentaryTickets, listDirectComplimentaryIssues, voidComplimentaryTicket, type ComplimentaryProgram, type DirectComplimentaryIssue } from "@/lib/complimentaryApi";
 import type { Product } from "@/lib/productApi";
@@ -15,6 +14,7 @@ import type { Question } from "@/lib/questionApi";
 import { ApiError } from "@/lib/authApi";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
 import { PhoneInput } from "@/components/PhoneInput";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { ComplimentaryDistributorManager } from "@/components/ComplimentaryDistributorManager";
 import { complimentaryInventory, poolLineKey } from "@/lib/complimentaryInventory";
@@ -85,7 +85,7 @@ export function ComplimentaryTicketsManager({ eventId, initialProgram, products,
       if (!attendee.inventory_key) return `Choose a ticket option for attendee ${index + 1}.`;
       if (!attendee.first_name.trim() || !attendee.last_name.trim()) return `Enter the full name for attendee ${index + 1}.`;
       if (!/^\S+@\S+\.\S+$/.test(attendee.email)) return `Enter a valid email for attendee ${index + 1}.`;
-      if (attendee.phone && !isValidPhoneNumber(attendee.phone)) return `Enter a valid phone number for attendee ${index + 1}, or leave it blank.`;
+      if (attendee.phone && !isValidInternationalPhoneNumber(attendee.phone)) return `Enter a valid phone number for attendee ${index + 1}, or leave it blank.`;
       const email = attendee.email.trim().toLowerCase();
       perEmail.set(email, (perEmail.get(email) ?? 0) + 1);
       for (const question of attendeeQuestions) if (!isQuestionAnswered(question, attendee.answers[question.id])) return `'${question.title}' is required for every attendee.`;

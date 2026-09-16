@@ -6,12 +6,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Badge, Button, Card, Checkbox, Container, Group, NumberInput, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconArrowLeft, IconHistory, IconPlus, IconTicket, IconTrash, IconTransferOut } from "@tabler/icons-react";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import type { AnswerValue } from "@/lib/checkoutApi";
 import type { ComplimentaryAllocation } from "@/lib/complimentaryApi";
 import type { Question } from "@/lib/questionApi";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
 import { PhoneInput } from "@/components/PhoneInput";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 
 type Draft = { allocation_line_id: string; first_name: string; last_name: string; email: string; phone: string; answers: Record<number, AnswerValue> };
 type HistoryOrder = { id: number; short_id: string; created_at: string; ticket_assignments: Array<{ id: number; attendee: { first_name: string; last_name: string; email: string } }>; items: Array<{ id: number; ticket_display_name: string; quantity: number }> };
@@ -35,7 +35,7 @@ export function DistributorAllocationWorkspace({ allocationId }: { allocationId:
   const recipientLimit = allocation.program?.maximum_tickets_per_recipient ?? 20;
   function patch(index: number, value: Partial<Draft>) { setAttendees((rows) => rows.map((row, i) => i === index ? { ...row, ...value } : row)); }
   function submitIssue() {
-    for (const [index, a] of attendees.entries()) { if (!a.allocation_line_id || !a.first_name.trim() || !a.last_name.trim() || !/^\S+@\S+\.\S+$/.test(a.email)) return notifications.show({ color: "red", message: `Complete the required details for attendee ${index + 1}.` }); if (a.phone && !isValidPhoneNumber(a.phone)) return notifications.show({ color: "red", message: `Enter a valid phone for attendee ${index + 1}.` }); for (const q of questions) if (q.is_required && !isQuestionAnswered(q, a.answers[q.id])) return notifications.show({ color: "red", message: `'${q.title}' is required for every attendee.` }); }
+    for (const [index, a] of attendees.entries()) { if (!a.allocation_line_id || !a.first_name.trim() || !a.last_name.trim() || !/^\S+@\S+\.\S+$/.test(a.email)) return notifications.show({ color: "red", message: `Complete the required details for attendee ${index + 1}.` }); if (a.phone && !isValidInternationalPhoneNumber(a.phone)) return notifications.show({ color: "red", message: `Enter a valid phone for attendee ${index + 1}.` }); for (const q of questions) if (q.is_required && !isQuestionAnswered(q, a.answers[q.id])) return notifications.show({ color: "red", message: `'${q.title}' is required for every attendee.` }); }
     const counts = new Map<string, number>(); attendees.forEach((a) => counts.set(a.email.toLowerCase(), (counts.get(a.email.toLowerCase()) ?? 0) + 1)); if (Math.max(...counts.values()) > recipientLimit) return notifications.show({ color: "red", message: "The per-recipient issuance limit was exceeded." }); issue.mutate();
   }
 
