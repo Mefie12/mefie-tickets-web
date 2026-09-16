@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { AppShell, Avatar, Group, Menu, Text, UnstyledButton } from "@mantine/core";
-import { IconChevronDown, IconLogout, IconShieldLock, IconTicket, IconUserCircle } from "@tabler/icons-react";
+import { IconChevronDown, IconLogout, IconShieldLock, IconUserCircle } from "@tabler/icons-react";
 import { logout } from "@/lib/authApi";
 import type { SessionUser } from "@/lib/session";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { MefieLogo } from "@/components/MefieLogo";
 
 /**
  * Minimal shell for distributor-only accounts (no organization
@@ -29,10 +30,7 @@ export function DistributorShell({ user, children }: { user: SessionUser; childr
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
-          <Group gap="xs">
-            <IconTicket size={20} />
-            <Text fw={700}>Mefie Tickets</Text>
-          </Group>
+          <MefieLogo h={22} />
 
           <Group gap="sm" wrap="nowrap">
           <ThemeToggle />

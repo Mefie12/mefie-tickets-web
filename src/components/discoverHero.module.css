@@ -1,0 +1,20 @@
+/*
+ * Below `md` the side-by-side photo card (see DiscoverHero.tsx) has
+ * nowhere to go, so the same photo becomes the section's own background
+ * instead — Eventbrite-style — with a navy scrim over it so the white/lime
+ * copy stays readable against whatever the photo is doing underneath. At
+ * `md` and up this resets to the flat brand.9 the boxed photo card already
+ * sits on, so the photo isn't showing twice.
+ */
+.hero {
+  background-color: var(--mantine-color-brand-9);
+  background-image: linear-gradient(rgba(21, 43, 64, 0.88), rgba(21, 43, 64, 0.88)), url("/images/discover-hero.jpg");
+  background-size: cover;
+  background-position: center;
+}
+
+@media (min-width: 62em) {
+  .hero {
+    background-image: none;
+  }
+}
