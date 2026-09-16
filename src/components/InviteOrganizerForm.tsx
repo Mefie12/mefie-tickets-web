@@ -5,11 +5,11 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Button, Group, Select, Stack, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import { ApiError, type Role } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { INVITABLE_ROLES, inviteTeammate } from "@/lib/teamApi";
 import { PhoneInput } from "@/components/PhoneInput";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 
 type InviteFormValues = {
   first_name: string;
@@ -60,7 +60,7 @@ export function InviteOrganizerForm({
       first_name: (v) => (v.trim().length === 0 ? "First name is required" : null),
       last_name: (v) => (v.trim().length === 0 ? "Last name is required" : null),
       email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? null : "Enter a valid email"),
-      phone: (v) => (v.trim() && !isValidPhoneNumber(v) ? "Enter a valid phone number" : null),
+      phone: (v) => (v.trim() && !isValidInternationalPhoneNumber(v) ? "Enter a valid phone number" : null),
       role: (v) => (!v ? "Role is required" : null),
     },
   });

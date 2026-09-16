@@ -18,8 +18,8 @@ import {
   TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import { PhoneInput } from "@/components/PhoneInput";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, changeEmail, type CurrentUser, updateCurrentUser } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
@@ -35,7 +35,7 @@ export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
     validate: {
       first_name: (v) => (v.trim() ? null : "First name is required"),
       last_name: (v) => (v.trim() ? null : "Last name is required"),
-      phone: (v) => (v.trim() && !isValidPhoneNumber(v) ? "Enter a valid phone number" : null),
+      phone: (v) => (v.trim() && !isValidInternationalPhoneNumber(v) ? "Enter a valid phone number" : null),
     },
   });
 

@@ -4,7 +4,6 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Card, Checkbox, Divider, Group, Radio, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { isValidPhoneNumber } from "libphonenumber-js";
 import { ApiError } from "@/lib/authApi";
 import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
@@ -14,6 +13,7 @@ import { LegalDocumentLinksLine } from "@/components/LegalDocumentLinks";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { PhoneInput } from "@/components/PhoneInput";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
+import { isValidInternationalPhoneNumber } from "@/lib/phone";
 import classes from "./checkoutDetailsForm.module.css";
 
 type CartLine = { product_id: number; ticket_option_id: number | null; product_title: string; quantity: number };
@@ -183,7 +183,7 @@ export function CheckoutDetailsForm({
   function validate(): string | null {
     if (!firstName.trim() || !lastName.trim()) return "Enter your first and last name.";
     if (!/^\S+@\S+\.\S+$/.test(email)) return "Enter a valid email address.";
-    if (!phone.trim() || !isValidPhoneNumber(phone)) return "Enter a valid phone number.";
+    if (!phone.trim() || !isValidInternationalPhoneNumber(phone)) return "Enter a valid phone number.";
     if (termsRequired && !termsAccepted) return "You must accept the Terms & Conditions to continue.";
 
     for (const q of orderQuestions) {
@@ -198,7 +198,7 @@ export function CheckoutDetailsForm({
       if (a.assignment === "other") {
         if (!a.first_name.trim() || !a.last_name.trim()) return `Enter a name for each ${a.product_title} attendee.`;
         if (a.email.trim() && !/^\S+@\S+\.\S+$/.test(a.email)) return `Enter a valid email for each ${a.product_title} attendee, or leave it blank.`;
-        if (a.phone.trim() && !isValidPhoneNumber(a.phone)) return `Enter a valid phone number for each ${a.product_title} attendee, or leave it blank.`;
+        if (a.phone.trim() && !isValidInternationalPhoneNumber(a.phone)) return `Enter a valid phone number for each ${a.product_title} attendee, or leave it blank.`;
       }
       for (const q of attendeeQuestions) {
         if (!isQuestionAnswered(q, a.answers[q.id])) return `'${q.title}' is required for each attendee.`;
