@@ -25,8 +25,8 @@ export async function generateMetadata({
   const { event_series: series } = result.data;
   const description = series.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${series.title}.`;
   const canonical = `${APP_URL}/${series.organization.slug}/${series.slug}/${publicOccurrenceId}`;
-  const url = series.cover_social_url ?? series.cover_image_url ?? series.organization.cover_image_url;
-  const images = url ? { images: [{ url, width: 1200, height: 630, alt: series.title }] } : {};
+  const url = series.cover_social_url ?? series.cover_image_url ?? series.organization.cover_image_url ?? "/opengraph-image";
+  const images = { images: [{ url, width: 1200, height: 630, alt: series.title }] };
   return {
     title: `${series.title} | Mefie Tickets`, description, alternates: { canonical },
     openGraph: { title: series.title, description, url: canonical, type: "website", ...images },

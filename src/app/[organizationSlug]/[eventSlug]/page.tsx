@@ -26,8 +26,8 @@ export async function generateMetadata({ params }: { params: Promise<{ organizat
   // hero, then the organiser's cover. Explicit dimensions let Next emit
   // og:image:width/height so crawlers don't have to fetch-and-measure.
   const ogImages = (socialUrl: string | null, heroUrl: string | null, orgUrl: string | null, alt: string) => {
-    const url = socialUrl ?? heroUrl ?? orgUrl;
-    return url ? { images: [{ url, width: 1200, height: 630, alt }] } : {};
+    const url = socialUrl ?? heroUrl ?? orgUrl ?? "/opengraph-image";
+    return { images: [{ url, width: 1200, height: 630, alt }] };
   };
 
   const eventResult = await getPublicEvent(organizationSlug, eventSlug);
