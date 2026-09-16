@@ -12,7 +12,6 @@ import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { EventHeroGallery } from "@/components/EventHeroGallery";
-import { EventGallery } from "@/components/EventGallery";
 import { EventTopActions } from "@/components/EventTopActions";
 import { EventVenueCard } from "@/components/EventVenueCard";
 import { ExpandableHtml } from "@/components/ExpandableHtml";
@@ -221,8 +220,6 @@ export default async function PublicEventPage({
                   navigationUrl={navigationUrl}
                 />
               )}
-
-              {event.gallery.length > 0 && <EventGallery gallery={event.gallery} />}
 
               {/* Always visible, never gated behind purchase: the event can be
                   months out and there's no ticket-email system yet to deliver

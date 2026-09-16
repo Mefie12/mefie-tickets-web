@@ -82,6 +82,9 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: 
   const status = option?.status ?? (product.is_sold_out ? "SOLD_OUT" : product.is_on_sale ? "AVAILABLE" : "PAUSED");
   const available = option ? option.is_available : product.is_on_sale && !product.is_sold_out;
   const remaining = option?.quantity_remaining ?? product.quantity_remaining;
+  // Only worth surfacing once stock is actually running low — see
+  // Product::isLowStock() for the exact (complimentary-aware) threshold.
+  const isLowStock = option?.is_low_stock ?? product.is_low_stock;
   // Per-order cap: the organizer's max-per-registration (10 when unset),
   // further limited by what's actually left. No extra hardcoded ceiling —
   // an organizer allowing 50 per order should get 50.
@@ -89,8 +92,7 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: 
   const price = option?.price ?? product.current_price;
   const heading = option?.name ?? product.title;
   const subtitleParts = [
-    remaining !== null ? `${remaining} remaining` : null,
-    Number(price ?? 0) > 0 ? "+ fees" : null,
+    isLowStock && remaining !== null ? `${remaining} remaining` : null,
   ].filter((part): part is string => part !== null);
 
   // Same reasoning as OrderSummaryCard: this card's background is

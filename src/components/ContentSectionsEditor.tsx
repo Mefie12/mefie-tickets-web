@@ -73,6 +73,7 @@ import {
   updateTalentProfile,
   uploadTalentProfileImage,
   TALENT_ROLES,
+  SOCIAL_LINK_PROVIDERS,
   type SocialLink,
   type SocialLinkProvider,
   type TalentProfile,
@@ -80,17 +81,7 @@ import {
 } from "@/lib/talentApi";
 
 const ROLE_OPTIONS = TALENT_ROLES;
-
-const SOCIAL_PROVIDER_OPTIONS: { value: SocialLinkProvider; label: string }[] = [
-  { value: "WEBSITE", label: "Website" },
-  { value: "INSTAGRAM", label: "Instagram" },
-  { value: "TIKTOK", label: "TikTok" },
-  { value: "YOUTUBE", label: "YouTube" },
-  { value: "SPOTIFY", label: "Spotify" },
-  { value: "SOUNDCLOUD", label: "SoundCloud" },
-  { value: "FACEBOOK", label: "Facebook" },
-  { value: "X", label: "X" },
-];
+const SOCIAL_PROVIDER_OPTIONS = SOCIAL_LINK_PROVIDERS;
 
 function roleLabel(role: string) {
   return ROLE_OPTIONS.find((r) => r.value === role)?.label ?? role;
@@ -960,7 +951,7 @@ function TalentProfileForm({
                 data={SOCIAL_PROVIDER_OPTIONS}
                 value={link.provider}
                 onChange={(v) => form.setFieldValue(`social_links.${index}.provider`, v as SocialLinkProvider)}
-                w={140}
+                w={150}
               />
               <TextInput
                 placeholder="https://…"
