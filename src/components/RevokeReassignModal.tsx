@@ -71,7 +71,7 @@ export function RevokeReassignModal({
     onSuccess: () => {
       notifications.show({
         color: mode === "revoke" ? "gray" : "teal",
-        message: mode === "revoke" ? "Ticket returned to unassigned." : "Ticket reassigned — a new pass was issued.",
+        message: mode === "revoke" ? "Attendee removed." : "Attendee changed — a new pass was issued.",
       });
       reset();
       onDone();
@@ -95,7 +95,7 @@ export function RevokeReassignModal({
         reset();
         onClose();
       }}
-      title={mode === "revoke" ? "Unassign this ticket" : "Reassign this ticket"}
+      title={mode === "revoke" ? "Remove attendee from this ticket" : "Change attendee for this ticket"}
       centered
     >
       <Stack gap="md">
@@ -118,7 +118,7 @@ export function RevokeReassignModal({
         ) : mode === "revoke" ? (
           <>
             <Text size="sm">
-              The current pass stops working immediately and the ticket goes back to your unassigned pool.
+              The current pass stops working immediately and the ticket will need attendee details again.
             </Text>
             <Textarea
               label="Reason (optional)"
@@ -128,7 +128,7 @@ export function RevokeReassignModal({
               onChange={(e) => setReason(e.currentTarget.value)}
             />
             <Button color="red" onClick={() => run.mutate()} loading={run.isPending}>
-              Unassign ticket
+              Remove attendee
             </Button>
           </>
         ) : (
@@ -141,7 +141,7 @@ export function RevokeReassignModal({
                 </Text>
                 <AttendeeRegistrationFields value={form} onChange={setForm} questions={questions} />
                 <Button onClick={() => run.mutate()} loading={run.isPending}>
-                  Reassign ticket
+                  Change attendee
                 </Button>
               </>
             )}

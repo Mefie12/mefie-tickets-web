@@ -5,7 +5,7 @@ export const ASSIGNMENT_STATUS_META: Record<
   EntitlementAssignmentStatus,
   { label: string; color: string }
 > = {
-  BUYER_HELD: { label: "Unassigned", color: "orange" },
+  BUYER_HELD: { label: "Needs attendee details", color: "orange" },
   PENDING_ACCEPTANCE: { label: "Awaiting acceptance", color: "yellow" },
   ISSUED: { label: "Ready", color: "teal" },
   CHECKED_IN: { label: "Checked in", color: "blue" },
