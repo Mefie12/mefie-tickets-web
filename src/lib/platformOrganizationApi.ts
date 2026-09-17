@@ -165,3 +165,83 @@ export function replaceOrganizationPaymentAccount(
     body: { legal_country: legalCountry, currency, idempotency_key: idempotencyKey, reason },
   });
 }
+
+export type ReleasePreviewOutcome = "PREVIEW_OK" | "NO_ELIGIBLE_FUNDS" | "PAYOUT_RESTRICTED" | "ACCOUNT_NOT_CONNECTED" | "ACCOUNT_NOT_READY" | "MULTIPLE_ACCOUNTS_ELIGIBLE";
+export type ReleaseOutcome = "RELEASE_REQUESTED" | "NO_ELIGIBLE_FUNDS" | "PAYOUT_RESTRICTED" | "ACCOUNT_NOT_CONNECTED" | "ACCOUNT_NOT_READY" | "MULTIPLE_ACCOUNTS_ELIGIBLE" | "PREVIEW_STALE";
+
+export type ReleaseAccountSummary = { id: number; provider: string; environment: string; routing_status: string; account_status: string };
+export type ReleaseBalance = { currency: string; amount_minor: number };
+
+export type ReleasePreview = {
+  outcome: ReleasePreviewOutcome;
+  account?: ReleaseAccountSummary;
+  balances?: ReleaseBalance[];
+  preview_token?: string;
+};
+
+export type OrganizerTransfer = {
+  id: number;
+  currency: string;
+  amount_minor: number;
+  status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "OUTCOME_UNKNOWN" | "RECONCILING";
+};
+
+export type ReleaseResult = {
+  outcome: ReleaseOutcome;
+  account: ReleaseAccountSummary | null;
+  organizer_transfers: OrganizerTransfer[];
+};
+
+/**
+ * Read-only: resolves the target account and exactly what's currently
+ * in scope for a release, and — if there's anything to release — a
+ * short-lived token that releaseOrganizationPayout() must present.
+ * Call this fresh immediately before opening a confirm dialog, not off
+ * the 30s-polled payments query — the release itself re-validates the
+ * token against live state regardless, but the preview should reflect
+ * reality as closely as possible before the admin is asked to confirm.
+ */
+export function getReleasePreview(id: string, forceEarly: boolean): Promise<ReleasePreview> {
+  return request<ReleasePreview>(`/api/admin/organizations/${id}/payments/release-preview${forceEarly ? "?force_early=1" : ""}`);
+}
+
+/**
+ * Submits a previously-fetched preview token. A routine release needs
+ * nothing else; force_early requires a reason category and a real
+ * explanation (backend enforces a 10-character minimum) — this is
+ * audited as a distinct event from a routine release. A PREVIEW_STALE
+ * outcome means live state changed since the preview (a new sale
+ * became eligible, the target account changed, etc.) — the caller must
+ * fetch a fresh preview and get a new explicit confirmation, never
+ * silently retry with the old token.
+ */
+export function releaseOrganizationPayout(
+  id: string,
+  previewToken: string,
+  options?: { forceEarly: true; reasonCategory: string; reason: string },
+): Promise<ReleaseResult> {
+  return request<ReleaseResult>(`/api/admin/organizations/${id}/payments/release`, {
+    method: "POST",
+    body: options
+      ? { preview_token: previewToken, force_early: true, reason_category: options.reasonCategory, reason: options.reason }
+      : { preview_token: previewToken },
+  });
+}
+
+/**
+ * Recovers an account ACCOUNT_STATUS=DISCONNECTED (Stripe no longer
+ * recognizes the stored provider_account_id) by re-provisioning a new
+ * Stripe account against the same OrganizationPaymentAccount row — see
+ * ReconnectAccountAction on the backend. Never moves money and never
+ * finishes onboarding by itself: the new account always starts
+ * ACTION_REQUIRED / transfers not yet enabled, so this is step one of
+ * two — the organizer still has to complete their new account's setup
+ * before anything held against it becomes releasable. 409s server-side
+ * if the account isn't actually DISCONNECTED.
+ */
+export function reconnectOrganizationPaymentAccount(id: string, paymentAccountId: number, reason: string) {
+  return request<{ payment_account: Record<string, unknown> }>(`/api/admin/organizations/${id}/payments/reconnect`, {
+    method: "POST",
+    body: { payment_account_id: paymentAccountId, reason },
+  });
+}
