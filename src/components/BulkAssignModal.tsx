@@ -84,7 +84,7 @@ export function BulkAssignModal({
       const bad = data.results.length - ok;
       notifications.show({
         color: bad === 0 ? "teal" : "yellow",
-        message: bad === 0 ? `${ok} tickets assigned.` : `${ok} assigned, ${bad} could not be assigned.`,
+        message: bad === 0 ? `Attendee details added for ${ok} tickets.` : `Attendee details added for ${ok} tickets; ${bad} could not be completed.`,
       });
       setRows({});
       setAnswers({});
@@ -97,7 +97,7 @@ export function BulkAssignModal({
     <Modal
       opened={opened}
       onClose={() => !submit.isPending && onClose()}
-      title={`Assign ${entitlements.length} tickets`}
+      title={`Add attendee details for ${entitlements.length} tickets`}
       centered
       size="lg"
     >

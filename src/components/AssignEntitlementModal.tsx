@@ -56,7 +56,7 @@ export function AssignEntitlementModal({
       return assignAttendee(entitlementPublicId!, toAttendeeRegistration(form, questions), requestKey);
     },
     onSuccess: () => {
-      notifications.show({ color: "teal", message: "Ticket assigned." });
+      notifications.show({ color: "teal", message: "Attendee details added." });
       reset();
       onDone();
     },
@@ -76,7 +76,7 @@ export function AssignEntitlementModal({
   }
 
   return (
-    <Modal opened={opened} onClose={close} title="Assign this ticket" centered>
+    <Modal opened={opened} onClose={close} title="Add attendee details" centered>
       <Stack gap="md">
         {error && (
           <Alert color="red" variant="light" onClose={() => setError(null)} withCloseButton>
@@ -108,7 +108,7 @@ export function AssignEntitlementModal({
         )}
 
         <Button onClick={() => submit.mutate()} loading={submit.isPending} disabled={who === "other" && schema.isLoading}>
-          {who === "me" ? "Assign to me" : "Assign ticket"}
+          {who === "me" ? "Use my details" : "Add attendee details"}
         </Button>
       </Stack>
     </Modal>

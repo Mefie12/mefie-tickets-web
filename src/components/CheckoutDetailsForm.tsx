@@ -194,7 +194,7 @@ export function CheckoutDetailsForm({
 
     for (const a of attendees) {
       if (a.assignment === "later") continue;
-      if (a.assignment === null) return `Choose who will use each ${a.product_title} ticket, or choose to assign it later.`;
+      if (a.assignment === null) return `Choose who will use each ${a.product_title} ticket, or choose to add attendee details later.`;
       if (a.assignment === "other") {
         if (!a.first_name.trim() || !a.last_name.trim()) return `Enter a name for each ${a.product_title} attendee.`;
         if (a.email.trim() && !/^\S+@\S+\.\S+$/.test(a.email)) return `Enter a valid email for each ${a.product_title} attendee, or leave it blank.`;
@@ -289,12 +289,12 @@ export function CheckoutDetailsForm({
             <Stack gap="xs" mt="xs">
               <Radio
                 value="later"
-                label="Assign later"
-                description="Complete the purchase now and assign each ticket from your account whenever you're ready. We'll email you a link."
+                label="Add attendee details later"
+                description="Complete your purchase now. We'll email you a link to add details for each person attending."
               />
               <Radio
                 value="now"
-                label="Enter attendees now"
+                label="Add attendee details now"
                 description="Fill in who each ticket is for as part of checkout."
               />
             </Stack>
@@ -304,7 +304,7 @@ export function CheckoutDetailsForm({
         {assignMode === "now" && (
           <>
         <Text size="sm" c="dimmed">
-          Tell us who will use each ticket{deferred ? ", or leave individual tickets to assign later" : ""}.
+          Tell us who will use each ticket{deferred ? ", or add attendee details for individual tickets later" : ""}.
         </Text>
         {attendees.map((attendee, index) => {
           const displayNumber = index + 1;
@@ -327,7 +327,7 @@ export function CheckoutDetailsForm({
                     data={[
                       { label: "Me", value: "me" },
                       { label: "Someone else", value: "other" },
-                      ...(deferred ? [{ label: "Assign later", value: "later" }] : []),
+                      ...(deferred ? [{ label: "Add attendee details later", value: "later" }] : []),
                     ]}
                   />
                 </Stack>
@@ -340,7 +340,7 @@ export function CheckoutDetailsForm({
 
                 {attendee.assignment === "later" && (
                   <Text size="sm" c="dimmed">
-                    You&apos;ll assign this ticket from your account later.
+                    You&apos;ll add attendee details for this ticket from your account later.
                   </Text>
                 )}
 
@@ -411,7 +411,7 @@ export function CheckoutDetailsForm({
         {assignMode === "later" && (
           <Text size="sm" c="dimmed">
             All {attendees.length} {attendees.length === 1 ? "ticket" : "tickets"} will be held on your account.
-            After checkout, open the link we email you to assign each one.
+            After checkout, open the link we email you to add attendee details for each ticket.
           </Text>
         )}
       </Stack>
