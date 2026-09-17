@@ -67,11 +67,11 @@ export function OrderConfirmation({ eventTitle, order }: { eventTitle: string; o
               {ticketsTotal} {ticketsTotal === 1 ? "Ticket" : "Tickets"} Secured
             </Badge>
             <Text size="sm" ta="center" c="var(--mantine-color-grey-6)">
-              To assign attendees to each ticket, use the secure link we sent to your email or click the button
-              below to update them directly.
+              Tell us who will use each ticket. Use the secure link we sent to your email or click the button
+              below to add attendee details.
             </Text>
             <Button component="a" href={`/tickets/orders/${order.short_id}`} size="md">
-              Assign attendees
+              Add attendee details
             </Button>
           </Stack>
         </Card>

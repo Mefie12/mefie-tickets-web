@@ -66,11 +66,11 @@ export default async function PortalDashboard() {
                 <Stack gap={6} mt="sm">
                   <Group justify="space-between">
                     <Text size="xs" c="dimmed">
-                      {done} of {total} tickets assigned
+                      {done} of {total} tickets have attendee details
                     </Text>
                     {order.entitlement_summary.buyer_held > 0 && (
                       <Badge size="sm" variant="light" color="orange">
-                        {order.entitlement_summary.buyer_held} to assign
+                        {order.entitlement_summary.buyer_held} need attendee details
                       </Badge>
                     )}
                   </Group>

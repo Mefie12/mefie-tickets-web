@@ -108,7 +108,7 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
         <Group gap="xs">
           <Checkbox
             size="sm"
-            label={`Select all ${assignable.length} unassigned`}
+            label={`Select all ${assignable.length} tickets needing attendee details`}
             checked={selected.size === assignable.length && assignable.length > 0}
             indeterminate={selected.size > 0 && selected.size < assignable.length}
             onChange={(e) =>
@@ -166,7 +166,7 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
                 Invite links
               </Button>
               <Button size="xs" onClick={() => setBulkOpen(true)}>
-                Assign {selected.size}
+                Add attendee details ({selected.size})
               </Button>
             </Group>
           </Group>
@@ -310,7 +310,7 @@ function EntitlementCard({
           </Badge>
           {pastCutoff && e.assignment_status === "BUYER_HELD" && (
             <Text size="xs" c="dimmed">
-              Assignment closed
+              Adding attendee details is closed
             </Text>
           )}
           {!pastCutoff && e.assignment_status === "BUYER_HELD" && !e.claim_link && (
@@ -319,7 +319,7 @@ function EntitlementCard({
                 Share link
               </Button>
               <Button size="xs" variant="light" onClick={onAssign}>
-                Assign
+                Add attendee details
               </Button>
             </Group>
           )}
@@ -336,10 +336,10 @@ function EntitlementCard({
               {!pastCutoff && e.assignment_status === "ISSUED" && (
                 <>
                   <Button size="xs" variant="subtle" onClick={onReassign}>
-                    Reassign
+                    Change attendee
                   </Button>
                   <Button size="xs" variant="subtle" color="red" onClick={onRevoke}>
-                    Unassign
+                    Remove attendee
                   </Button>
                 </>
               )}
