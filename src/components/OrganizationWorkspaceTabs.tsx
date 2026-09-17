@@ -3,13 +3,19 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { Alert, Badge, Button, Card, Group, Loader, Pagination, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Alert, Badge, Button, Card, Group, Loader, Modal, Pagination, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertTriangle, IconBuildingStore, IconTicket, IconUsers } from '@tabler/icons-react';
 import { redirectOnAdminAuthError } from '@/lib/adminAuthErrorRedirect';
 import { AdminReplacePaymentAccountModal } from '@/components/AdminReplacePaymentAccountModal';
-import { fetchOrganizationWorkspace, type MoneySummary } from '@/lib/platformOrganizationApi';
+import { AdminReasonModal } from '@/components/AdminReasonModal';
+import { AdminForceEarlyReleaseModal, blockedPreviewCopy } from '@/components/AdminForceEarlyReleaseModal';
+import { formatMinorAmount } from '@/lib/money';
+import {
+  fetchOrganizationWorkspace, getReleasePreview, releaseOrganizationPayout, reconnectOrganizationPaymentAccount,
+  type MoneySummary, type ReleasePreview, type ReleaseResult,
+} from '@/lib/platformOrganizationApi';
 
 type Overview = { period: { from: string; to: string }; lifetime: MoneySummary[]; period_financials: MoneySummary[]; events: { total: number; by_status: Record<string, number> }; tickets: { issued: number; checked_in: number }; health_alerts: AlertRow[]; recent_activity: ActivityRow[]; last_updated_at: string };
 type AlertRow = { rule: string; severity: string; title: string; evidence: string; tab: string; detected_at: string };
@@ -44,7 +50,7 @@ export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPa
     <Tabs.Panel value="sales" pt="lg"><OrdersPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="customers" pt="lg"><CustomersPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="team" pt="lg"><TeamPanel organizationId={organizationId} /></Tabs.Panel>
-    <Tabs.Panel value="payments" pt="lg"><PaymentsPanel organizationId={organizationId} canReplaceAccount={has('payouts.replace_account')} /></Tabs.Panel>
+    <Tabs.Panel value="payments" pt="lg"><PaymentsPanel organizationId={organizationId} canReplaceAccount={has('payouts.replace_account')} canReleasePayout={has('payouts.release')} canReconnectAccount={has('payouts.reconnect_account')} /></Tabs.Panel>
     <Tabs.Panel value="notes" pt="lg">{notesPanel}</Tabs.Panel>
     <Tabs.Panel value="activity" pt="lg"><ActivityPanel organizationId={organizationId} /></Tabs.Panel>
   </Tabs>;
@@ -76,21 +82,146 @@ function EventsPanel({ organizationId }: { organizationId: string }) {
 function OrdersPanel({ organizationId }: { organizationId:string }) { const [page,setPage]=useState(1),[q,setQ]=useState(''),[status,setStatus]=useState(''); const query=useQuery({queryKey:['org-orders',organizationId,page,q,status],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'orders',{page,q,status})}); const rows=(query.data?.orders??[]) as Record<string,any>[]; return <Stack><Group><TextInput placeholder="Order or event" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={v=>setStatus(v??'')} data={['RESERVED','COMPLETED','CANCELLED','AWAITING_OFFLINE_PAYMENT','ABANDONED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped><Table.Thead><Table.Tr><Table.Th>Order</Table.Th><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Source</Table.Th><Table.Th>Total</Table.Th><Table.Th>Created</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.short_id}</Table.Td><Table.Td>{r.event_title}</Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{r.source}</Table.Td><Table.Td>{money(r.total_amount,r.currency)}</Table.Td><Table.Td>{date(r.created_at)}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No orders match these filters."/>}</Stack>; }
 function CustomersPanel({organizationId}:{organizationId:string}) { const [page,setPage]=useState(1),[q,setQ]=useState(''); const query=useQuery({queryKey:['org-customers',organizationId,page,q],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'customers',{page,q})}); const rows=(query.data?.customers??[]) as Record<string,any>[]; return <Stack><TextInput placeholder="Search customers" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/>{!query.data?<Loading error={query.error}/>:rows.length?<><Table><Table.Thead><Table.Tr><Table.Th>Customer</Table.Th><Table.Th>Contact (masked)</Table.Th><Table.Th>Events</Table.Th><Table.Th>Tickets</Table.Th><Table.Th>Checked in</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.first_name} {r.last_name}</Table.Td><Table.Td>{r.email}<br/>{r.phone}</Table.Td><Table.Td>{r.events_count}</Table.Td><Table.Td>{r.tickets_count}</Table.Td><Table.Td>{r.checked_in_count}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No customers yet."/>}</Stack>; }
 function TeamPanel({organizationId}:{organizationId:string}) { const query=useQuery({queryKey:['org-team',organizationId],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'team')}); const rows=(query.data?.members??[]) as Record<string,any>[]; return !query.data?<Loading error={query.error}/>:rows.length?<Table><Table.Thead><Table.Tr><Table.Th>Member</Table.Th><Table.Th>Role</Table.Th><Table.Th>Status</Table.Th><Table.Th>Joined</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.first_name} {r.last_name}</Table.Td><Table.Td>{r.role}</Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{date(r.joined_at)}</Table.Td></Table.Tr>)}</Table.Tbody></Table>:<Empty label="No team members."/>; }
-function PaymentsPanel({organizationId, canReplaceAccount}:{organizationId:string; canReplaceAccount: boolean}) {
+type AccountBalance = { currency: string; release_eligible_minor: number; held_available_for_early_minor: number; held_excluded_by_hold_minor: number; reconciliation_required_minor: number; transfer_pending_minor: number };
+
+const PAYOUT_STATUS_LABEL: Record<string, string> = {
+  OUTCOME_UNKNOWN: 'Outcome unknown — verification required',
+  RECONCILING: 'Reconciling — verification in progress',
+};
+
+function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, canReconnectAccount}:{organizationId:string; canReplaceAccount: boolean; canReleasePayout: boolean; canReconnectAccount: boolean}) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [replaceModalOpen, setReplaceModalOpen] = useState(false);
-  const query=useQuery({queryKey:['org-payments',organizationId],queryFn:()=>fetchOrganizationWorkspace<{payments:{financials:MoneySummary[];accounts:Record<string,any>[];payouts:Record<string,any>[];last_updated_at:string}}>(organizationId,'payments'),refetchInterval:30000});
+  const [routineConfirmOpen, setRoutineConfirmOpen] = useState(false);
+  const [earlyModalOpen, setEarlyModalOpen] = useState(false);
+  const [reconnectAccountId, setReconnectAccountId] = useState<number | null>(null);
+
+  const query=useQuery({queryKey:['org-payments',organizationId],queryFn:()=>fetchOrganizationWorkspace<{payments:{financials:MoneySummary[];accounts:(Record<string,any> & {balances: AccountBalance[]})[];payouts:Record<string,any>[];last_updated_at:string}}>(organizationId,'payments'),refetchInterval:30000});
+
+  function onReleaseError(error: unknown) {
+    const err = error instanceof Error ? error : new Error('Something went wrong.');
+    const redirected = redirectOnAdminAuthError(err, router);
+    if (!redirected) notifications.show({ color: 'red', message: err.message });
+  }
+
+  // enabled: false — these never fire just from opening the tab. A
+  // preview reveals which account and how much would move, so it's
+  // gated the same as the release itself (payouts.release +
+  // admin.recent-auth); firing it eagerly on mount for every visit to
+  // this tab would routinely 428 admins who haven't stepped up
+  // recently, for no benefit. Only fetched on explicit intent — the
+  // button click that opens the corresponding confirm dialog.
+  const routinePreviewQuery = useQuery({
+    queryKey: ['release-preview', organizationId, 'routine'],
+    queryFn: () => getReleasePreview(organizationId, false),
+    enabled: false,
+  });
+  const earlyPreviewQuery = useQuery({
+    queryKey: ['release-preview', organizationId, 'early'],
+    queryFn: () => getReleasePreview(organizationId, true),
+    enabled: false,
+  });
+
+  function onReleaseSettled(result: ReleaseResult, mode: 'routine' | 'early') {
+    query.refetch();
+    routinePreviewQuery.refetch();
+    earlyPreviewQuery.refetch();
+    queryClient.invalidateQueries({ queryKey: ['org-workspace-overview', organizationId] });
+    queryClient.invalidateQueries({ queryKey: ['org-activity', organizationId] });
+
+    if (result.outcome === 'RELEASE_REQUESTED') {
+      const total = result.organizer_transfers.map((t) => formatMinorAmount(t.amount_minor, t.currency)).join(', ');
+      notifications.show({ color: mode === 'early' ? 'orange' : 'teal', title: 'Release requested', message: `Transfers queued: ${total}.` });
+    } else if (result.outcome === 'PREVIEW_STALE') {
+      notifications.show({ color: 'orange', message: 'The release scope changed since you last checked — review the refreshed amounts and confirm again.' });
+    } else {
+      notifications.show({ color: result.outcome === 'NO_ELIGIBLE_FUNDS' ? 'gray' : 'red', message: blockedPreviewCopy(result.outcome, result.account?.account_status) });
+    }
+  }
+
+  const routineRelease = useMutation({
+    mutationFn: () => releaseOrganizationPayout(organizationId, routinePreviewQuery.data!.preview_token!),
+    onSuccess: (result) => { setRoutineConfirmOpen(false); onReleaseSettled(result, 'routine'); },
+    onError: onReleaseError,
+  });
+  const earlyRelease = useMutation({
+    mutationFn: (data: { reasonCategory: string; reason: string }) =>
+      releaseOrganizationPayout(organizationId, earlyPreviewQuery.data!.preview_token!, { forceEarly: true, reasonCategory: data.reasonCategory, reason: data.reason }),
+    onSuccess: (result) => { setEarlyModalOpen(false); onReleaseSettled(result, 'early'); },
+    onError: onReleaseError,
+  });
+
+  const reconnectAccount = useMutation({
+    mutationFn: (reason: string) => reconnectOrganizationPaymentAccount(organizationId, reconnectAccountId!, reason),
+    onSuccess: () => {
+      setReconnectAccountId(null);
+      query.refetch();
+      notifications.show({
+        color: 'teal', title: 'Account reconnected',
+        message: "A new payment account was created for this connection. It still needs to complete its own setup with the provider before anything held against it can be released.",
+      });
+    },
+    onError: onReleaseError,
+  });
+
+  const actionsPending = routineRelease.isPending || earlyRelease.isPending;
+
+  // refetch() (React Query v5) resolves with a result object rather
+  // than rejecting — checked directly here rather than via a useEffect
+  // watching .error, since setState synchronously inside an effect body
+  // is the anti-pattern that hook is there to catch; this is a plain
+  // event handler, not an effect.
+  async function openRoutineConfirm() {
+    setRoutineConfirmOpen(true);
+    const result = await routinePreviewQuery.refetch();
+    if (result.error) { setRoutineConfirmOpen(false); onReleaseError(result.error); }
+  }
+  async function openEarlyModal() {
+    setEarlyModalOpen(true);
+    const result = await earlyPreviewQuery.refetch();
+    if (result.error) { setEarlyModalOpen(false); onReleaseError(result.error); }
+  }
+
   if(!query.data)return <Loading error={query.error}/>;
   const p=query.data.payments;
+  const routinePreview: ReleasePreview | null = routinePreviewQuery.data ?? null;
+  const routineBlockedReason = canReleasePayout && routinePreview && routinePreview.outcome !== 'PREVIEW_OK' ? blockedPreviewCopy(routinePreview.outcome, routinePreview.account?.account_status) : null;
+
   return <Stack>
     <FinancialCards rows={p.financials}/>
     <Group justify="space-between" align="center">
       <Title order={4}>Payment accounts</Title>
       {canReplaceAccount && <Button variant="outline" color="red" size="xs" onClick={() => setReplaceModalOpen(true)}>Replace payment account</Button>}
     </Group>
-    {p.accounts.map(a=><Card withBorder key={a.id}><Group justify="space-between"><Text fw={600}>{a.provider} · {a.environment}</Text><Badge color={a.payments_enabled?'teal':'red'}>{a.account_status}</Badge></Group><Text size="sm" c="dimmed">Routing {a.routing_status} · Payments {a.payments_enabled?'enabled':'disabled'} · Transfers {a.transfers_enabled?'enabled':'disabled'}</Text></Card>)}
-    <Title order={4}>Payout history</Title>
-    {p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Text>{x.note||'Payout release'}</Text><Text fw={700}>{money(String(Number(x.amount_minor)/100),x.currency)}</Text></Group><Text size="xs" c="dimmed">{x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}
+    {p.accounts.map(a=><Card withBorder key={a.id}>
+      <Group justify="space-between">
+        <Text fw={600}>{a.provider} · {a.environment}</Text>
+        <Group gap="xs">
+          <Badge color={a.payments_enabled?'teal':'red'}>{a.account_status}</Badge>
+          {canReconnectAccount && a.account_status === 'DISCONNECTED' && (
+            <Button size="xs" color="red" loading={reconnectAccount.isPending && reconnectAccountId === a.id} disabled={reconnectAccount.isPending} onClick={() => setReconnectAccountId(a.id)}>Reconnect account</Button>
+          )}
+        </Group>
+      </Group>
+      <Text size="sm" c="dimmed">Routing {a.routing_status} · Payments {a.payments_enabled?'enabled':'disabled'} · Transfers {a.transfers_enabled?'enabled':'disabled'}</Text>
+      {(a.balances ?? []).map((b) => <Group key={b.currency} grow mt="xs" wrap="nowrap">
+        <Stack gap={0}><Text size="xs" c="dimmed">Ready to release</Text><Text fw={600} c="teal">{formatMinorAmount(b.release_eligible_minor, b.currency)}</Text></Stack>
+        <Stack gap={0}><Text size="xs" c="dimmed">Held ({b.currency})</Text><Text fw={600}>{formatMinorAmount(b.held_available_for_early_minor + b.held_excluded_by_hold_minor, b.currency)}</Text></Stack>
+        {b.reconciliation_required_minor > 0 && <Stack gap={0}><Text size="xs" c="dimmed">Outcome unknown</Text><Text fw={600} c="orange">{formatMinorAmount(b.reconciliation_required_minor, b.currency)}</Text></Stack>}
+      </Group>)}
+    </Card>)}
+
+    <Group justify="space-between" align="center">
+      <Title order={4}>Payout history</Title>
+      {canReleasePayout && <Group gap="xs">
+        <Button color="teal" size="xs" loading={routinePreviewQuery.isFetching && routineConfirmOpen} disabled={actionsPending || routinePreviewQuery.isFetching || earlyPreviewQuery.isFetching} onClick={openRoutineConfirm}>Release eligible funds</Button>
+        <Button variant="outline" color="red" size="xs" loading={earlyPreviewQuery.isFetching && earlyModalOpen} disabled={actionsPending || routinePreviewQuery.isFetching || earlyPreviewQuery.isFetching} onClick={openEarlyModal}>Release held funds early…</Button>
+      </Group>}
+    </Group>
+    {routineBlockedReason && <Text size="xs" c="dimmed">{routineBlockedReason}</Text>}
+    {p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Text>{x.note||PAYOUT_STATUS_LABEL[x.status]||'Payout release'}</Text><Text fw={700}>{money(String(Number(x.amount_minor)/100),x.currency)}</Text></Group><Text size="xs" c="dimmed">{PAYOUT_STATUS_LABEL[x.status]||x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}
+
     {canReplaceAccount && (
       <AdminReplacePaymentAccountModal
         opened={replaceModalOpen}
@@ -102,6 +233,55 @@ function PaymentsPanel({organizationId, canReplaceAccount}:{organizationId:strin
           if (!redirected) notifications.show({ color: 'red', message: error.message });
           return redirected;
         }}
+      />
+    )}
+
+    {canReleasePayout && (
+      <Modal opened={routineConfirmOpen} onClose={() => setRoutineConfirmOpen(false)} title="Release eligible funds" centered closeOnClickOutside={!routineRelease.isPending}>
+        {routinePreviewQuery.isFetching ? (
+          <Group justify="center" py="xl"><Loader size="sm" /></Group>
+        ) : routinePreview?.outcome !== 'PREVIEW_OK' ? (
+          <Stack>
+            <Alert color={routinePreview?.outcome === 'NO_ELIGIBLE_FUNDS' ? 'gray' : 'red'}>{blockedPreviewCopy(routinePreview?.outcome ?? 'NO_ELIGIBLE_FUNDS', routinePreview?.account?.account_status)}</Alert>
+            <Group justify="flex-end"><Button onClick={() => setRoutineConfirmOpen(false)}>Close</Button></Group>
+          </Stack>
+        ) : (
+          <Stack>
+            <Text size="sm" c="dimmed">
+              Target account: {routinePreview.account?.provider} · {routinePreview.account?.environment} (routing {routinePreview.account?.routing_status})
+            </Text>
+            {routinePreview.balances?.map((b) => <Text key={b.currency} fw={600}>{formatMinorAmount(b.amount_minor, b.currency)}</Text>)}
+            <Text size="sm" c="dimmed">This moves the release-eligible balance above to the organizer&apos;s connected account. This cannot be undone.</Text>
+            <Group justify="flex-end">
+              <Button variant="subtle" onClick={() => setRoutineConfirmOpen(false)} disabled={routineRelease.isPending}>Cancel</Button>
+              <Button color="teal" loading={routineRelease.isPending} onClick={() => routineRelease.mutate()}>Release eligible funds</Button>
+            </Group>
+          </Stack>
+        )}
+      </Modal>
+    )}
+
+    {canReleasePayout && (
+      <AdminForceEarlyReleaseModal
+        opened={earlyModalOpen}
+        onClose={() => setEarlyModalOpen(false)}
+        preview={earlyPreviewQuery.data ?? null}
+        previewLoading={earlyPreviewQuery.isFetching}
+        loading={earlyRelease.isPending}
+        onConfirm={(data) => earlyRelease.mutate(data)}
+      />
+    )}
+
+    {canReconnectAccount && (
+      <AdminReasonModal
+        opened={reconnectAccountId !== null}
+        onClose={() => setReconnectAccountId(null)}
+        title="Reconnect payment account"
+        description="This creates a new provider connection for this account row — it does not move money and does not by itself finish onboarding. The organizer will still need to complete setup on the new connection before anything held against it can be released."
+        confirmLabel="Reconnect account"
+        confirmColor="red"
+        loading={reconnectAccount.isPending}
+        onConfirm={(reason) => reconnectAccount.mutate(reason)}
       />
     )}
   </Stack>;
