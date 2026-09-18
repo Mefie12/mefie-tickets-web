@@ -48,6 +48,7 @@ function AccountForm({ signup }: { signup: boolean }) {
           {step === "details" && !proof && <TextInput label="Email" type="email" required autoComplete="email" {...form.getInputProps("email")}/>}
           {step === "details" && proof && <Text size="sm">We’ll email a code to this ticket’s designated recipient.</Text>}
           {needsDetails && <><TextInput label="First name" required autoComplete="given-name" {...form.getInputProps("first_name")}/><TextInput label="Last name" required autoComplete="family-name" {...form.getInputProps("last_name")}/><PhoneInput label="Phone" required {...form.getInputProps("phone")}/>
+            <Text size="xs" c="dimmed">If you add a phone number to your account, we may text you about product updates and events — reply STOP at any time to opt out.</Text>
             <Text size="xs" c="dimmed">By creating an account you agree to our <LegalDocumentLinks placement="account-registration" fallback="Terms of Use and Privacy Policy"/>.</Text>
             {legal.isError && <Alert color="red">Unable to load account documents. Please reload to try again.</Alert>}
           </>}

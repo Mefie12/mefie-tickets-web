@@ -108,10 +108,6 @@ export default function RegisterPage() {
           <Button type="submit" fullWidth loading={registerMutation.isPending} mt="sm">
             Create organization
           </Button>
-          <Text size="xs" c="dimmed" ta="center">
-            If you add a phone number to your account, we may text you about product updates and events — reply
-            STOP at any time to opt out.
-          </Text>
           <Text size="sm" ta="center" c="dimmed">
             Already have an account? <Anchor href="/organizers/login">Log in</Anchor>
           </Text>
