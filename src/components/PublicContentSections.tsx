@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { ActionIcon, Anchor, Avatar, Button, Card, Group, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import {
-  IconBrandApple,
   IconBrandFacebook,
   IconBrandInstagram,
   IconBrandSoundcloud,
@@ -12,6 +11,7 @@ import {
   IconBrandX,
   IconBrandYoutube,
   IconExternalLink,
+  IconMusic,
   IconStarFilled,
   IconWorld,
 } from "@tabler/icons-react";
@@ -26,9 +26,9 @@ const SOCIAL_LINK_LABELS: Record<string, string> = Object.fromEntries(
   SOCIAL_LINK_PROVIDERS.map((p) => [p.value, p.label]),
 );
 
-// Tabler has no dedicated Apple Music glyph — the plain Apple brand mark
-// is the closest available and reads fine paired with the "Apple Music"
-// label already carried in the link's aria-label.
+// Tabler has no dedicated Apple Music glyph — a plain music note reads
+// better here than the Apple brand mark, which is easily mistaken for a
+// link to Apple's site rather than a music platform.
 const SOCIAL_ICONS: Record<string, typeof IconWorld> = {
   WEBSITE: IconWorld,
   INSTAGRAM: IconBrandInstagram,
@@ -38,7 +38,7 @@ const SOCIAL_ICONS: Record<string, typeof IconWorld> = {
   SOUNDCLOUD: IconBrandSoundcloud,
   FACEBOOK: IconBrandFacebook,
   X: IconBrandX,
-  APPLE_MUSIC: IconBrandApple,
+  APPLE_MUSIC: IconMusic,
 };
 
 /** Renders after the event description/gallery — see docs/15_event_content_sections_plan.md. Hidden sections are already filtered server-side. */
