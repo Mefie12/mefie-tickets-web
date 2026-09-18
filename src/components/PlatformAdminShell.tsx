@@ -17,6 +17,7 @@ import {
   IconStar,
   IconDevices,
   IconFileText,
+  IconSettings,
 } from "@tabler/icons-react";
 import { endAdminSession, type AdminDeviceSession } from "@/lib/adminAuthApi";
 import { logout } from "@/lib/authApi";
@@ -135,6 +136,14 @@ export function PlatformAdminShell({
             label="Legal Documents"
             icon={<IconFileText size={20} />}
             active={pathname.startsWith("/admin/platform-documents")}
+          />
+        )}
+        {has("platform_settings.view") && (
+          <ConsoleNavItem
+            href="/admin/platform-settings"
+            label="Platform Settings"
+            icon={<IconSettings size={20} />}
+            active={pathname.startsWith("/admin/platform-settings")}
           />
         )}
       </ConsoleNavSection>
