@@ -133,8 +133,22 @@ export function createOrder(eventId: number, input: CreateOrderInput) {
 }
 
 export function createPaymentIntent(eventId: number, shortId: string) {
-  return request<{ client_secret: string; provider: "STRIPE"; provider_account_id: string }>(
+  return request<{ client_secret: string; provider: "STRIPE"; provider_account_id: string; reservation_expires_at: string | null }>(
     `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/payment`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Called immediately before handing the client_secret to Stripe's
+ * confirmPayment() — the server-side race-closing check. Throws
+ * ApiError with code "ORDER_NOT_PAYABLE" (reservation genuinely gone) or
+ * "PAYMENT_ATTEMPT_NOT_READY" (unexpected payment-attempt state; the
+ * reservation itself may still have time left) on failure.
+ */
+export function beginPaymentConfirmation(eventId: number, shortId: string) {
+  return request<Record<string, never>>(
+    `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/payment/begin-confirmation`,
     { method: "POST" },
   );
 }
@@ -145,7 +159,7 @@ export function getOrderPaymentStatus(eventId: number, shortId: string) {
   // has no entitlements yet (unassigned_count/attendees are always
   // empty on it), so this is the one place a fresh, post-completion
   // order can be picked up.
-  return request<{ status: OrderStatus; completed_at: string | null; order?: Order }>(
+  return request<{ status: OrderStatus; completed_at: string | null; reservation_expires_at: string | null; order?: Order }>(
     `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/payment-status`,
   );
 }
