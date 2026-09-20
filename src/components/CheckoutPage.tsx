@@ -18,7 +18,7 @@ import { OrderConfirmation } from "@/components/OrderConfirmation";
 
 type Step = "details" | "payment" | "confirmation";
 
-type PersistedCheckout = { order: Order; clientSecret: string };
+type PersistedCheckout = { order: Order; clientSecret: string; reservationExpiresAt: string | null };
 
 function checkoutStorageKey(eventId: number): string {
   return `mefie-checkout:${eventId}`;
@@ -44,6 +44,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   const [step, setStep] = useState<Step>("details");
   const [order, setOrder] = useState<Order | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
   const reconciling = useRef(false);
 
   // No cart handed off (direct visit, bookmark, expired tab) — nothing
@@ -61,8 +62,11 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
 
   useEffect(() => {
     if (!order || !clientSecret) return;
-    sessionStorage.setItem(checkoutStorageKey(event.id), JSON.stringify({ order, clientSecret } satisfies PersistedCheckout));
-  }, [order, clientSecret, event.id]);
+    sessionStorage.setItem(
+      checkoutStorageKey(event.id),
+      JSON.stringify({ order, clientSecret, reservationExpiresAt } satisfies PersistedCheckout),
+    );
+  }, [order, clientSecret, reservationExpiresAt, event.id]);
 
   // Reconcile against the authoritative status before resuming anywhere
   // — a persisted copy could be stale (e.g. the webhook that completes
@@ -95,6 +99,11 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         } else if (authoritative.status === "RESERVED") {
           setOrder(persisted.order);
           setClientSecret(persisted.clientSecret);
+          // Prefer the freshly-polled deadline over the persisted one —
+          // it's the same value (reservation_expires_at is fixed at
+          // creation and never changes), but this keeps a single source
+          // of truth rather than trusting sessionStorage's copy.
+          setReservationExpiresAt(authoritative.reservation_expires_at ?? persisted.reservationExpiresAt);
           setStep("payment");
         } else {
           sessionStorage.removeItem(checkoutStorageKey(event.id));
@@ -130,8 +139,9 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
 
   const paymentIntentMutation = useMutation({
     mutationFn: (o: Order) => createPaymentIntent(event.id, o.short_id),
-    onSuccess: (data: { client_secret: string; provider: "STRIPE"; provider_account_id: string }) => {
+    onSuccess: (data: { client_secret: string; provider: "STRIPE"; provider_account_id: string; reservation_expires_at: string | null }) => {
       setClientSecret(data.client_secret);
+      setReservationExpiresAt(data.reservation_expires_at);
       setStep("payment");
     },
     onError: (error: Error) =>
@@ -140,6 +150,22 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         message: error instanceof ApiError ? error.message : "Could not start payment. Please try again.",
       }),
   });
+
+  // The reservation expired before any payment confirmation began — safe
+  // to restart from scratch. Cart selections are left untouched
+  // (cartStorage), but availability is never guaranteed to still be
+  // there; the next createOrder call re-checks it naturally.
+  function handleExpired() {
+    sessionStorage.removeItem(checkoutStorageKey(event.id));
+    setOrder(null);
+    setClientSecret(null);
+    setReservationExpiresAt(null);
+    setStep("details");
+    notifications.show({
+      color: "orange",
+      message: "Your reservation expired, so we released those tickets. Please review your selections and try again.",
+    });
+  }
 
   function handleOrderCreated(newOrder: Order) {
     setOrder(newOrder);
@@ -188,6 +214,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                   eventId={event.id}
                   order={order}
                   clientSecret={clientSecret}
+                  reservationExpiresAt={reservationExpiresAt}
                   defaultBillingCountry={event.location?.country}
                   onPaid={(updatedOrder) => {
                     sessionStorage.removeItem(checkoutStorageKey(event.id));
@@ -195,6 +222,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                     setOrder(updatedOrder);
                     setStep("confirmation");
                   }}
+                  onExpired={handleExpired}
                 />
               ) : (
                 // Reservation was created but the payment-intent call failed —
