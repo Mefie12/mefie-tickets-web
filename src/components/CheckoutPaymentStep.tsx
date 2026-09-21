@@ -179,6 +179,15 @@ function PaymentForm({
   // below for why this one-way flag exists and what it does (and does
   // NOT) suppress.
   const [confirmationInFlight, setConfirmationInFlight] = useState(false);
+  // True only for the window between calling stripe.confirmPayment() from
+  // handleSubmit and it returning. Stripe requires the PaymentElement to
+  // stay mounted for that entire call (confirmed live: unmounting it via
+  // the awaitingAsyncConfirmation branch below, which confirmationInFlight
+  // alone would otherwise trigger immediately, made confirmPayment() throw
+  // "elements should have a mounted Payment Element"). Never set from the
+  // resumed-page-reload path (below) since no confirmPayment() call is
+  // in flight there.
+  const [stripeCallPending, setStripeCallPending] = useState(false);
   // Flips from the "confirming" to the "taking a while" message once
   // CONFIRMATION_POLL_CEILING_MS has passed since a confirmation began —
   // driven by its own timer rather than recomputed from Date.now() on
@@ -329,7 +338,10 @@ function PaymentForm({
   // safe to pay again. The buyer isn't trapped — they can navigate away
   // and start an independent new checkout whenever they choose.
   const outcomeIsUncertain =
-    confirmationInFlight && statusQuery.data !== undefined && !["RESERVED", "COMPLETED"].includes(statusQuery.data.status);
+    confirmationInFlight &&
+    !stripeCallPending &&
+    statusQuery.data !== undefined &&
+    !["RESERVED", "COMPLETED"].includes(statusQuery.data.status);
   // A redirect-based method's confirmation (e.g. Klarna) genuinely in
   // flight while the order is still RESERVED — distinct from
   // paymentConfirmedByStripe (Stripe itself already reported success)
@@ -338,7 +350,8 @@ function PaymentForm({
   // "processing" would show a fresh, resubmittable Pay button, since
   // neither of the other two guards fires while the order stays
   // RESERVED pending the completion webhook.
-  const awaitingAsyncConfirmation = confirmationInFlight && !paymentConfirmedByStripe && !outcomeIsUncertain;
+  const awaitingAsyncConfirmation =
+    confirmationInFlight && !stripeCallPending && !paymentConfirmedByStripe && !outcomeIsUncertain;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -346,6 +359,20 @@ function PaymentForm({
 
     setSubmitting(true);
     setErrorMessage(null);
+
+    // Must happen synchronously off the form-submit event, before any
+    // other async work (beginPaymentConfirmation below) — Elements only
+    // links a confirmPayment() call back to this submission if
+    // elements.submit() ran first. Skipping it here previously left
+    // confirmPayment() throwing once beginPaymentConfirmation's own
+    // network round-trip was introduced (confirmed live: checkout got
+    // stuck with the PaymentIntent never leaving payment_intent.created).
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setErrorMessage(submitError.message ?? "Please check your payment details and try again.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       await beginPaymentConfirmation(eventId, order.short_id);
@@ -367,26 +394,42 @@ function PaymentForm({
 
     pollStartedAtRef.current = Date.now();
     setConfirmationInFlight(true);
+    setStripeCallPending(true);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
-      elements,
-      confirmParams: { return_url: window.location.href },
-      redirect: "if_required",
-    });
+    try {
+      const { error, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        confirmParams: { return_url: window.location.href },
+        redirect: "if_required",
+      });
+      setStripeCallPending(false);
 
-    if (error) {
-      setErrorMessage(error.message ?? "Payment failed. Please try a different payment method.");
+      if (error) {
+        setErrorMessage(error.message ?? "Payment failed. Please try a different payment method.");
+        setConfirmationInFlight(false);
+        setSubmitting(false);
+        return;
+      }
+
+      if (paymentIntent?.status === "succeeded") {
+        setPaymentConfirmedByStripe(true);
+        return;
+      }
+
+      setErrorMessage("Payment did not complete. Please try again.");
+      setConfirmationInFlight(false);
       setSubmitting(false);
-      return;
+    } catch (error) {
+      setStripeCallPending(false);
+      // confirmPayment() rejecting (as opposed to resolving with `error`)
+      // means Stripe never received a confirmation attempt at all — the
+      // PaymentIntent is still stuck wherever it was (typically
+      // requires_payment_method). Nothing was charged, so this is a
+      // plain retryable error, not the uncertain-outcome state.
+      setErrorMessage(error instanceof Error ? error.message : "Payment failed. Please try again.");
+      setConfirmationInFlight(false);
+      setSubmitting(false);
     }
-
-    if (paymentIntent?.status === "succeeded") {
-      setPaymentConfirmedByStripe(true);
-      return;
-    }
-
-    setErrorMessage("Payment did not complete. Please try again.");
-    setSubmitting(false);
   }
 
   if (checkingExistingStatus) {
