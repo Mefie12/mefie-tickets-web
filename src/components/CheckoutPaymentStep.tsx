@@ -242,17 +242,19 @@ function PaymentForm({
   }, [expiryCheckQuery.data]);
 
   useEffect(() => {
-    if (!paymentConfirmedByStripe) return;
+    if (!confirmationInFlight) return;
     const timer = setTimeout(() => setShowConfirmingMessage(false), CONFIRMATION_POLL_CEILING_MS);
     return () => clearTimeout(timer);
-  }, [paymentConfirmedByStripe]);
+  }, [confirmationInFlight]);
 
   // A reload (see Checkout.tsx's sessionStorage resume) re-mounts this
   // form fresh, with no memory of whether the underlying PaymentIntent
   // was already confirmed before the reload — confirmed live: without
   // this check, a resumed page shows a fresh, clickable Pay button even
   // when Stripe already marked the charge succeeded, risking exactly
-  // the double-confirm error this component otherwise prevents.
+  // the double-confirm error this component otherwise prevents. Also
+  // covers a redirect-based method's (e.g. Klarna) return trip, which
+  // is a full navigation away and back rather than an in-page result.
   useEffect(() => {
     if (!stripe) return;
     let cancelled = false;
@@ -262,7 +264,26 @@ function PaymentForm({
         pollStartedAtRef.current = Date.now();
         setConfirmationInFlight(true);
         setPaymentConfirmedByStripe(true);
+      } else if (paymentIntent?.status === "processing" || paymentIntent?.status === "requires_action") {
+        // "processing": Klarna's authorization/Stripe's relay very
+        // plausibly hasn't finished by the time the browser redirects
+        // back. "requires_action": the buyer left before finishing
+        // Klarna's authentication (closed the tab, came back later) —
+        // resubmitting re-enters handleSubmit's normal confirmPayment()
+        // call, which Stripe resumes/re-displays the pending action for.
+        // Either way, our own webhook-driven statusQuery poll below is
+        // what actually resolves this, exactly as it already does for
+        // the inline-confirm path — and createOrRetrieve() on the
+        // backend already reuses the existing attempt rather than
+        // creating a second one, so this never risks a duplicate charge.
+        pollStartedAtRef.current = Date.now();
+        setConfirmationInFlight(true);
       }
+      // requires_payment_method / canceled / anything else: fall through
+      // to the normal, resubmittable form. A canceled PaymentIntent means
+      // the reservation sweep already resolved this order server-side —
+      // CheckoutPage.tsx's own mount-time reconciliation against the
+      // order's authoritative status handles routing away from this step.
       setCheckingExistingStatus(false);
     });
     return () => {
@@ -309,6 +330,15 @@ function PaymentForm({
   // and start an independent new checkout whenever they choose.
   const outcomeIsUncertain =
     confirmationInFlight && statusQuery.data !== undefined && !["RESERVED", "COMPLETED"].includes(statusQuery.data.status);
+  // A redirect-based method's confirmation (e.g. Klarna) genuinely in
+  // flight while the order is still RESERVED — distinct from
+  // paymentConfirmedByStripe (Stripe itself already reported success)
+  // and from outcomeIsUncertain (the order status has already diverged
+  // from RESERVED/COMPLETED). Without this, a Klarna payment stuck in
+  // "processing" would show a fresh, resubmittable Pay button, since
+  // neither of the other two guards fires while the order stays
+  // RESERVED pending the completion webhook.
+  const awaitingAsyncConfirmation = confirmationInFlight && !paymentConfirmedByStripe && !outcomeIsUncertain;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -388,6 +418,19 @@ function PaymentForm({
           {showConfirmingMessage
             ? "Payment received — confirming your order…"
             : `Your payment was received. We're finalizing your order — this can take a few minutes. Reference: ${order.short_id}.`}
+        </Text>
+      </Stack>
+    );
+  }
+
+  if (awaitingAsyncConfirmation) {
+    return (
+      <Stack gap="md" align="center" py="xl">
+        <Loader size="sm" />
+        <Text ta="center" fw={500}>
+          {showConfirmingMessage
+            ? "Your payment is being confirmed — please don't try to pay again."
+            : `This can take a few minutes for some payment methods. We'll update this automatically. Reference: ${order.short_id}.`}
         </Text>
       </Stack>
     );
