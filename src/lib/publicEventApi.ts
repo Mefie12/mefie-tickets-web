@@ -238,4 +238,6 @@ export type PublicEvent = {
   deferred_assignment_enabled: boolean;
   /** PURCHASER_GROUP | ATTENDEE_PERSONAL | ATTENDEE_SELF — how admission-terms acceptance is collected. null when the event has no acceptance step. */
   acceptance_policy: string | null;
+  /** UTC assignment/reassignment cutoff; null means the organizer has not set one. */
+  admission_closes_at: string | null;
 };

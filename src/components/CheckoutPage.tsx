@@ -9,12 +9,14 @@ import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { createPaymentIntent, getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
-import { loadCart, clearCart, type StoredCartItem } from "@/lib/cartStorage";
+import { loadCart, saveCart, clearCart, type StoredCartItem } from "@/lib/cartStorage";
 import { summaryLinesFromCart } from "@/lib/orderSummaryLines";
 import { CheckoutDetailsForm } from "@/components/CheckoutDetailsForm";
+import { CheckoutTicketEditor } from "@/components/CheckoutTicketEditor";
 import { CheckoutPaymentStep } from "@/components/CheckoutPaymentStep";
 import { CheckoutOrderSummary } from "@/components/CheckoutOrderSummary";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
+import { createCheckoutDraft, reconcileCheckoutDraft, type CheckoutCartLine, type CheckoutDraft } from "@/lib/checkoutDraft";
 
 type Step = "details" | "payment" | "confirmation";
 
@@ -45,6 +47,8 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   const [order, setOrder] = useState<Order | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
+  const [draft, setDraft] = useState<CheckoutDraft | null>(null);
+  const [ticketEditorOpen, setTicketEditorOpen] = useState(false);
   const reconciling = useRef(false);
 
   // No cart handed off (direct visit, bookmark, expired tab) — nothing
@@ -112,9 +116,8 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
       .catch(() => sessionStorage.removeItem(checkoutStorageKey(event.id)));
   }, [event.id]);
 
-  const cartItems = useMemo(() => {
-    if (cart === "loading" || cart === null) return [];
-    return cart.map((item) => {
+  const toCartLines = (items: StoredCartItem[]): CheckoutCartLine[] =>
+    items.map((item) => {
       const product = event.products.find((p) => p.id === item.product_id);
       const option = item.ticket_option_id ? product?.options?.find((o) => o.id === item.ticket_option_id) : null;
       return {
@@ -124,7 +127,22 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         quantity: item.quantity,
       };
     });
+
+  const cartItems = useMemo(() => {
+    if (cart === "loading" || cart === null) return [];
+    return toCartLines(cart);
+    // Product data is authoritative for labels/prices; cart is the only mutable input here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, event.products]);
+
+  useEffect(() => {
+    if (cart === "loading" || cart === null || draft !== null) return;
+    const deferred = event.deferred_assignment_enabled;
+    const inlineOffered = deferred && event.acceptance_policy === "PURCHASER_GROUP";
+    Promise.resolve().then(() => setDraft(createCheckoutDraft(toCartLines(cart), deferred, inlineOffered)));
+    // Draft creation is intentionally one-shot; later cart changes go through reconciliation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cart, draft, event.deferred_assignment_enabled, event.acceptance_policy]);
 
   const total = useMemo(() => {
     return cartItems.reduce((sum, item) => {
@@ -184,7 +202,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   const showBookingHeader = step !== "confirmation";
 
   let content: React.ReactNode;
-  if (cart === "loading") {
+  if (cart === "loading" || (cart !== null && draft === null)) {
     content = (
       <Stack align="center" py="xl">
         <Loader />
@@ -234,15 +252,17 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                   <Button onClick={() => paymentIntentMutation.mutate(order)}>Retry</Button>
                 </Stack>
               )
-            ) : (
+            ) : draft ? (
               <CheckoutDetailsForm
                 event={event}
                 cartItems={cartItems}
                 totalDue={total}
+                draft={draft}
+                onDraftChange={(updater) => setDraft((current) => current ? updater(current) : current)}
+                onEditTickets={() => setTicketEditorOpen(true)}
                 onOrderCreated={handleOrderCreated}
-                onBack={() => router.push(backUrl)}
               />
-            )}
+            ) : null}
           </Paper>
         </GridCol>
 
@@ -273,6 +293,24 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         </Stack>
       )}
       {content}
+      {cart !== "loading" && cart !== null && draft && step === "details" && (
+        <CheckoutTicketEditor
+          key={`${ticketEditorOpen}-${cart.map((item) => `${item.product_id}:${item.ticket_option_id}:${item.quantity}`).join("|")}`}
+          opened={ticketEditorOpen}
+          event={event}
+          cart={cart}
+          slots={draft.slots}
+          onClose={() => setTicketEditorOpen(false)}
+          onSave={(nextCart, removedAuthoredIds) => {
+            const lines = toCartLines(nextCart);
+            const deferred = event.deferred_assignment_enabled;
+            const inlineOffered = deferred && event.acceptance_policy === "PURCHASER_GROUP";
+            setDraft((current) => current ? reconcileCheckoutDraft(current, lines, removedAuthoredIds, deferred, inlineOffered) : current);
+            setCart(nextCart);
+            saveCart(event.id, nextCart);
+          }}
+        />
+      )}
     </Stack>
   );
 }
