@@ -27,7 +27,7 @@ import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { exportOrdersUrl, listOrders, ORDER_STATUS, type OrderListItem, type OrderListResponse } from "@/lib/orderApi";
 import { exportAttendeesUrl, listAttendees, type AttendeeListItem, type AttendeeListResponse } from "@/lib/attendeeApi";
 import { formatAmount } from "@/lib/money";
-import { formatEventDate } from "@/lib/eventDateTime";
+import { formatEventDateTime } from "@/lib/eventDateTime";
 
 type View = "orders" | "attendees";
 
@@ -408,7 +408,7 @@ export function OrdersAttendeesTable({
                               </Table.Td>
                               <Table.Td>
                                 <Text size="sm" c="dimmed">
-                                  {formatEventDate(o.created_at, timezone)}
+                                  {formatEventDateTime(o.created_at, timezone)}
                                 </Text>
                               </Table.Td>
                               <Table.Td>
