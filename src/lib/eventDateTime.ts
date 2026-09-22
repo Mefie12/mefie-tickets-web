@@ -137,6 +137,39 @@ export function formatEventDate(iso: string | null, timeZone: string): string {
   }).format(new Date(iso));
 }
 
+/**
+ * Date and time together, with an explicit zone label: "22 September
+ * 2026 at 09:50 GMT+1". For record timestamps (order placed/completed/
+ * refunded, attendee actions, audit log entries) where the date alone
+ * doesn't say enough to reconstruct what happened when — see
+ * formatEventDate for the date-only variant, still correct for an
+ * event's own schedule. The zone label matters here specifically
+ * because these are shown in the event's venue zone, not the viewer's
+ * own or UTC — without it, a timestamp being cross-referenced against a
+ * UTC log (Stripe, the database) reads as ambiguous rather than
+ * obviously offset (confirmed live: this cost real time while
+ * investigating a payment webhook issue).
+ */
+export function formatEventDateTime(iso: string | null, timeZone: string): string {
+  if (!iso) return "Date and time TBA";
+  const date = new Date(iso);
+  const formatted = new Intl.DateTimeFormat(LOCALE, {
+    timeZone,
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(date);
+  const zoneLabel =
+    new Intl.DateTimeFormat(LOCALE, { timeZone, timeZoneName: "shortOffset" })
+      .formatToParts(date)
+      .find((p) => p.type === "timeZoneName")?.value ?? "";
+
+  return `${formatted} ${zoneLabel}`.trim();
+}
+
 /** Compact "Sat, 19 Sep · 2:00 PM" for event cards — weekday, short date, and time, no year or zone label. */
 export function formatEventCardDate(iso: string | null, timeZone: string): string {
   if (!iso) return "Date and time TBA";

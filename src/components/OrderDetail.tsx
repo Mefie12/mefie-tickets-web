@@ -49,7 +49,7 @@ import {
   type OrderTicketStatus,
   type OrderView,
 } from "@/lib/orderApi";
-import { formatEventDate } from "@/lib/eventDateTime";
+import { formatEventDateTime } from "@/lib/eventDateTime";
 import { formatAmount } from "@/lib/money";
 import type { Event } from "@/lib/eventApi";
 
@@ -401,7 +401,7 @@ export function OrderDetail({
           <Field label="Order ID">#{order.short_id}</Field>
           <Field label="Event Name">{event.title}</Field>
           <Field label={headerDate.label}>
-            {headerDate.value ? formatEventDate(headerDate.value, event.timezone) : "—"}
+            {headerDate.value ? formatEventDateTime(headerDate.value, event.timezone) : "—"}
           </Field>
         </SimpleGrid>
       </Section>
@@ -413,7 +413,7 @@ export function OrderDetail({
           </Field>
           <Field label="Email">{order.email}</Field>
           <Field label="Phone">{order.phone ?? "—"}</Field>
-          <Field label="Order Placement Date">{formatEventDate(order.created_at, event.timezone)}</Field>
+          <Field label="Order Placement Date">{formatEventDateTime(order.created_at, event.timezone)}</Field>
         </SimpleGrid>
         {view === "cancelled" && order.cancellation_reason && (
           <Text size="sm" c="dimmed">
@@ -429,7 +429,7 @@ export function OrderDetail({
               <Text fw={600}>Terms &amp; Conditions</Text>
               <Text size="sm" c="dimmed">
                 Accepted v{order.terms_acceptance.version_number} on{" "}
-                {formatEventDate(order.terms_acceptance.accepted_at, event.timezone)}
+                {formatEventDateTime(order.terms_acceptance.accepted_at, event.timezone)}
               </Text>
             </Stack>
             {order.terms_acceptance.content_type === "PDF" ? (
@@ -688,7 +688,7 @@ export function OrderDetail({
                                       {entry.reason ? ` · ${entry.reason}` : ""}
                                     </Text>
                                     <Text size="xs" c="dimmed">
-                                      {formatEventDate(entry.at, event.timezone)} · by {entry.actor_label}
+                                      {formatEventDateTime(entry.at, event.timezone)} · by {entry.actor_label}
                                     </Text>
                                   </Box>
                                 ))}
