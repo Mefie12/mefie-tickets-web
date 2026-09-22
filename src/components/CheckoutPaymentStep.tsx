@@ -24,6 +24,9 @@ const CONFIRMATION_POLL_INTERVAL_MS = 2000;
 const CONFIRMATION_POLL_SLOW_INTERVAL_MS = 20000;
 const CONFIRMATION_POLL_CEILING_MS = 3 * 60 * 1000;
 
+/** A PaymentIntent status meaning a confirmation has already genuinely begun for this clientSecret. */
+type ResumedIntentStatus = "succeeded" | "processing" | "requires_action";
+
 function paymentElementOptionsFor(defaultBillingCountry?: string | null): StripePaymentElementOptions {
   return {
     layout: "tabs",
@@ -106,11 +109,69 @@ export function CheckoutPaymentStep({
   // live: the payment step hung with the PaymentElement never usable).
   const stripePromise = useMemo(() => (publishableKey ? loadStripe(publishableKey) : null), []);
 
+  // Resolved with the raw Stripe object — BEFORE ever mounting <Elements>
+  // — to find out whether a confirmation has already genuinely happened
+  // for this clientSecret (e.g. the buyer paid, then reloaded or the tab
+  // was revived before our own webhook flipped the order to COMPLETED).
+  // Mounting <Elements clientSecret> against a PaymentIntent that's
+  // already succeeded/processing gets its elements/sessions init request
+  // rejected by Stripe with a 400 (confirmed live against a real
+  // already-succeeded PaymentIntent pulled straight from Stripe's API),
+  // which previously left the buyer on a permanently stuck, unlabeled
+  // spinner with no ticket and no error. Checking first, with the plain
+  // Stripe object (no Elements needed for retrievePaymentIntent), avoids
+  // ever asking Stripe to initialize a Payment Element that's doomed to
+  // fail.
+  const [resumeStatus, setResumeStatus] = useState<"checking" | "fresh" | ResumedIntentStatus>("checking");
+
+  useEffect(() => {
+    if (!stripePromise) return;
+    let cancelled = false;
+    stripePromise.then((stripe) => {
+      if (!stripe || cancelled) return;
+      stripe.retrievePaymentIntent(clientSecret).then(({ paymentIntent }) => {
+        if (cancelled) return;
+        const status = paymentIntent?.status;
+        if (status === "succeeded" || status === "processing" || status === "requires_action") {
+          setResumeStatus(status);
+        } else {
+          // requires_payment_method / canceled / anything else: this
+          // clientSecret is still fresh (or the order has already moved
+          // on server-side, which CheckoutPage's own reconciliation
+          // handles) — safe to mount a Payment Element against it.
+          setResumeStatus("fresh");
+        }
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stripePromise, clientSecret]);
+
   if (!stripePromise) {
     return (
       <Alert color="red" icon={<IconAlertCircle size={18} />} title="Payment unavailable">
         Stripe isn&apos;t configured for this environment. Set NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY and reload.
       </Alert>
+    );
+  }
+
+  if (resumeStatus === "checking") {
+    return (
+      <Stack align="center" py="xl">
+        <Loader size="sm" />
+      </Stack>
+    );
+  }
+
+  if (resumeStatus !== "fresh") {
+    return (
+      <Stack gap="md">
+        <Title order={2} fz={22}>
+          2. Payment Details
+        </Title>
+        <ResumedConfirmationStatus eventId={eventId} order={order} initialStatus={resumeStatus} onPaid={onPaid} />
+      </Stack>
     );
   }
 
@@ -132,7 +193,6 @@ export function CheckoutPaymentStep({
         <PaymentForm
           eventId={eventId}
           order={order}
-          clientSecret={clientSecret}
           reservationExpiresAt={reservationExpiresAt}
           defaultBillingCountry={defaultBillingCountry}
           onPaid={onPaid}
@@ -143,10 +203,93 @@ export function CheckoutPaymentStep({
   );
 }
 
+/**
+ * Renders in place of the Payment Element whenever a confirmation has
+ * already genuinely begun for this order before PaymentForm ever mounted
+ * — no Elements/Stripe object needed here at all, since nothing further
+ * is being collected from the buyer; this only polls Mefie's own
+ * webhook-driven order status until it resolves.
+ */
+function ResumedConfirmationStatus({
+  eventId,
+  order,
+  initialStatus,
+  onPaid,
+}: {
+  eventId: number;
+  order: Order;
+  initialStatus: ResumedIntentStatus;
+  onPaid: (order: Order) => void;
+}) {
+  const [showConfirmingMessage, setShowConfirmingMessage] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowConfirmingMessage(false), CONFIRMATION_POLL_CEILING_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const statusQuery = useQuery({
+    queryKey: ["order-payment-status", eventId, order.short_id],
+    queryFn: () => getOrderPaymentStatus(eventId, order.short_id),
+    refetchInterval: (query) => {
+      if (query.state.data?.status === "COMPLETED") return false;
+      return initialStatus === "succeeded" ? CONFIRMATION_POLL_INTERVAL_MS : CONFIRMATION_POLL_SLOW_INTERVAL_MS;
+    },
+  });
+
+  useEffect(() => {
+    // statusQuery.data.order is the fresh, post-completion order (real
+    // unassigned_count/attendees) — falling back to the pre-payment
+    // `order` prop only guards a response shape that should never
+    // actually happen once status is COMPLETED.
+    if (statusQuery.data?.status === "COMPLETED") onPaid(statusQuery.data.order ?? order);
+  }, [statusQuery.data, onPaid, order]);
+
+  // The order was abandoned server-side AFTER a confirmation had
+  // genuinely begun — the card may have actually been charged (the
+  // existing PAYMENT_CAPTURED_AFTER_EXPIRY/REVIEW_REQUIRED backend path
+  // exists precisely for this). Deliberately no "Start over" here: an
+  // extra 10-60 seconds of polling cannot turn a genuinely uncertain
+  // Stripe outcome into a certain one, so this screen never claims it's
+  // safe to pay again. The buyer isn't trapped — they can navigate away
+  // and start an independent new checkout whenever they choose.
+  const outcomeIsUncertain = statusQuery.data !== undefined && !["RESERVED", "COMPLETED"].includes(statusQuery.data.status);
+
+  if (outcomeIsUncertain) {
+    return (
+      <Stack gap="md" align="center" py="xl">
+        <Loader size="sm" />
+        <Text ta="center" fw={500}>
+          {showConfirmingMessage
+            ? "We're checking your payment status — please don't submit another payment."
+            : `This is taking longer than expected. If you were charged, we'll follow up — please don't submit another payment. Reference: ${order.short_id}.`}
+        </Text>
+      </Stack>
+    );
+  }
+
+  const message =
+    initialStatus === "succeeded"
+      ? showConfirmingMessage
+        ? "Payment received — confirming your order…"
+        : `Your payment was received. We're finalizing your order — this can take a few minutes. Reference: ${order.short_id}.`
+      : showConfirmingMessage
+        ? "Your payment is being confirmed — please don't try to pay again."
+        : `This can take a few minutes for some payment methods. We'll update this automatically. Reference: ${order.short_id}.`;
+
+  return (
+    <Stack gap="md" align="center" py="xl">
+      <Loader size="sm" />
+      <Text ta="center" fw={500}>
+        {message}
+      </Text>
+    </Stack>
+  );
+}
+
 function PaymentForm({
   eventId,
   order,
-  clientSecret,
   reservationExpiresAt,
   defaultBillingCountry,
   onPaid,
@@ -154,7 +297,6 @@ function PaymentForm({
 }: {
   eventId: number;
   order: Order;
-  clientSecret: string;
   reservationExpiresAt: string | null;
   defaultBillingCountry?: string | null;
   onPaid: (order: Order) => void;
@@ -171,7 +313,6 @@ function PaymentForm({
   // error for a payment that already went through fine (confirmed live:
   // the previous version left the Pay button enabled through this wait).
   const [paymentConfirmedByStripe, setPaymentConfirmedByStripe] = useState(false);
-  const [checkingExistingStatus, setCheckingExistingStatus] = useState(true);
   // True from the moment beginPaymentConfirmation() succeeds (before
   // Stripe is ever called) through to a final resolved outcome. A
   // confirmation that has genuinely begun may have actually charged the
@@ -184,9 +325,7 @@ function PaymentForm({
   // stay mounted for that entire call (confirmed live: unmounting it via
   // the awaitingAsyncConfirmation branch below, which confirmationInFlight
   // alone would otherwise trigger immediately, made confirmPayment() throw
-  // "elements should have a mounted Payment Element"). Never set from the
-  // resumed-page-reload path (below) since no confirmPayment() call is
-  // in flight there.
+  // "elements should have a mounted Payment Element").
   const [stripeCallPending, setStripeCallPending] = useState(false);
   // Flips from the "confirming" to the "taking a while" message once
   // CONFIRMATION_POLL_CEILING_MS has passed since a confirmation began —
@@ -255,50 +394,6 @@ function PaymentForm({
     const timer = setTimeout(() => setShowConfirmingMessage(false), CONFIRMATION_POLL_CEILING_MS);
     return () => clearTimeout(timer);
   }, [confirmationInFlight]);
-
-  // A reload (see Checkout.tsx's sessionStorage resume) re-mounts this
-  // form fresh, with no memory of whether the underlying PaymentIntent
-  // was already confirmed before the reload — confirmed live: without
-  // this check, a resumed page shows a fresh, clickable Pay button even
-  // when Stripe already marked the charge succeeded, risking exactly
-  // the double-confirm error this component otherwise prevents. Also
-  // covers a redirect-based method's (e.g. Klarna) return trip, which
-  // is a full navigation away and back rather than an in-page result.
-  useEffect(() => {
-    if (!stripe) return;
-    let cancelled = false;
-    stripe.retrievePaymentIntent(clientSecret).then(({ paymentIntent }) => {
-      if (cancelled) return;
-      if (paymentIntent?.status === "succeeded") {
-        pollStartedAtRef.current = Date.now();
-        setConfirmationInFlight(true);
-        setPaymentConfirmedByStripe(true);
-      } else if (paymentIntent?.status === "processing" || paymentIntent?.status === "requires_action") {
-        // "processing": Klarna's authorization/Stripe's relay very
-        // plausibly hasn't finished by the time the browser redirects
-        // back. "requires_action": the buyer left before finishing
-        // Klarna's authentication (closed the tab, came back later) —
-        // resubmitting re-enters handleSubmit's normal confirmPayment()
-        // call, which Stripe resumes/re-displays the pending action for.
-        // Either way, our own webhook-driven statusQuery poll below is
-        // what actually resolves this, exactly as it already does for
-        // the inline-confirm path — and createOrRetrieve() on the
-        // backend already reuses the existing attempt rather than
-        // creating a second one, so this never risks a duplicate charge.
-        pollStartedAtRef.current = Date.now();
-        setConfirmationInFlight(true);
-      }
-      // requires_payment_method / canceled / anything else: fall through
-      // to the normal, resubmittable form. A canceled PaymentIntent means
-      // the reservation sweep already resolved this order server-side —
-      // CheckoutPage.tsx's own mount-time reconciliation against the
-      // order's authoritative status handles routing away from this step.
-      setCheckingExistingStatus(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [stripe, clientSecret]);
 
   const paymentElementOptions = useMemo(() => paymentElementOptionsFor(defaultBillingCountry), [defaultBillingCountry]);
 
@@ -430,14 +525,6 @@ function PaymentForm({
       setConfirmationInFlight(false);
       setSubmitting(false);
     }
-  }
-
-  if (checkingExistingStatus) {
-    return (
-      <Stack align="center" py="xl">
-        <Loader size="sm" />
-      </Stack>
-    );
   }
 
   if (outcomeIsUncertain) {
