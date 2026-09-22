@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Button, PasswordInput, Stack, TextInput } from "@mantine/core";
@@ -17,8 +16,6 @@ import { adminLogin } from "@/lib/adminAuthApi";
  * straight to /dashboard.
  */
 export function AdminLoginForm({ defaultEmail = "", returnTo = "/admin/dashboard" }: { defaultEmail?: string; returnTo?: string }) {
-  const router = useRouter();
-
   const form = useForm({
     initialValues: { email: defaultEmail, password: "" },
     validate: {
@@ -29,7 +26,12 @@ export function AdminLoginForm({ defaultEmail = "", returnTo = "/admin/dashboard
 
   const loginMutation = useMutation({
     mutationFn: (values: { email: string; password: string }) => adminLogin(values),
-    onSuccess: () => router.push(`/admin/mfa?returnTo=${encodeURIComponent(returnTo)}`),
+    onSuccess: () => {
+      // The MFA page reads the newly issued session cookie on the server.
+      // A full navigation ensures it uses the response from this login.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.assign(`/admin/mfa?returnTo=${encodeURIComponent(returnTo)}`);
+    },
     onError: (error: Error) => {
       if (error instanceof ApiError && error.errors) {
         form.setErrors(

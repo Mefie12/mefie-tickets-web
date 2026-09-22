@@ -21,5 +21,6 @@ export function AdminMfaPanel({ initialChallenge, onVerified }: { initialChallen
     {challenge.attempts_remaining < 5 && !expired && <Alert color="yellow" w="100%">{challenge.attempts_remaining} verification attempts remaining.</Alert>}
     <Group><PinInput length={6} type="number" value={code} onChange={setCode} disabled={verifyMutation.isPending || expired} autoFocus /></Group>
     <Button fullWidth loading={verifyMutation.isPending} disabled={code.length !== 6 || expired} onClick={() => verifyMutation.mutate()}>Verify and continue</Button>
+    {expired && <Anchor href="/admin/login">Return to admin sign in</Anchor>}
     {!expired && <Text size="sm" c="dimmed">Didn&apos;t get a code?{" "}<Anchor component="button" type="button" onClick={() => resendMutation.mutate()} disabled={cooldown > 0 || resendMutation.isPending}>{cooldown > 0 ? `Resend in ${formatMMSS(cooldown)}` : "Resend code"}</Anchor></Text>}</Stack>;
 }
