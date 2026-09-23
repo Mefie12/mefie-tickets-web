@@ -11,6 +11,7 @@ import {
   IconSettings,
   IconDeviceMobile,
   IconUsers,
+  IconForms,
   type Icon,
 } from "@tabler/icons-react";
 import classes from "./eventOperationsNav.module.css";
@@ -31,6 +32,7 @@ const sections: NavSection[] = [
     heading: "Manage",
     items: [
       { label: "Orders & Attendees", suffix: "/orders", icon: IconUsers, alsoActiveOn: ["/attendees"] },
+      { label: "Responses", suffix: "/responses", icon: IconForms },
       { label: "Complimentary", suffix: "/complimentary", icon: IconGift },
     ],
   },
