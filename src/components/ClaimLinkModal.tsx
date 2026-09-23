@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Button, Checkbox, Code, Divider, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
   createClaimLink,
@@ -191,7 +192,21 @@ export function ClaimLinkModal({
               <Button variant="light" onClick={() => rotate.mutate()} loading={rotate.isPending}>
                 {linkLocked ? "Resend invite" : "Rotate link"}
               </Button>
-              <Button variant="light" color="red" onClick={() => revoke.mutate()} loading={revoke.isPending}>
+              <Button
+                variant="light"
+                color="red"
+                loading={revoke.isPending}
+                onClick={() =>
+                  modals.openConfirmModal({
+                    title: "Revoke this invite link?",
+                    centered: true,
+                    children: <Text size="sm">The link stops working immediately. This cannot be undone.</Text>,
+                    labels: { confirm: "Revoke", cancel: "Cancel" },
+                    confirmProps: { color: "red" },
+                    onConfirm: () => revoke.mutate(),
+                  })
+                }
+              >
                 Revoke
               </Button>
             </Group>

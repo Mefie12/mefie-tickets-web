@@ -206,7 +206,7 @@ export function TeamMembersTable({ initialRows, canEdit }: { initialRows: TeamRo
                 {canEdit && (
                   <Table.Td>
                     {row.type === "member" && row.status === "ACTIVE" && (
-                      <Button size="compact-xs" color="red" variant="subtle" onClick={() => confirmRemove(row)}>
+                      <Button size="compact-xs" color="red" variant="light" onClick={() => confirmRemove(row)}>
                         Remove
                       </Button>
                     )}
@@ -214,7 +214,7 @@ export function TeamMembersTable({ initialRows, canEdit }: { initialRows: TeamRo
                       <Button
                         size="compact-xs"
                         color="red"
-                        variant="subtle"
+                        variant="light"
                         onClick={() => confirmCancelInvitation(row)}
                       >
                         Cancel

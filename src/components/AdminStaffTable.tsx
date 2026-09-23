@@ -214,7 +214,7 @@ export function AdminStaffTable({ initialRows }: { initialRows: AdminUserRow[] }
                           <Button size="compact-xs" color="orange" variant="subtle" onClick={() => suspendMutation.mutate(row.id)}>
                             Suspend
                           </Button>
-                          <Button size="compact-xs" color="red" variant="subtle" onClick={() => confirmRemove(row)}>
+                          <Button size="compact-xs" color="red" variant="light" onClick={() => confirmRemove(row)}>
                             Remove
                           </Button>
                         </>
@@ -225,7 +225,7 @@ export function AdminStaffTable({ initialRows }: { initialRows: AdminUserRow[] }
                         </Button>
                       )}
                       {row.type === "invitation" && row.status === "PENDING" && (
-                        <Button size="compact-xs" color="red" variant="subtle" onClick={() => confirmCancelInvitation(row)}>
+                        <Button size="compact-xs" color="red" variant="light" onClick={() => confirmCancelInvitation(row)}>
                           Cancel
                         </Button>
                       )}

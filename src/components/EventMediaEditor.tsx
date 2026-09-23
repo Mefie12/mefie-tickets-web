@@ -4,8 +4,21 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Dropzone, IMAGE_MIME_TYPE } from "@mantine/dropzone";
-import { ActionIcon, Badge, Button, Card, Group, Image, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Card,
+  Group,
+  Image,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+  Tooltip,
+} from "@mantine/core";
 import { IconChevronDown, IconChevronUp, IconCrop, IconPhoto, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
@@ -251,7 +264,16 @@ export function EventMediaEditor({
                   variant="light"
                   color="red"
                   loading={deleteCoverMutation.isPending}
-                  onClick={() => deleteCoverMutation.mutate()}
+                  onClick={() =>
+                    modals.openConfirmModal({
+                      title: "Remove the cover image?",
+                      centered: true,
+                      children: <Text size="sm">You&apos;ll need to upload a new one before this event can go live.</Text>,
+                      labels: { confirm: "Remove image", cancel: "Cancel" },
+                      confirmProps: { color: "red" },
+                      onConfirm: () => deleteCoverMutation.mutate(),
+                    })
+                  }
                 >
                   Remove
                 </Button>
@@ -342,14 +364,26 @@ export function EventMediaEditor({
                           <IconChevronDown size={14} />
                         </ActionIcon>
                       </Group>
-                      <ActionIcon
-                        variant="subtle"
-                        color="red"
-                        size="sm"
-                        onClick={() => deleteGalleryMutation.mutate(image.id)}
-                      >
-                        <IconTrash size={14} />
-                      </ActionIcon>
+                      <Tooltip label="Delete image">
+                        <ActionIcon
+                          variant="light"
+                          color="red"
+                          size="sm"
+                          aria-label="Delete image"
+                          onClick={() =>
+                            modals.openConfirmModal({
+                              title: "Delete this image?",
+                              centered: true,
+                              children: <Text size="sm">This permanently removes it from the gallery. This cannot be undone.</Text>,
+                              labels: { confirm: "Delete image", cancel: "Cancel" },
+                              confirmProps: { color: "red" },
+                              onConfirm: () => deleteGalleryMutation.mutate(image.id),
+                            })
+                          }
+                        >
+                          <IconTrash size={14} />
+                        </ActionIcon>
+                      </Tooltip>
                     </Group>
                   )}
                 </Stack>
