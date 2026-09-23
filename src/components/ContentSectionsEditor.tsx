@@ -42,7 +42,7 @@ import {
   IconPlus,
   IconRefresh,
   IconStarFilled,
-  IconX,
+  IconTrash,
 } from "@tabler/icons-react";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
@@ -959,8 +959,13 @@ function TalentProfileForm({
                 value={link.url}
                 onChange={(e) => form.setFieldValue(`social_links.${index}.url`, e.currentTarget.value)}
               />
-              <ActionIcon variant="subtle" color="red" onClick={() => form.removeListItem("social_links", index)}>
-                <IconX size={16} />
+              <ActionIcon
+                variant="subtle"
+                color="red"
+                size="sm"
+                onClick={() => form.removeListItem("social_links", index)}
+              >
+                <IconTrash size={14} />
               </ActionIcon>
             </Group>
           ))}

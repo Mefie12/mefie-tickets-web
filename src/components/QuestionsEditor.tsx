@@ -18,6 +18,7 @@ import {
   Text,
   Textarea,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import {
   IconChevronDown,
@@ -26,8 +27,8 @@ import {
   IconInfoCircle,
   IconPlus,
   IconTrash,
-  IconX,
 } from "@tabler/icons-react";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
@@ -145,6 +146,17 @@ export function QuestionsEditor({
     },
   });
 
+  function openDeleteModal(question: Question) {
+    modals.openConfirmModal({
+      title: `Delete "${question.title}"?`,
+      centered: true,
+      children: <Text size="sm">This permanently removes this question. This cannot be undone.</Text>,
+      labels: { confirm: "Delete question", cancel: "Cancel" },
+      confirmProps: { color: "red", loading: deleteMutation.isPending },
+      onConfirm: () => deleteMutation.mutate(question),
+    });
+  }
+
   return (
     <Stack gap="md">
       <Group justify="space-between">
@@ -220,14 +232,18 @@ export function QuestionsEditor({
                     <Button size="xs" variant="light" onClick={() => setModalQuestion(question)}>
                       Edit
                     </Button>
-                    <ActionIcon
-                      variant="subtle"
-                      color="red"
-                      loading={deleteMutation.isPending && deleteMutation.variables?.id === question.id}
-                      onClick={() => deleteMutation.mutate(question)}
-                    >
-                      <IconTrash size={14} />
-                    </ActionIcon>
+                    <Tooltip label="Delete question">
+                      <ActionIcon
+                        size="lg"
+                        variant="light"
+                        color="red"
+                        aria-label="Delete question"
+                        loading={deleteMutation.isPending && deleteMutation.variables?.id === question.id}
+                        onClick={() => openDeleteModal(question)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
                   </Group>
                 )}
               </Group>
@@ -340,8 +356,13 @@ function QuestionFormModal({
                     placeholder={`Option ${index + 1}`}
                     {...form.getInputProps(`options.${index}`)}
                   />
-                  <ActionIcon variant="subtle" color="red" onClick={() => form.removeListItem("options", index)}>
-                    <IconX size={14} />
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    size="sm"
+                    onClick={() => form.removeListItem("options", index)}
+                  >
+                    <IconTrash size={14} />
                   </ActionIcon>
                 </Group>
               ))}

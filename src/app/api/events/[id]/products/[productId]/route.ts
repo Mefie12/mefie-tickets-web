@@ -14,3 +14,15 @@ export async function PATCH(
   );
   return relayResponse(result);
 }
+
+export async function DELETE(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string; productId: string }> },
+) {
+  const { id, productId } = await params;
+  const result = await backendRequest(
+    `/api/events/${encodeURIComponent(id)}/products/${encodeURIComponent(productId)}`,
+    { method: "DELETE" },
+  );
+  return relayResponse(result);
+}

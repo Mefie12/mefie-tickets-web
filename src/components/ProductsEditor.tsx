@@ -19,13 +19,31 @@ import {
   Switch,
   Text,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
-import { IconChevronDown, IconChevronUp, IconInfoCircle, IconPlus, IconTicket, IconTrash } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconInfoCircle,
+  IconPlayerPause,
+  IconPlayerPlay,
+  IconPlus,
+  IconTicket,
+  IconTrash,
+} from "@tabler/icons-react";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { minimumEndTime, utcIsoToZonedPartsOrEmpty, wallClockEndIsInvalid } from "@/lib/eventDateTime";
-import { createProduct, type PricingType, type Product, type TicketOptionInput, updateProduct } from "@/lib/productApi";
+import {
+  createProduct,
+  deleteProduct,
+  type PricingType,
+  type Product,
+  type TicketOptionInput,
+  updateProduct,
+} from "@/lib/productApi";
 import { currencySymbol, formatMoney } from "@/lib/money";
 
 /** Mantine gives nested-list validators a path like "tiers.2.ends_at_time". */
@@ -230,8 +248,72 @@ export function ProductsEditor({
   initialProducts: Product[];
   disabled: boolean;
 }) {
+  const router = useRouter();
   const [products, setProducts] = useState(initialProducts);
   const [modalProduct, setModalProduct] = useState<Product | "new" | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (productId: number) => deleteProduct(eventId, productId),
+    onSuccess: (_data, productId) => {
+      setProducts((prev) => prev.filter((p) => p.id !== productId));
+      notifications.show({ color: "teal", message: "Ticket type deleted." });
+    },
+    onError: (error: Error, productId) => {
+      if (redirectOnAuthError(error, router)) return;
+      if (error instanceof ApiError && error.status === 404) {
+        // Already deleted elsewhere (e.g. a stale second tab) — the
+        // outcome is the same as a successful delete from here.
+        setProducts((prev) => prev.filter((p) => p.id !== productId));
+        notifications.show({ color: "yellow", message: "This ticket type was already deleted." });
+        return;
+      }
+      notifications.show({
+        color: "red",
+        message: error instanceof ApiError ? error.message : "Something went wrong.",
+      });
+    },
+  });
+
+  function openDeleteModal(product: Product) {
+    modals.openConfirmModal({
+      title: `Delete "${product.title}"?`,
+      centered: true,
+      children: <Text size="sm">This permanently removes this unused ticket type. This cannot be undone.</Text>,
+      labels: { confirm: "Delete ticket type", cancel: "Cancel" },
+      confirmProps: { color: "red", loading: deleteMutation.isPending },
+      onConfirm: () => deleteMutation.mutate(product.id),
+    });
+  }
+
+  const toggleEnabledMutation = useMutation({
+    mutationFn: (product: Product) =>
+      updateProduct(eventId, product.id, { is_enabled: product.disabled_at !== null }),
+    onSuccess: (data: { product: Product }) => {
+      setProducts((prev) => prev.map((p) => (p.id === data.product.id ? data.product : p)));
+      notifications.show({
+        color: "teal",
+        message: data.product.disabled_at ? "Ticket type paused." : "Ticket type resumed.",
+      });
+    },
+    onError: (error: Error) => {
+      if (redirectOnAuthError(error, router)) return;
+      notifications.show({
+        color: "red",
+        message: error instanceof ApiError ? error.message : "Something went wrong.",
+      });
+    },
+  });
+
+  // UI hint only — does not determine server-side deletion eligibility.
+  // quantity_sold + quantity_reserved + quantity_complimentary_held === 0
+  // does NOT imply the product has never had historical usage: it can be
+  // sold out, refunded, and voided back down to zero on every counter and
+  // still be permanently undeletable server-side. This just means there's
+  // nothing to warn about *right now* — a 422 on delete remains a
+  // legitimate, expected outcome even when this hint leaves Delete enabled.
+  function hasUsageHint(product: Product): boolean {
+    return product.quantity_sold + product.quantity_reserved + product.quantity_complimentary_held > 0;
+  }
 
   return (
     <Stack gap="md">
@@ -282,9 +364,38 @@ export function ProductsEditor({
                   </Text>
                 </Stack>
                 {!disabled && (
-                  <Button size="xs" variant="light" onClick={() => setModalProduct(product)}>
-                    Edit
-                  </Button>
+                  <Group gap="xs">
+                    <Button size="xs" variant="light" onClick={() => setModalProduct(product)}>
+                      Edit
+                    </Button>
+                    <Tooltip label={product.disabled_at ? "Resume sales" : "Pause sales"}>
+                      <ActionIcon
+                        size="lg"
+                        variant="light"
+                        color="gray"
+                        aria-label={product.disabled_at ? "Resume ticket type" : "Pause ticket type"}
+                        loading={toggleEnabledMutation.isPending && toggleEnabledMutation.variables?.id === product.id}
+                        onClick={() => toggleEnabledMutation.mutate(product)}
+                      >
+                        {product.disabled_at ? <IconPlayerPlay size={16} /> : <IconPlayerPause size={16} />}
+                      </ActionIcon>
+                    </Tooltip>
+                    <Tooltip
+                      label="This ticket type has existing activity. Disable it instead."
+                      disabled={!hasUsageHint(product)}
+                    >
+                      <ActionIcon
+                        size="lg"
+                        variant="light"
+                        color="red"
+                        aria-label="Delete ticket type"
+                        disabled={hasUsageHint(product)}
+                        onClick={() => openDeleteModal(product)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
                 )}
               </Group>
             </Card>

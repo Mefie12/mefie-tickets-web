@@ -35,6 +35,7 @@ export type Product = {
   quantity_available: number | null;
   quantity_sold: number;
   quantity_reserved: number;
+  quantity_complimentary_held: number;
   starts_at: string | null;
   ends_at: string | null;
   disabled_at: string | null;
@@ -134,4 +135,8 @@ export function updateProduct(
     method: "PATCH",
     body: input,
   });
+}
+
+export function deleteProduct(eventId: number, productId: number) {
+  return request<void>(`/api/events/${eventId}/products/${productId}`, { method: "DELETE" });
 }
