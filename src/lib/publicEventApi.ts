@@ -105,11 +105,11 @@ export type PublicProduct = {
 
 /**
  * The lowest currently-purchasable price across an event's products
- * (tiered options counted individually), for the mobile sticky "Buy
- * tickets from $X" bar — not shown anywhere a full price breakdown
- * already exists (TicketSelector shows real per-tier prices).
+ * (tiered options counted individually) — null when nothing is
+ * currently purchasable. Shared by cheapestPriceLabel() and
+ * isEventFree() so both agree on what counts as "purchasable."
  */
-export function cheapestPriceLabel(event: { products: PublicProduct[]; currency_code: string }): string | null {
+function cheapestPrice(event: { products: PublicProduct[] }): number | null {
   const prices: number[] = [];
   for (const product of event.products) {
     if (product.type === "TIERED") {
@@ -124,8 +124,22 @@ export function cheapestPriceLabel(event: { products: PublicProduct[]; currency_
       prices.push(product.current_price !== null ? Number(product.current_price) : 0);
     }
   }
-  if (prices.length === 0) return null;
-  return formatMoney(Math.min(...prices), event.currency_code);
+  return prices.length === 0 ? null : Math.min(...prices);
+}
+
+/**
+ * For the mobile sticky "Buy tickets from $X" bar — not shown anywhere
+ * a full price breakdown already exists (TicketSelector shows real
+ * per-tier prices).
+ */
+export function cheapestPriceLabel(event: { products: PublicProduct[]; currency_code: string }): string | null {
+  const price = cheapestPrice(event);
+  return price === null ? null : formatMoney(price, event.currency_code);
+}
+
+/** True when the cheapest currently-purchasable price is 0 — drives the "Register" vs "Buy Ticket" CTA, mirroring PublicEventCard.is_free. */
+export function isEventFree(event: { products: PublicProduct[] }): boolean {
+  return cheapestPrice(event) === 0;
 }
 
 export type PublicQuestion = {

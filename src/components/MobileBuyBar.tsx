@@ -14,10 +14,12 @@ import { Box, Button, Group, Text } from "@mantine/core";
 export function MobileBuyBar({
   targetId,
   priceLabel,
+  isFree,
   disabled,
 }: {
   targetId: string;
   priceLabel: string | null;
+  isFree: boolean;
   disabled: boolean;
 }) {
   const [checkoutVisible, setCheckoutVisible] = useState(false);
@@ -55,7 +57,7 @@ export function MobileBuyBar({
           {priceLabel ? `Tickets from ${priceLabel}` : "Get tickets"}
         </Text>
         <Button onClick={() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth" })}>
-          Buy tickets
+          {isFree ? "Register" : "Buy Ticket"}
         </Button>
       </Group>
     </Box>
