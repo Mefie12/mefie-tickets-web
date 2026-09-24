@@ -2,7 +2,7 @@ import { Alert, Avatar, Badge, Box, Container, Grid, GridCol, Group, Paper, Stac
 import { IconCalendar, IconMapPin, IconWorld } from "@tabler/icons-react";
 import { formatEventDate, formatEventDateRange, formatEventTime } from "@/lib/eventDateTime";
 import { APP_URL } from "@/lib/backend";
-import { cheapestPriceLabel, TICKET_DELIVERY_NOTE } from "@/lib/publicEventApi";
+import { cheapestPriceLabel, isEventFree, TICKET_DELIVERY_NOTE } from "@/lib/publicEventApi";
 import type { PublicEventSeries } from "@/lib/publicEventSeriesApi";
 import { staticMapImageUrl } from "@/lib/mapbox";
 import { EventTicketPanel } from "@/components/EventTicketPanel";
@@ -254,7 +254,12 @@ export function PublicEventSeriesView({ series, publicOccurrenceId }: { series: 
           </GridCol>
         </Grid>
       </Container>
-      <MobileBuyBar targetId="checkout-section" priceLabel={cheapestPriceLabel(occurrence)} disabled={occurrence.has_ended} />
+      <MobileBuyBar
+        targetId="checkout-section"
+        priceLabel={cheapestPriceLabel(occurrence)}
+        isFree={isEventFree(occurrence)}
+        disabled={occurrence.has_ended}
+      />
     </Box>
   );
 }

@@ -25,6 +25,8 @@ import {
   IconChevronUp,
   IconHelpCircle,
   IconInfoCircle,
+  IconPlayerPause,
+  IconPlayerPlay,
   IconPlus,
   IconTrash,
 } from "@tabler/icons-react";
@@ -84,11 +86,20 @@ type QuestionFormValues = {
   type: QuestionType;
   options: string[];
   is_required: boolean;
+  is_enabled: boolean;
 };
 
 function questionToFormValues(question?: Question): QuestionFormValues {
   if (!question) {
-    return { title: "", description: "", scope: "ATTENDEE", type: "TEXT", options: [], is_required: false };
+    return {
+      title: "",
+      description: "",
+      scope: "ATTENDEE",
+      type: "TEXT",
+      options: [],
+      is_required: false,
+      is_enabled: true,
+    };
   }
   return {
     title: question.title,
@@ -97,6 +108,7 @@ function questionToFormValues(question?: Question): QuestionFormValues {
     type: question.type,
     options: question.options ?? [],
     is_required: question.is_required,
+    is_enabled: question.disabled_at === null,
   };
 }
 
@@ -143,6 +155,25 @@ export function QuestionsEditor({
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
       notifications.show({ color: "red", message: error.message });
+    },
+  });
+
+  const toggleEnabledMutation = useMutation({
+    mutationFn: (question: Question) =>
+      updateQuestion(eventId, question.id, { is_enabled: question.disabled_at !== null }),
+    onSuccess: (data: { question: Question }) => {
+      setQuestions((prev) => prev.map((q) => (q.id === data.question.id ? data.question : q)));
+      notifications.show({
+        color: "teal",
+        message: data.question.disabled_at ? "Question disabled." : "Question enabled.",
+      });
+    },
+    onError: (error: Error) => {
+      if (redirectOnAuthError(error, router)) return;
+      notifications.show({
+        color: "red",
+        message: error instanceof ApiError ? error.message : "Something went wrong.",
+      });
     },
   });
 
@@ -204,6 +235,11 @@ export function QuestionsEditor({
                         Required
                       </Badge>
                     )}
+                    {question.disabled_at && (
+                      <Badge size="sm" color="gray" variant="light">
+                        Disabled
+                      </Badge>
+                    )}
                   </Group>
                   {question.description && (
                     <Text size="sm" c="dimmed">
@@ -232,6 +268,18 @@ export function QuestionsEditor({
                     <Button size="xs" variant="light" onClick={() => setModalQuestion(question)}>
                       Edit
                     </Button>
+                    <Tooltip label={question.disabled_at ? "Enable question" : "Disable question"}>
+                      <ActionIcon
+                        size="lg"
+                        variant="light"
+                        color="gray"
+                        aria-label={question.disabled_at ? "Enable question" : "Disable question"}
+                        loading={toggleEnabledMutation.isPending && toggleEnabledMutation.variables?.id === question.id}
+                        onClick={() => toggleEnabledMutation.mutate(question)}
+                      >
+                        {question.disabled_at ? <IconPlayerPlay size={16} /> : <IconPlayerPause size={16} />}
+                      </ActionIcon>
+                    </Tooltip>
                     <Tooltip label="Delete question">
                       <ActionIcon
                         size="lg"
@@ -308,6 +356,7 @@ function QuestionFormModal({
         type: values.type,
         options: OPTIONS_TYPES.includes(values.type) ? values.options.filter((o) => o.trim().length > 0) : null,
         is_required: values.is_required,
+        is_enabled: values.is_enabled,
         ...(isEdit ? {} : { sort_order: nextSortOrder }),
       };
       return isEdit ? updateQuestion(eventId, question.id, input) : createQuestion(eventId, input);
@@ -384,6 +433,7 @@ function QuestionFormModal({
           )}
 
           <Switch label="Required" {...form.getInputProps("is_required", { type: "checkbox" })} />
+          <Switch label="Enabled" {...form.getInputProps("is_enabled", { type: "checkbox" })} />
 
           <Group justify="flex-end" mt="md">
             <Button variant="subtle" onClick={onClose}>

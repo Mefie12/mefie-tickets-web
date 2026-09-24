@@ -14,6 +14,7 @@ export type Question = {
   options: string[] | null;
   is_required: boolean;
   sort_order: number;
+  disabled_at: string | null;
 };
 
 async function request<T>(
@@ -49,6 +50,7 @@ export function createQuestion(
     options?: string[] | null;
     is_required?: boolean;
     sort_order?: number;
+    is_enabled?: boolean;
   },
 ) {
   return request<{ question: Question }>(`/api/events/${eventId}/questions`, { method: "POST", body: input });
@@ -65,6 +67,7 @@ export function updateQuestion(
     options?: string[] | null;
     is_required?: boolean;
     sort_order?: number;
+    is_enabled?: boolean;
   },
 ) {
   return request<{ question: Question }>(`/api/events/${eventId}/questions/${questionId}`, {
