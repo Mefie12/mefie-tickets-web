@@ -65,12 +65,18 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   }, [cart, router, backUrl]);
 
   useEffect(() => {
-    if (!order || !clientSecret) return;
+    // Once the buyer has reached confirmation, never re-persist — otherwise
+    // a stale clientSecret still sitting in state (see onPaid below) would
+    // resurrect the entry this same render cycle just removed, leaving a
+    // COMPLETED order permanently stuck in sessionStorage for this event
+    // and hijacking the buyer's next checkout attempt straight to
+    // confirmation instead of a fresh cart.
+    if (!order || !clientSecret || step === "confirmation") return;
     sessionStorage.setItem(
       checkoutStorageKey(event.id),
       JSON.stringify({ order, clientSecret, reservationExpiresAt } satisfies PersistedCheckout),
     );
-  }, [order, clientSecret, reservationExpiresAt, event.id]);
+  }, [order, clientSecret, reservationExpiresAt, event.id, step]);
 
   // Reconcile against the authoritative status before resuming anywhere
   // — a persisted copy could be stale (e.g. the webhook that completes
@@ -238,6 +244,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                     sessionStorage.removeItem(checkoutStorageKey(event.id));
                     clearCart(event.id);
                     setOrder(updatedOrder);
+                    setClientSecret(null);
                     setStep("confirmation");
                   }}
                   onExpired={handleExpired}
