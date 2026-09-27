@@ -38,6 +38,10 @@ export function GateRoutingManager({
     : initial.structure_changes.reason;
   const defaultGate = gates.find((gate) => gate.is_default)!;
   const gateOptions = useMemo(() => gates.map((gate) => ({ value: String(gate.id), label: gate.name })), [gates]);
+  // Live duplicate checks against the already-loaded list, for a fast inline warning.
+  // The server remains authoritative (and is the only guard against races or names/codes not yet loaded client-side).
+  const gateNameTaken = gates.some((gate) => gate.name.trim().toLowerCase() === name.trim().toLowerCase());
+  const laneCodeTaken = (laneGate?.lanes ?? []).some((lane) => lane.code.trim().toLowerCase() === code.trim().toLowerCase());
 
   useEffect(() => {
     if (!publication || publication.status !== "PREPARING") return;
@@ -293,8 +297,9 @@ export function GateRoutingManager({
       }
     </Stack></Card>
     <Modal opened={gateModal} onClose={() => setGateModal(false)} title="New entrance" centered>
-      <Stack><TextInput label="Entrance name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus/>
-        <Button loading={busy} disabled={!name.trim()} onClick={addGate}>Create entrance</Button></Stack>
+      <Stack><TextInput label="Entrance name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus
+          error={gateNameTaken ? "An entrance with this name already exists." : undefined}/>
+        <Button loading={busy} disabled={!name.trim() || gateNameTaken} onClick={addGate}>Create entrance</Button></Stack>
     </Modal>
     <Modal opened={confirmChange} onClose={() => setConfirmChange(false)} title="Prepare published routing change" centered>
       <Stack><Text size="sm">Mefie will generate every affected replacement ticket before changing canonical routing. Existing tickets remain valid during preparation.</Text>
@@ -305,8 +310,9 @@ export function GateRoutingManager({
     </Modal>
     <Modal opened={laneGate !== null} onClose={() => setLaneGate(null)} title={`New lane · ${laneGate?.name ?? ""}`} centered>
       <Stack><TextInput label="Lane name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus/>
-        <TextInput label="Lane code" description="Short operational identifier, for example vip-1" value={code} onChange={(e) => setCode(e.currentTarget.value)}/>
-        <Button loading={busy} disabled={!name.trim() || !code.trim()} onClick={addLane}>Create lane</Button></Stack>
+        <TextInput label="Lane code" description="Short operational identifier, for example vip-1" value={code} onChange={(e) => setCode(e.currentTarget.value)}
+          error={laneCodeTaken ? "A lane with this code already exists on this entrance." : undefined}/>
+        <Button loading={busy} disabled={!name.trim() || !code.trim() || laneCodeTaken} onClick={addLane}>Create lane</Button></Stack>
     </Modal>
     <Modal opened={renameGateTarget !== null} onClose={() => setRenameGateTarget(null)} title="Rename entrance" centered>
       <Stack><TextInput label="Entrance name" value={renameValue} onChange={(e) => setRenameValue(e.currentTarget.value)} autoFocus/>

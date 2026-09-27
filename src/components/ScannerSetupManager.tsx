@@ -279,8 +279,12 @@ export function ScannerSetupManager({
         </Table></TableScrollShadow>}
       <Text size="xs" c="dimmed" mt="sm">
         The setup link stays valid for the whole event — only the activation code expires (resend it above).
-        To pause, retire, or move a device that has already enrolled, use{" "}
+        To pause or retire a device without reassigning it, use{" "}
         <Text span component="a" href={`/events/${eventId}/gate-operations`} c="blue">Gate operations</Text>.
+        To move an already-enrolled device to a different entrance or lane, don&apos;t retire it there first —
+        create a new scanner setup above for the correct entrance and lane and re-enroll the same device with it.
+        Reassigning it this way automatically retires its old assignment, but only once it has no pending
+        offline check-ins and has synced recently; otherwise the new setup will refuse to activate until it does.
       </Text>
     </Card>
   </Stack>;
