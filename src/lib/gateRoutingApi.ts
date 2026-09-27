@@ -36,12 +36,16 @@ export type RoutingChangePublication = {
   generation: RoutingGeneration;
 };
 
-async function request<T>(path: string, method: "POST" | "PUT", body: unknown): Promise<T> {
+async function request<T>(path: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
+  if (response.status === 204) {
+    if (!response.ok) throw new ApiError("Something went wrong.", response.status);
+    return undefined as T;
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new ApiError(data?.message ?? "Something went wrong.", response.status, data?.errors);
   return data as T;
@@ -52,6 +56,18 @@ export const createGate = (eventId: number, name: string) =>
 
 export const createLane = (eventId: number, gateId: number, name: string, code: string) =>
   request<{ lane: GateLane }>(`/api/events/${eventId}/gates/${gateId}/lanes`, "POST", { name, code });
+
+export const renameGate = (eventId: number, gateId: number, name: string) =>
+  request<{ gate: EventGate }>(`/api/events/${eventId}/gates/${gateId}`, "PATCH", { name });
+
+export const deleteGate = (eventId: number, gateId: number) =>
+  request<void>(`/api/events/${eventId}/gates/${gateId}`, "DELETE");
+
+export const renameLane = (eventId: number, gateId: number, laneId: number, name: string) =>
+  request<{ lane: GateLane }>(`/api/events/${eventId}/gates/${gateId}/lanes/${laneId}`, "PATCH", { name });
+
+export const deleteLane = (eventId: number, gateId: number, laneId: number) =>
+  request<void>(`/api/events/${eventId}/gates/${gateId}/lanes/${laneId}`, "DELETE");
 
 export const replaceGateRoutes = (eventId: number, routes: { product_id: number; event_gate_id: number; gate_lane_id?: number }[]) =>
   request<{ generation: RoutingGeneration }>(`/api/events/${eventId}/gate-routing`, "PUT", { routes });
