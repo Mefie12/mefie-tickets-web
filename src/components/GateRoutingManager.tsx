@@ -11,6 +11,7 @@ import {
   type EventGate, type GateConfiguration, type GateLane, type RoutingChangePublication,
 } from "@/lib/gateRoutingApi";
 import { GateConfigStatus } from "@/components/GateConfigStatus";
+import { nextLaneCode } from "@/lib/laneSlug";
 
 export function GateRoutingManager({
   eventId, eventStatus, products, productLoadError, initial,
@@ -23,6 +24,7 @@ export function GateRoutingManager({
   const [laneGate, setLaneGate] = useState<EventGate | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [codeEdited, setCodeEdited] = useState(false);
   const [renameGateTarget, setRenameGateTarget] = useState<EventGate | null>(null);
   const [renameLaneTarget, setRenameLaneTarget] = useState<{ gate: EventGate; lane: GateLane } | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -70,7 +72,7 @@ export function GateRoutingManager({
       const result = await createLane(eventId, laneGate.id, name, code);
       setGates((current) => current.map((gate) => gate.id === laneGate.id
         ? { ...gate, lanes: [...gate.lanes, result.lane] } : gate));
-      setName(""); setCode(""); setLaneGate(null);
+      setName(""); setCode(""); setCodeEdited(false); setLaneGate(null);
       notifications.show({ color: "teal", message: "Lane created." });
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not create lane." });
@@ -261,7 +263,7 @@ export function GateRoutingManager({
                 onClick={() => removeLane(gate, lane)} aria-label="Delete lane"><IconTrash size={12}/></Button>
             </Group>
           </Group>)}</Stack>
-          <Button variant="subtle" size="xs" disabled={!structureChangesAllowed} onClick={() => { setName(""); setCode(""); setLaneGate(gate); }}>Add lane</Button>
+          <Button variant="subtle" size="xs" disabled={!structureChangesAllowed} onClick={() => { setName(""); setCode(""); setCodeEdited(false); setLaneGate(gate); }}>Add lane</Button>
         </Stack>
       </Card>)}
     </SimpleGrid>
@@ -309,8 +311,17 @@ export function GateRoutingManager({
       </Stack>
     </Modal>
     <Modal opened={laneGate !== null} onClose={() => setLaneGate(null)} title={`New lane · ${laneGate?.name ?? ""}`} centered>
-      <Stack><TextInput label="Lane name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus/>
-        <TextInput label="Lane code" description="Short operational identifier, for example vip-1" value={code} onChange={(e) => setCode(e.currentTarget.value)}
+      <Stack><TextInput label="Lane name" value={name} autoFocus
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setName(value);
+            setCode((current) => nextLaneCode({
+              name: value, codeEdited, currentCode: current,
+              existingCodes: (laneGate?.lanes ?? []).map((lane) => lane.code),
+            }));
+          }}/>
+        <TextInput label="Lane code" description="Auto-filled from the lane name — edit if you'd like something different." value={code}
+          onChange={(e) => { setCode(e.currentTarget.value); setCodeEdited(true); }}
           error={laneCodeTaken ? "A lane with this code already exists on this entrance." : undefined}/>
         <Button loading={busy} disabled={!name.trim() || !code.trim() || laneCodeTaken} onClick={addLane}>Create lane</Button></Stack>
     </Modal>
