@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
+import { modals } from "@mantine/modals";
 import {
   Avatar,
   Badge,
@@ -49,7 +50,6 @@ export function OrganizationSettingsForm({
 }) {
   const [organization, setOrganization] = useState(initialOrganization);
   const router = useRouter();
-  const feeSchedule = useQuery({ queryKey: ["organization-fee-schedule"], queryFn: getOrganizationFeeSchedule });
 
   const form = useForm({
     initialValues: {
@@ -62,9 +62,6 @@ export function OrganizationSettingsForm({
       state: organization.address?.state ?? "",
       postal_code: organization.address?.postal_code ?? "",
       country: organization.address?.country ?? "",
-      tax_pass_through: organization.tax_pass_through,
-      fee_pass_through: organization.fee_pass_through,
-      processing_fee_pass_through: organization.processing_fee_pass_through,
     },
     validate: {
       name: (v) => (v.trim().length === 0 ? "Name is required" : null),
@@ -87,9 +84,6 @@ export function OrganizationSettingsForm({
           postal_code: values.postal_code || null,
           country: values.country || null,
         },
-        tax_pass_through: values.tax_pass_through,
-        fee_pass_through: values.fee_pass_through,
-        processing_fee_pass_through: values.processing_fee_pass_through,
       }),
     onSuccess: (data: { organization: Organization }) => {
       setOrganization(data.organization);
@@ -138,27 +132,6 @@ export function OrganizationSettingsForm({
               <TextInput label="Postal code" {...form.getInputProps("postal_code")} />
               <CountrySelector label="Country" {...form.getInputProps("country")} />
 
-              <Divider label="Payment settings" labelPosition="left" mt="sm" />
-              <Text size="xs" c="dimmed" mt={-8}>
-                Choose who pays each cost on a paid ticket: pass it on to the buyer, or absorb it from your payout.
-              </Text>
-              {feeSchedule.data && <FeeScheduleNote schedule={feeSchedule.data.fee_schedule} />}
-              <Switch
-                label="Pass tax on to attendees"
-                description="On: tax is added to the buyer's total. Off: absorbed from your payout."
-                {...form.getInputProps("tax_pass_through", { type: "checkbox" })}
-              />
-              <Switch
-                label="Pass Mefie service fee on to attendees"
-                description="On: the Mefie service fee is added to the buyer's total. Off: your organization absorbs it. Mefie service fees are normally non-refundable."
-                {...form.getInputProps("fee_pass_through", { type: "checkbox" })}
-              />
-              <Switch
-                label="Pass payment processing costs on to attendees"
-                description="On: a processing fee is included in the buyer's service fee. Off: your organization absorbs it from your payout."
-                {...form.getInputProps("processing_fee_pass_through", { type: "checkbox" })}
-              />
-
               {canEdit && (
                 <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>
                   Save changes
@@ -169,8 +142,117 @@ export function OrganizationSettingsForm({
         </form>
       </Card>
 
+      <PaymentSettingsCard organization={organization} canEdit={canEdit} onUpdated={setOrganization} />
+
       {canEdit && <AdvancedSlugCard organization={organization} onUpdated={setOrganization} />}
     </Stack>
+  );
+}
+
+type PaymentSetting = "tax_pass_through" | "fee_pass_through" | "processing_fee_pass_through";
+
+const paymentSettingDetails: Record<PaymentSetting, {
+  label: string;
+  onDescription: string;
+  offDescription: string;
+  passLabel: string;
+  absorbLabel: string;
+}> = {
+  tax_pass_through: {
+    label: "Pass tax on to attendees",
+    onDescription: "Tax will be added to attendee checkout totals.",
+    offDescription: "Your organization will absorb tax from its payout.",
+    passLabel: "Pass tax to attendees",
+    absorbLabel: "Absorb tax",
+  },
+  fee_pass_through: {
+    label: "Pass Mefie service fee on to attendees",
+    onDescription: "The Mefie service fee will be added to attendee checkout totals.",
+    offDescription: "Your organization will absorb the Mefie service fee from its payout.",
+    passLabel: "Pass service fee to attendees",
+    absorbLabel: "Absorb service fee",
+  },
+  processing_fee_pass_through: {
+    label: "Pass payment processing costs on to attendees",
+    onDescription: "Payment processing costs will be included in the attendee service fee.",
+    offDescription: "Your organization will absorb payment processing costs from its payout.",
+    passLabel: "Pass processing costs to attendees",
+    absorbLabel: "Absorb processing costs",
+  },
+};
+
+function PaymentSettingsCard({
+  organization,
+  canEdit,
+  onUpdated,
+}: {
+  organization: Organization;
+  canEdit: boolean;
+  onUpdated: (organization: Organization) => void;
+}) {
+  const router = useRouter();
+  const feeSchedule = useQuery({ queryKey: ["organization-fee-schedule"], queryFn: getOrganizationFeeSchedule });
+  const updateMutation = useMutation({
+    mutationFn: (input: Pick<Organization, PaymentSetting>) => updateOrganization(input),
+    onSuccess: (data: { organization: Organization }) => {
+      onUpdated(data.organization);
+      notifications.show({ color: "teal", message: "Payment setting updated." });
+    },
+    onError: (error: Error) => {
+      if (redirectOnAuthError(error, router)) return;
+      notifications.show({
+        color: "red",
+        message: error instanceof ApiError ? error.message : "Something went wrong.",
+      });
+    },
+  });
+
+  function confirmChange(setting: PaymentSetting, nextValue: boolean) {
+    const detail = paymentSettingDetails[setting];
+    const actionLabel = nextValue ? detail.passLabel : detail.absorbLabel;
+    modals.openConfirmModal({
+      title: `${actionLabel}?`,
+      centered: true,
+      children: (
+        <Text size="sm">
+          {nextValue ? detail.onDescription : detail.offDescription} This applies to events you publish from now on;
+          already-published events keep their frozen rates.
+        </Text>
+      ),
+      labels: { confirm: actionLabel, cancel: "Cancel" },
+      confirmProps: { color: nextValue ? "teal" : "orange" },
+      onConfirm: () => updateMutation.mutate({ [setting]: nextValue } as Pick<Organization, PaymentSetting>),
+    });
+  }
+
+  return (
+    <Card withBorder radius="lg" p="xl">
+      <Stack>
+        <Stack gap={2}>
+          <Title order={4}>Payment settings</Title>
+          <Text size="xs" c="dimmed">
+            Choose who pays each cost on a paid ticket: pass it on to the buyer, or absorb it from your payout.
+          </Text>
+          {feeSchedule.data && <FeeScheduleNote schedule={feeSchedule.data.fee_schedule} />}
+        </Stack>
+
+        {!canEdit && <Text size="xs" c="dimmed">Only organization admins can change payment settings.</Text>}
+
+        {(Object.keys(paymentSettingDetails) as PaymentSetting[]).map((setting) => {
+          const detail = paymentSettingDetails[setting];
+          return (
+            <Switch
+              key={setting}
+              label={detail.label}
+              description={organization[setting] ? detail.onDescription : detail.offDescription}
+              checked={organization[setting]}
+              disabled={!canEdit || updateMutation.isPending}
+              onChange={(event) => confirmChange(setting, event.currentTarget.checked)}
+            />
+          );
+        })}
+      </Stack>
+    </Card>
   );
 }
 
