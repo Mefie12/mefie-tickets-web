@@ -2,6 +2,7 @@ import { ApiError } from "@/lib/authApi";
 import type { EventLocation, EventLocationInput, EventTaxonomyItem } from "@/lib/eventApi";
 
 export type EventSeriesStatus = "DRAFT" | "LIVE" | "ARCHIVED";
+export type EventVisibility = "PUBLIC" | "UNLISTED" | "INVITED";
 export type RecurrenceFrequency = "DAILY" | "WEEKLY" | "MONTHLY";
 export type MonthlyRecurrenceType = "MONTH_DAY" | "ORDINAL_WEEKDAY";
 
@@ -41,6 +42,7 @@ export type EventSeries = {
   template_event_id: number;
   slug: string;
   status: EventSeriesStatus;
+  visibility: EventVisibility;
   title: string;
   description: string;
   event_category_id: number | null;

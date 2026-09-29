@@ -1,10 +1,12 @@
 import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import { Alert, Box, Container, Stack, Text, Title } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { getPublicEvent, getPublicSeries } from "@/lib/publicEventFetchers";
 import { CheckoutPage } from "@/components/CheckoutPage";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
+import { RestrictedEventAccess } from "@/components/RestrictedEventAccess";
 
 /**
  * Standalone event checkout (and a series' default occurrence, same
@@ -20,14 +22,21 @@ export default async function CheckoutRoutePage({
 
   const result = await getPublicEvent(organizationSlug, eventSlug);
 
+  if (result.status === 200 && result.data.access_required) return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}/checkout`} />;
+
   let event;
   let backUrl;
-  if (result.status === 200) {
+  if (result.status === 200 && result.data.event) {
+    if (!result.data.can_buy) redirect(`/${organizationSlug}/${eventSlug}`);
     event = result.data.event;
     backUrl = `/${organizationSlug}/${eventSlug}`;
   } else {
     const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
-    if (seriesResult.status !== 200) notFound();
+    if (seriesResult.status !== 200 || seriesResult.data.access_required || !seriesResult.data.event_series) {
+      if (seriesResult.status === 200 && seriesResult.data.access_required) return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}/checkout`} />;
+      notFound();
+    }
+    if (!seriesResult.data.can_buy) redirect(`/${organizationSlug}/${eventSlug}`);
     event = seriesResult.data.event_series.selected_occurrence;
     backUrl = `/${organizationSlug}/${eventSlug}`;
   }

@@ -30,7 +30,7 @@ import { MobileBuyBar } from "@/components/MobileBuyBar";
  * checkout link this builds matches whichever of the two sibling
  * `/checkout` routes the buyer is actually on.
  */
-export function PublicEventSeriesView({ series, publicOccurrenceId }: { series: PublicEventSeries; publicOccurrenceId?: string }) {
+export function PublicEventSeriesView({ series, publicOccurrenceId, canBuy = true }: { series: PublicEventSeries; publicOccurrenceId?: string; canBuy?: boolean }) {
   const { location, organization, selected_occurrence: occurrence } = series;
   const checkoutUrl = publicOccurrenceId
     ? `/${organization.slug}/${series.slug}/${publicOccurrenceId}/checkout`
@@ -247,19 +247,19 @@ export function PublicEventSeriesView({ series, publicOccurrenceId }: { series: 
                 </Alert>
               ) : (
                 <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
-                  <EventTicketPanel event={occurrence} checkoutUrl={checkoutUrl} />
+                  {canBuy && <EventTicketPanel event={occurrence} checkoutUrl={checkoutUrl} />}
                 </Paper>
               )}
             </Box>
           </GridCol>
         </Grid>
       </Container>
-      <MobileBuyBar
+      {canBuy && <MobileBuyBar
         targetId="checkout-section"
         priceLabel={cheapestPriceLabel(occurrence)}
         isFree={isEventFree(occurrence)}
         disabled={occurrence.has_ended}
-      />
+      />}
     </Box>
   );
 }

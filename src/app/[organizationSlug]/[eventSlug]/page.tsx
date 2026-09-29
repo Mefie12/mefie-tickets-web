@@ -17,6 +17,7 @@ import { ExpandableHtml } from "@/components/ExpandableHtml";
 import { PublicContentSections } from "@/components/PublicContentSections";
 import { PublicEventSeriesView } from "@/components/PublicEventSeriesView";
 import { MobileBuyBar } from "@/components/MobileBuyBar";
+import { RestrictedEventAccess } from "@/components/RestrictedEventAccess";
 
 export async function generateMetadata({ params }: { params: Promise<{ organizationSlug: string; eventSlug: string }> }): Promise<Metadata> {
   const { organizationSlug, eventSlug } = await params;
@@ -30,28 +31,41 @@ export async function generateMetadata({ params }: { params: Promise<{ organizat
   };
 
   const eventResult = await getPublicEvent(organizationSlug, eventSlug);
-  if (eventResult.status === 200) {
+  if (eventResult.status === 200 && eventResult.data.access_required) {
+    return { title: "Invitation required | Mefie Tickets", robots: { index: false, follow: false } };
+  }
+  if (eventResult.status === 200 && eventResult.data.event) {
     const { event } = eventResult.data;
     const description = event.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${event.title}.`;
     const canonical = `${APP_URL}/${event.organization.slug}/${event.slug}`;
     const images = ogImages(event.cover_social_url, event.cover_image_url, event.organization.cover_image_url, event.title);
+    const privateEvent = eventResult.data.visibility === "INVITED";
+    const metadataTitle = privateEvent ? "Private event | Mefie Tickets" : `${event.title} | Mefie Tickets`;
+    const metadataDescription = privateEvent ? "An invited event on Mefie Tickets." : description;
     return {
-      title: `${event.title} | Mefie Tickets`, description, alternates: { canonical },
-      openGraph: { title: event.title, description, url: canonical, type: "website", ...images },
-      twitter: { card: "summary_large_image", title: event.title, description, ...images },
+      title: metadataTitle,
+      ...(eventResult.data.visibility !== "PUBLIC" ? { robots: { index: false, follow: false } } : {}),
+      description: metadataDescription, alternates: { canonical },
+      openGraph: { title: metadataTitle, description: metadataDescription, url: canonical, type: "website", ...(privateEvent ? ogImages(null, null, null, "Mefie Tickets") : images) },
+      twitter: { card: "summary_large_image", title: metadataTitle, description: metadataDescription, ...(privateEvent ? ogImages(null, null, null, "Mefie Tickets") : images) },
     };
   }
 
   const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
-  if (seriesResult.status !== 200) return {};
+  if (seriesResult.status !== 200 || !seriesResult.data.event_series || seriesResult.data.access_required) return { title: "Invitation required | Mefie Tickets", robots: { index: false, follow: false } };
   const { event_series: series } = seriesResult.data;
   const description = series.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${series.title}.`;
   const canonical = `${APP_URL}/${series.organization.slug}/${series.slug}`;
   const images = ogImages(series.cover_social_url, series.cover_image_url, series.organization.cover_image_url, series.title);
+  const privateSeries = seriesResult.data.visibility === "INVITED";
+  const seriesMetadataTitle = privateSeries ? "Private event | Mefie Tickets" : `${series.title} | Mefie Tickets`;
+  const seriesMetadataDescription = privateSeries ? "An invited event on Mefie Tickets." : description;
   return {
-    title: `${series.title} | Mefie Tickets`, description, alternates: { canonical },
-    openGraph: { title: series.title, description, url: canonical, type: "website", ...images },
-    twitter: { card: "summary_large_image", title: series.title, description, ...images },
+    title: seriesMetadataTitle,
+    ...(seriesResult.data.visibility !== "PUBLIC" ? { robots: { index: false, follow: false } } : {}),
+    description: seriesMetadataDescription, alternates: { canonical },
+    openGraph: { title: seriesMetadataTitle, description: seriesMetadataDescription, url: canonical, type: "website", ...(privateSeries ? ogImages(null, null, null, "Mefie Tickets") : images) },
+    twitter: { card: "summary_large_image", title: seriesMetadataTitle, description: seriesMetadataDescription, ...(privateSeries ? ogImages(null, null, null, "Mefie Tickets") : images) },
   };
 }
 
@@ -64,15 +78,20 @@ export default async function PublicEventPage({
 
   const result = await getPublicEvent(organizationSlug, eventSlug);
 
-  if (result.status !== 200) {
+  if (result.status === 200 && result.data.access_required) {
+    return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}`} />;
+  }
+
+  if (result.status !== 200 || !result.data.event) {
     const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
-    if (seriesResult.status !== 200) {
+    if (seriesResult.status !== 200 || seriesResult.data.access_required || !seriesResult.data.event_series) {
+      if (seriesResult.status === 200 && seriesResult.data.access_required) return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}`} />;
       notFound();
     }
     return (
       <Box>
         <PublicSiteHeader />
-        <PublicEventSeriesView series={seriesResult.data.event_series} />
+        <PublicEventSeriesView series={seriesResult.data.event_series} canBuy={seriesResult.data.can_buy} />
         <PublicSiteFooter />
       </Box>
     );
@@ -256,19 +275,19 @@ export default async function PublicEventPage({
                 </Alert>
               ) : (
                 <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
-                  <EventTicketPanel event={event} checkoutUrl={checkoutUrl} />
+                  {result.data.can_buy && <EventTicketPanel event={event} checkoutUrl={checkoutUrl} />}
                 </Paper>
               )}
             </Box>
           </GridCol>
         </Grid>
       </Container>
-      <MobileBuyBar
+      {result.data.can_buy && <MobileBuyBar
         targetId="checkout-section"
         priceLabel={cheapestPriceLabel(event)}
         isFree={isEventFree(event)}
         disabled={event.has_ended}
-      />
+      />}
       <PublicSiteFooter />
     </Box>
   );
