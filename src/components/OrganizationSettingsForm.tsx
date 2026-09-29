@@ -193,7 +193,7 @@ function PaymentSettingsCard({
   const router = useRouter();
   const feeSchedule = useQuery({ queryKey: ["organization-fee-schedule"], queryFn: getOrganizationFeeSchedule });
   const updateMutation = useMutation({
-    mutationFn: (input: Pick<Organization, PaymentSetting>) => updateOrganization(input),
+    mutationFn: (input: Partial<Pick<Organization, PaymentSetting>>) => updateOrganization(input),
     onSuccess: (data: { organization: Organization }) => {
       onUpdated(data.organization);
       notifications.show({ color: "teal", message: "Payment setting updated." });
@@ -221,7 +221,7 @@ function PaymentSettingsCard({
       ),
       labels: { confirm: actionLabel, cancel: "Cancel" },
       confirmProps: { color: nextValue ? "teal" : "orange" },
-      onConfirm: () => updateMutation.mutate({ [setting]: nextValue } as Pick<Organization, PaymentSetting>),
+      onConfirm: () => updateMutation.mutate({ [setting]: nextValue }),
     });
   }
 
