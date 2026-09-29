@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/authApi";
 
 export type EventStatus = "DRAFT" | "LIVE" | "ARCHIVED";
+export type EventVisibility = "PUBLIC" | "UNLISTED" | "INVITED";
 
 export type LocationType = "IN_PERSON" | "ONLINE" | "HYBRID";
 
@@ -53,6 +54,7 @@ export type Event = {
   attributes: EventTaxonomyItem[];
   slug: string;
   status: EventStatus;
+  visibility: EventVisibility;
   /** UTC instants. Render them via src/lib/eventDateTime.ts in `timezone`, never in the viewer's or the server's zone. */
   start_date: string | null;
   end_date: string | null;

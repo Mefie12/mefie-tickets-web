@@ -48,6 +48,7 @@ import {
 import type { Product } from "@/lib/productApi";
 import type { Question } from "@/lib/questionApi";
 import { ProductsEditor } from "@/components/ProductsEditor";
+import { EventSharingDialog } from "@/components/EventSharingDialog";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
@@ -124,11 +125,13 @@ export function EventManager({
   initialProducts,
   initialQuestions,
   initialComplimentaryProgram,
+  organizationSlug,
 }: {
   initialEvent: Event;
   initialProducts: Product[];
   initialQuestions: Question[];
   initialComplimentaryProgram: ComplimentaryProgram;
+  organizationSlug: string;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const sellsPaidTickets = initialProducts.some((product) => ["PAID", "TIERED", "DONATION"].includes(product.type));
@@ -335,7 +338,10 @@ export function EventManager({
           <EventTermsEditor eventId={event.id} disabled={archived} />
         </Tabs.Panel>
         <Tabs.Panel value="advanced" pt="lg">
-          <DeferredAssignmentCard eventId={event.id} event={event} sellsPaidTickets={sellsPaidTickets} />
+          <Stack gap="lg">
+            <DeferredAssignmentCard eventId={event.id} event={event} sellsPaidTickets={sellsPaidTickets} />
+            <EventSharingDialog target="events" id={event.id} title={event.title} slug={event.slug} organizationSlug={organizationSlug} visibility={event.visibility ?? "PUBLIC"} archived={archived} live={event.status === "LIVE"} />
+          </Stack>
         </Tabs.Panel>
       </Tabs>
     </Stack>
