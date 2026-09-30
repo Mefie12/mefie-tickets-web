@@ -163,7 +163,17 @@ export function updateEvent(
 }
 
 export function updateEventStatus(id: number, status: EventStatus) {
-  return request<{ event: Event }>(`/api/events/${id}/status`, { method: "PATCH", body: { status } });
+  return request<{ event: Event; outstanding_invitations: number | null }>(`/api/events/${id}/status`, {
+    method: "PATCH",
+    body: { status },
+  });
+}
+
+/** Sends to everyone outstanding (never-sent, or their last attempt FAILED/BOUNCED) — the post-publish nudge's "Send now" action. */
+export function sendOutstandingInvitations(eventId: number) {
+  return request<{ message: string; count: number }>(`/api/events/${eventId}/invitations/send-outstanding`, {
+    method: "POST",
+  });
 }
 
 export function updateDeferredAssignment(
