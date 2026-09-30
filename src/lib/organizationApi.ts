@@ -63,7 +63,8 @@ export type FeeSchedule = {
 /**
  * The current platform fee/tax/processing rates for this org's currency —
  * powers the "what this costs" figures next to the pass-through toggles.
- * These are the current rates; each event freezes its own copy at publish.
+ * These are the current rates; each event freezes its own copy the moment
+ * it gets its first sale.
  */
 export function getOrganizationFeeSchedule() {
   return request<{ fee_schedule: FeeSchedule }>("/api/organization/fee-schedule");

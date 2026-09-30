@@ -31,12 +31,13 @@ import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import {
   changeOrganizationSlug,
   getOrganizationFeeSchedule,
+  type FeeSchedule,
   type Organization,
   updateOrganization,
   uploadOrganizationCoverImage,
   uploadOrganizationLogo,
 } from "@/lib/organizationApi";
-import { formatMinorAmount } from "@/lib/money";
+import { formatBasisPointsAsPercent, formatMinorAmount } from "@/lib/money";
 import { PublicShareCard } from "@/components/PublicShareCard";
 
 export function OrganizationSettingsForm({
@@ -151,35 +152,56 @@ export function OrganizationSettingsForm({
 
 type PaymentSetting = "tax_pass_through" | "fee_pass_through" | "processing_fee_pass_through";
 
-const paymentSettingDetails: Record<PaymentSetting, {
+type PaymentSettingDetail = {
   label: string;
+  rateLabel: string;
   onDescription: string;
   offDescription: string;
   passLabel: string;
   absorbLabel: string;
-}> = {
-  tax_pass_through: {
-    label: "Pass tax on to attendees",
-    onDescription: "Tax will be added to attendee checkout totals.",
-    offDescription: "Your organization will absorb tax from its payout.",
-    passLabel: "Pass tax to attendees",
-    absorbLabel: "Absorb tax",
-  },
-  fee_pass_through: {
-    label: "Pass Mefie service fee on to attendees",
-    onDescription: "The Mefie service fee will be added to attendee checkout totals.",
-    offDescription: "Your organization will absorb the Mefie service fee from its payout.",
-    passLabel: "Pass service fee to attendees",
-    absorbLabel: "Absorb service fee",
-  },
-  processing_fee_pass_through: {
-    label: "Pass payment processing costs on to attendees",
-    onDescription: "Payment processing costs will be included in the attendee service fee.",
-    offDescription: "Your organization will absorb payment processing costs from its payout.",
-    passLabel: "Pass processing costs to attendees",
-    absorbLabel: "Absorb processing costs",
-  },
 };
+
+/**
+ * Rates are folded into each switch's own label (not just a separate
+ * summary note) so an organizer sees exactly what they're opting into —
+ * "Tax (8%)", not just "Tax" — right where they toggle it. `schedule` is
+ * undefined while the fee-schedule request is still loading; the label
+ * degrades to the bare component name rather than blocking render.
+ */
+function buildPaymentSettingDetails(schedule: FeeSchedule | undefined): Record<PaymentSetting, PaymentSettingDetail> {
+  const taxRate = schedule ? formatBasisPointsAsPercent(schedule.tax_basis_points) : undefined;
+  const platformRate = schedule ? formatBasisPointsAsPercent(schedule.platform_fee_basis_points) : undefined;
+  const processingRate = schedule
+    ? `${formatBasisPointsAsPercent(schedule.processing_fee_basis_points)} + ${formatMinorAmount(schedule.processing_fee_flat_minor, schedule.currency)}`
+    : undefined;
+
+  return {
+    tax_pass_through: {
+      label: taxRate ? `Tax (${taxRate})` : "Tax",
+      rateLabel: taxRate ?? "",
+      onDescription: "Tax will be added to attendee checkout totals.",
+      offDescription: "Your organization will absorb tax from its payout.",
+      passLabel: "Pass tax to attendees",
+      absorbLabel: "Absorb tax",
+    },
+    fee_pass_through: {
+      label: platformRate ? `Mefie service fee (${platformRate})` : "Mefie service fee",
+      rateLabel: platformRate ?? "",
+      onDescription: "The Mefie service fee will be added to attendee checkout totals.",
+      offDescription: "Your organization will absorb the Mefie service fee from its payout.",
+      passLabel: "Pass service fee to attendees",
+      absorbLabel: "Absorb service fee",
+    },
+    processing_fee_pass_through: {
+      label: processingRate ? `Payment processing (${processingRate})` : "Payment processing",
+      rateLabel: processingRate ?? "",
+      onDescription: "Payment processing costs will be included in the attendee service fee.",
+      offDescription: "Your organization will absorb payment processing costs from its payout.",
+      passLabel: "Pass processing costs to attendees",
+      absorbLabel: "Absorb processing costs",
+    },
+  };
+}
 
 function PaymentSettingsCard({
   organization,
@@ -192,6 +214,7 @@ function PaymentSettingsCard({
 }) {
   const router = useRouter();
   const feeSchedule = useQuery({ queryKey: ["organization-fee-schedule"], queryFn: getOrganizationFeeSchedule });
+  const paymentSettingDetails = buildPaymentSettingDetails(feeSchedule.data?.fee_schedule);
   const updateMutation = useMutation({
     mutationFn: (input: Partial<Pick<Organization, PaymentSetting>>) => updateOrganization(input),
     onSuccess: (data: { organization: Organization }) => {
@@ -215,8 +238,9 @@ function PaymentSettingsCard({
       centered: true,
       children: (
         <Text size="sm">
-          {nextValue ? detail.onDescription : detail.offDescription} This applies to events you publish from now on;
-          already-published events keep their frozen rates.
+          {nextValue ? detail.onDescription : detail.offDescription} This applies right away to any event that
+          hasn&apos;t had a sale yet; once an event gets its first sale, its rate is locked in and this setting no
+          longer affects it.
         </Text>
       ),
       labels: { confirm: actionLabel, cancel: "Cancel" },
@@ -225,15 +249,16 @@ function PaymentSettingsCard({
     });
   }
 
+  const absorbed = (Object.keys(paymentSettingDetails) as PaymentSetting[]).filter((setting) => !organization[setting]);
+
   return (
     <Card withBorder radius="lg" p="xl">
       <Stack>
-        <Stack gap={2}>
+        <Stack gap={6}>
           <Title order={4}>Payment settings</Title>
           <Text size="xs" c="dimmed">
             Choose who pays each cost on a paid ticket: pass it on to the buyer, or absorb it from your payout.
           </Text>
-          {feeSchedule.data && <FeeScheduleNote schedule={feeSchedule.data.fee_schedule} />}
         </Stack>
 
         {!canEdit && <Text size="xs" c="dimmed">Only organization admins can change payment settings.</Text>}
@@ -251,42 +276,26 @@ function PaymentSettingsCard({
             />
           );
         })}
+
+        {feeSchedule.data && absorbed.length > 0 && (
+          <Text size="xs" c="dimmed">
+            You&apos;re currently absorbing:{" "}
+            {absorbed.map((setting, i) => (
+              <span key={setting}>
+                {i > 0 && ", "}
+                {paymentSettingDetails[setting].label}
+              </span>
+            ))}
+            {" "}— taken out of your payout instead of charged to attendees.
+          </Text>
+        )}
+
+        <Text size="xs" c="dimmed">
+          Changes apply right away to events with no sales yet. Once an event gets its first sale, its rate is
+          locked in for good and no longer follows this setting.
+        </Text>
       </Stack>
     </Card>
-  );
-}
-
-/**
- * Shows what the pass-through toggles actually cost, in money, using a
- * per-100 reference so it reads like a rate but is concrete. The
- * platform fee + card-processing fee are shown together as one "service
- * fee" — same as the buyer sees. These are the *current* platform rates;
- * each event freezes its own copy at publish.
- */
-function FeeScheduleNote({
-  schedule,
-}: {
-  schedule: {
-    currency: string;
-    tax_basis_points: number;
-    platform_fee_basis_points: number;
-    processing_fee_basis_points: number;
-    processing_fee_flat_minor: number;
-  };
-}) {
-  const per100 = 10_000;
-  const halfUp = (bps: number) => Math.floor((per100 * bps + 5000) / 10000);
-  const serviceFee = halfUp(schedule.platform_fee_basis_points) + halfUp(schedule.processing_fee_basis_points) + schedule.processing_fee_flat_minor;
-  const tax = halfUp(schedule.tax_basis_points);
-
-  return (
-    <Text size="xs" c="dimmed" mt={-8}>
-      Current rates, per {formatMinorAmount(per100, schedule.currency)} of tickets sold: service fee{" "}
-      {formatMinorAmount(serviceFee, schedule.currency)}
-      {tax > 0 && <> · tax {formatMinorAmount(tax, schedule.currency)}</>}. Toggled on, the buyer pays it; off,
-      it comes off your payout. A change here applies to events you publish from now on — already-published
-      events keep the rates frozen at their publish.
-    </Text>
   );
 }
 

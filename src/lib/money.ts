@@ -50,6 +50,11 @@ export function formatMinorAmount(amountMinor: number, currencyCode: string): st
   return formatAmount(amountMinor / 100, currencyCode);
 }
 
+/** Basis points as a percent string, trimmed to at most 2 decimals with no trailing zeros — e.g. 300 -> "3%", 875 -> "8.75%". */
+export function formatBasisPointsAsPercent(basisPoints: number): string {
+  return `${Number((basisPoints / 100).toFixed(2))}%`;
+}
+
 /** The bare currency symbol (e.g. "£" for GBP) — for use as an input prefix, not for formatted totals. */
 export function currencySymbol(currencyCode: string): string {
   try {

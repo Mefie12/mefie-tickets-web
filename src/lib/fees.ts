@@ -3,8 +3,9 @@
  * show the all-in price (mandatory fees + tax included) BEFORE an order
  * exists — instead of revealing fees only at the payment step.
  *
- * The rates below are frozen onto the event at publish
- * (EventPaymentBindingService) and the arithmetic is deterministic
+ * The rates below are frozen onto the event the moment it gets its first
+ * sale (EventPaymentBindingService, called from OrderService::create())
+ * and the arithmetic is deterministic
  * integer maths identical to App\Domain\Payments\ValueObjects\Money, so
  * the figure here equals the real order to the penny — it is the actual
  * price, not an estimate.

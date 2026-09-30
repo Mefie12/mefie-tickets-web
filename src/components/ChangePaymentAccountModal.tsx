@@ -89,7 +89,7 @@ export function ChangePaymentAccountModal({
   const draftCount = preview.data?.live_event_ids_to_draft.length ?? 0;
 
   return (
-    <Modal opened={opened} onClose={handleClose} title="Change payment country & currency" size="lg" closeOnClickOutside={!replace.isPending}>
+    <Modal opened={opened} onClose={handleClose} title="Change payment country & currency" centered size={820} closeOnClickOutside={!replace.isPending}>
       {preview.isLoading ? (
         <Group justify="center" py="xl">
           <Loader size="sm" />
@@ -115,22 +115,30 @@ export function ChangePaymentAccountModal({
         </Stack>
       ) : (
         <Stack>
-          <Text size="sm" c="dimmed">
-            This creates a new payment account for future events. Your existing payment account isn&apos;t deleted.
-          </Text>
-          <List size="sm" spacing={4}>
-            <List.Item>Events that already have sales keep their current currency and payment account.</List.Item>
+          <Text size="sm">Your new country and currency will automatically apply to future events.</Text>
+          <Text size="sm" fw={600}>What happens to your events</Text>
+          <List size="sm" spacing="sm">
+            <List.Item>Events that have already made a sale will keep their current payment account and currency.</List.Item>
             <List.Item>
-              Events with no sales yet {mutableCount > 0 ? `(${mutableCount})` : ""} will move to the new setup.
-              {draftCount > 0 ? ` ${draftCount} of those are currently live and will be set to Draft` : ""} so you
-              can review ticket prices before publishing again — prices carry over as the same number, not converted.
+              {mutableCount > 0
+                ? `${mutableCount} event${mutableCount === 1 ? "" : "s"} with no sales`
+                : "Events with no sales yet"} will move to the new account and currency. Ticket prices will keep the
+              same number; they won&apos;t be converted.
             </List.Item>
-            {lockedCount > 0 && <List.Item>{lockedCount} event{lockedCount === 1 ? "" : "s"} with sales stay untouched.</List.Item>}
-            <List.Item>You&apos;ll need to complete payment verification for the new account before you can withdraw from it.</List.Item>
+            {draftCount > 0 && (
+              <List.Item>
+                {draftCount} live event{draftCount === 1 ? "" : "s"} with no sales will return to Draft. Review ticket
+                prices before publishing again.
+              </List.Item>
+            )}
+            {lockedCount > 0 && <List.Item>{lockedCount} event{lockedCount === 1 ? "" : "s"} with sales will stay on the current account.</List.Item>}
           </List>
+          <Text size="xs" c="dimmed">
+            Complete verification for the new account before withdrawing money from it.
+          </Text>
 
           <CountrySelector
-            label="New legal entity country"
+            label="Country where your business is legally registered"
             required
             value={country}
             onChange={(value) => {
@@ -141,7 +149,7 @@ export function ChangePaymentAccountModal({
             }}
           />
           <CurrencySelector
-            label="New settlement currency"
+            label="Currency you&apos;ll receive payouts in"
             required
             value={currency}
             onChange={(value) => setCurrency(value ?? "")}
@@ -151,7 +159,7 @@ export function ChangePaymentAccountModal({
           <Checkbox
             checked={confirmed}
             onChange={(event) => setConfirmed(event.currentTarget.checked)}
-            label="I understand this creates a new payment account, and events with sales won't be affected."
+            label="I understand: a new payment account will be created, and events with sales will stay on my current account."
           />
 
           {replace.error && (
