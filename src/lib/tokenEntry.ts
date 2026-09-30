@@ -22,13 +22,13 @@ export async function handleTokenEntry(
   }: {
     backendPath: string;
     previewCookie: { name: string; minutes: number } | null;
-    resolveDestination: (status: string, httpStatus: number) => string;
+    resolveDestination: (status: string, httpStatus: number, data: Record<string, unknown>) => string;
   },
 ): Promise<NextResponse> {
   const result = await backendRequest<{ status?: string } & Record<string, unknown>>(backendPath, { method: "GET" });
 
   const status = typeof result.data?.status === "string" ? result.data.status : "notfound";
-  const destination = resolveDestination(result.ok ? status : "notfound", result.status);
+  const destination = resolveDestination(result.ok ? status : "notfound", result.status, result.data ?? {});
 
   const response = NextResponse.redirect(new URL(destination, request.url), { status: 303 });
 
