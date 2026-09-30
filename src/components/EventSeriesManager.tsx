@@ -42,6 +42,7 @@ import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
+import { EventSharingDialog } from "@/components/EventSharingDialog";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
@@ -81,7 +82,7 @@ function isGeneratingStatus(status: EventSeries["generation_status"]): boolean {
   return status === "PENDING" || status === "PROCESSING";
 }
 
-const VALID_TABS = ["details", "recurrence", "location", "media", "ticket-setup", "questions", "content", "terms", "publish"];
+const VALID_TABS = ["details", "recurrence", "location", "media", "ticket-setup", "questions", "content", "terms", "advanced", "publish"];
 
 // Same rule as EventManager.tsx's nextTab: only a tab with one discrete
 // save action advances the organizer forward — open-ended lists (media,
@@ -115,11 +116,13 @@ export function EventSeriesManager({
   initialTemplateEvent,
   initialProducts,
   initialQuestions,
+  organizationSlug,
 }: {
   initialSeries: EventSeries;
   initialTemplateEvent: Event;
   initialProducts: Product[];
   initialQuestions: Question[];
+  organizationSlug: string;
 }) {
   const [series, setSeries] = useState(initialSeries);
   const router = useRouter();
@@ -213,6 +216,7 @@ export function EventSeriesManager({
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
           <Tabs.Tab value="content">Event page content</Tabs.Tab>
           <Tabs.Tab value="terms">Terms & Conditions</Tabs.Tab>
+          <Tabs.Tab value="advanced">Advanced Settings</Tabs.Tab>
           <Tabs.Tab value="publish">{series.status === "DRAFT" ? "Publish" : "Occurrences"}</Tabs.Tab>
         </Tabs.List>
 
@@ -245,6 +249,9 @@ export function EventSeriesManager({
         </Tabs.Panel>
         <Tabs.Panel value="terms" pt="lg">
           <EventTermsEditor eventId={series.template_event_id} disabled={disabled} />
+        </Tabs.Panel>
+        <Tabs.Panel value="advanced" pt="lg">
+          <EventSharingDialog target="event-series" id={series.id} title={series.title} slug={series.slug} organizationSlug={organizationSlug} visibility={series.visibility ?? "PUBLIC"} archived={series.status === "ARCHIVED"} live={series.status === "LIVE"} />
         </Tabs.Panel>
         <Tabs.Panel value="publish" pt="lg">
           <PublishPanel series={series} onUpdated={setSeries} />

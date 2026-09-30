@@ -6,10 +6,14 @@ import type { Product } from "@/lib/productApi";
 import type { Question } from "@/lib/questionApi";
 import type { EventSeries } from "@/lib/eventSeriesApi";
 import { EventSeriesManager } from "@/components/EventSeriesManager";
+import { getCurrentOrganization } from "@/lib/session";
 
 export default async function EventSeriesSettingsPage({ params }: { params: Promise<{ seriesId: string }> }) {
   const { seriesId } = await params;
-  const seriesResult = await backendRequest<{ event_series: EventSeries & { template_event: Event } }>(`/api/event-series/${seriesId}`);
+  const [seriesResult, organization] = await Promise.all([
+    backendRequest<{ event_series: EventSeries & { template_event: Event } }>(`/api/event-series/${seriesId}`),
+    getCurrentOrganization(),
+  ]);
   if (seriesResult.status !== 200) notFound();
 
   const templateEventId = seriesResult.data.event_series.template_event.id;
@@ -25,6 +29,7 @@ export default async function EventSeriesSettingsPage({ params }: { params: Prom
         initialTemplateEvent={seriesResult.data.event_series.template_event}
         initialProducts={productsResult.status === 200 ? productsResult.data.products : []}
         initialQuestions={questionsResult.status === 200 ? questionsResult.data.questions : []}
+        organizationSlug={organization?.slug ?? ""}
       />
     </Stack>
   );

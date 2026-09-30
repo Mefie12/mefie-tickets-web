@@ -1,10 +1,11 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Alert, Box, Container, Stack, Text, Title } from "@mantine/core";
 import { IconArrowLeft } from "@tabler/icons-react";
 import { getPublicSeriesOccurrence } from "@/lib/publicEventFetchers";
 import { CheckoutPage } from "@/components/CheckoutPage";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
+import { RestrictedEventAccess } from "@/components/RestrictedEventAccess";
 
 /** Checkout for a specific, bookmarkable series occurrence — mirrors ../checkout/page.tsx. */
 export default async function OccurrenceCheckoutRoutePage({
@@ -15,7 +16,11 @@ export default async function OccurrenceCheckoutRoutePage({
   const { organizationSlug, eventSlug, publicOccurrenceId } = await params;
 
   const result = await getPublicSeriesOccurrence(organizationSlug, eventSlug, publicOccurrenceId);
-  if (result.status !== 200) notFound();
+  if (result.status !== 200 || result.data.access_required || !result.data.event_series) {
+    if (result.status === 200 && result.data.access_required) return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}/${publicOccurrenceId}`} />;
+    notFound();
+  }
+  if (!result.data.can_buy) redirect(`/${organizationSlug}/${eventSlug}/${publicOccurrenceId}`);
 
   const event = result.data.event_series.selected_occurrence;
   const backUrl = `/${organizationSlug}/${eventSlug}/${publicOccurrenceId}`;

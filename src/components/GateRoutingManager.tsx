@@ -3,14 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Badge, Button, Card, Group, Modal, Select, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconDoorEnter, IconPlus } from "@tabler/icons-react";
+import { IconDoorEnter, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import type { Product } from "@/lib/productApi";
 import {
-  createGate, createLane, replaceGateRoutes,
+  createGate, createLane, deleteGate, deleteLane, renameGate, renameLane, replaceGateRoutes,
   cancelRoutingChange, getRoutingChange, prepareRoutingChange, publishRoutingChange, retryRoutingChange,
-  type EventGate, type GateConfiguration, type RoutingChangePublication,
+  type EventGate, type GateConfiguration, type GateLane, type RoutingChangePublication,
 } from "@/lib/gateRoutingApi";
 import { GateConfigStatus } from "@/components/GateConfigStatus";
+import { nextLaneCode } from "@/lib/laneSlug";
 
 export function GateRoutingManager({
   eventId, eventStatus, products, productLoadError, initial,
@@ -23,6 +24,10 @@ export function GateRoutingManager({
   const [laneGate, setLaneGate] = useState<EventGate | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [codeEdited, setCodeEdited] = useState(false);
+  const [renameGateTarget, setRenameGateTarget] = useState<EventGate | null>(null);
+  const [renameLaneTarget, setRenameLaneTarget] = useState<{ gate: EventGate; lane: GateLane } | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmChange, setConfirmChange] = useState(false);
   const [publication, setPublication] = useState<RoutingChangePublication | null>(initial.publication ?? null);
@@ -31,10 +36,14 @@ export function GateRoutingManager({
   const stagedChangeOpen = publication !== null && ["PREPARING", "READY", "FAILED"].includes(publication.status);
   const structureChangesAllowed = initial.structure_changes.allowed && !stagedChangeOpen;
   const structureDisabledReason = stagedChangeOpen
-    ? "Finish or cancel the staged routing change before adding entrances or lanes."
+    ? "Finish or cancel the staged routing change before changing entrances or lanes."
     : initial.structure_changes.reason;
   const defaultGate = gates.find((gate) => gate.is_default)!;
   const gateOptions = useMemo(() => gates.map((gate) => ({ value: String(gate.id), label: gate.name })), [gates]);
+  // Live duplicate checks against the already-loaded list, for a fast inline warning.
+  // The server remains authoritative (and is the only guard against races or names/codes not yet loaded client-side).
+  const gateNameTaken = gates.some((gate) => gate.name.trim().toLowerCase() === name.trim().toLowerCase());
+  const laneCodeTaken = (laneGate?.lanes ?? []).some((lane) => lane.code.trim().toLowerCase() === code.trim().toLowerCase());
 
   useEffect(() => {
     if (!publication || publication.status !== "PREPARING") return;
@@ -63,10 +72,88 @@ export function GateRoutingManager({
       const result = await createLane(eventId, laneGate.id, name, code);
       setGates((current) => current.map((gate) => gate.id === laneGate.id
         ? { ...gate, lanes: [...gate.lanes, result.lane] } : gate));
-      setName(""); setCode(""); setLaneGate(null);
+      setName(""); setCode(""); setCodeEdited(false); setLaneGate(null);
       notifications.show({ color: "teal", message: "Lane created." });
     } catch (error) {
       notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not create lane." });
+    } finally { setBusy(false); }
+  }
+
+  /** Products whose current (possibly unsaved) routing selection points at this entrance/lane. */
+  function productsRoutedTo({ gateId, laneId }: { gateId?: number; laneId?: number }): Product[] {
+    return products.filter((product) => {
+      const route = routes[product.id] ?? { gateId: defaultGate.id, laneId: defaultGate.lanes[0]?.id };
+      return (gateId !== undefined && route.gateId === gateId) || (laneId !== undefined && route.laneId === laneId);
+    });
+  }
+
+  async function submitRenameGate() {
+    if (!renameGateTarget) return;
+    setBusy(true);
+    try {
+      const result = await renameGate(eventId, renameGateTarget.id, renameValue);
+      setGates((current) => current.map((gate) => (gate.id === result.gate.id ? result.gate : gate)));
+      setRenameGateTarget(null);
+      notifications.show({ color: "teal", message: "Entrance renamed." });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not rename entrance." });
+    } finally { setBusy(false); }
+  }
+
+  async function submitRenameLane() {
+    if (!renameLaneTarget) return;
+    setBusy(true);
+    try {
+      const result = await renameLane(eventId, renameLaneTarget.gate.id, renameLaneTarget.lane.id, renameValue);
+      setGates((current) => current.map((gate) => (gate.id === renameLaneTarget.gate.id
+        ? { ...gate, lanes: gate.lanes.map((lane) => (lane.id === result.lane.id ? result.lane : lane)) }
+        : gate)));
+      setRenameLaneTarget(null);
+      notifications.show({ color: "teal", message: "Lane renamed." });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not rename lane." });
+    } finally { setBusy(false); }
+  }
+
+  async function removeGate(gate: EventGate) {
+    const blocking = productsRoutedTo({ gateId: gate.id });
+    if (blocking.length > 0) {
+      notifications.show({
+        color: "red",
+        message: `Change the pending ticket-routing selection for ${blocking.map((product) => product.title).join(", ")} before deleting this entrance.`,
+      });
+      return;
+    }
+    if (!window.confirm(`Delete the entrance "${gate.name}"? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      await deleteGate(eventId, gate.id);
+      setGates((current) => current.filter((item) => item.id !== gate.id));
+      notifications.show({ color: "teal", message: "Entrance deleted." });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not delete entrance." });
+    } finally { setBusy(false); }
+  }
+
+  async function removeLane(gate: EventGate, lane: GateLane) {
+    const blocking = productsRoutedTo({ laneId: lane.id });
+    if (blocking.length > 0) {
+      notifications.show({
+        color: "red",
+        message: `Change the pending ticket-routing selection for ${blocking.map((product) => product.title).join(", ")} before deleting this lane.`,
+      });
+      return;
+    }
+    if (!window.confirm(`Delete the lane "${lane.name}"? This cannot be undone.`)) return;
+    setBusy(true);
+    try {
+      await deleteLane(eventId, gate.id, lane.id);
+      setGates((current) => current.map((item) => (item.id === gate.id
+        ? { ...item, lanes: item.lanes.filter((l) => l.id !== lane.id) }
+        : item)));
+      notifications.show({ color: "teal", message: "Lane deleted." });
+    } catch (error) {
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not delete lane." });
     } finally { setBusy(false); }
   }
 
@@ -161,10 +248,22 @@ export function GateRoutingManager({
     </Stack></Card>}
     <SimpleGrid cols={{ base: 1, md: 2 }}>
       {gates.map((gate) => <Card key={gate.id} withBorder radius="lg">
-        <Stack gap="sm"><Group justify="space-between"><Group gap="xs"><IconDoorEnter size={20}/><Text fw={700}>{gate.name}</Text></Group>
+        <Stack gap="sm"><Group justify="space-between"><Group gap="xs"><IconDoorEnter size={20}/><Text fw={700}>{gate.name}</Text>
+            <Button variant="subtle" size="xs" p={4} disabled={!structureChangesAllowed}
+              onClick={() => { setRenameValue(gate.name); setRenameGateTarget(gate); }} aria-label="Rename entrance"><IconPencil size={14}/></Button>
+            <Button variant="subtle" size="xs" p={4} color="red" disabled={!structureChangesAllowed || gate.is_default}
+              onClick={() => removeGate(gate)} aria-label="Delete entrance"><IconTrash size={14}/></Button></Group>
           <Group gap="xs">{gate.status === "CONFIGURING" && <Badge color="orange" variant="light">Not published</Badge>}{gate.is_default && <Badge variant="light">Default</Badge>}</Group></Group>
-          <Stack gap={4}>{gate.lanes.map((lane) => <Group key={lane.id} gap="xs"><Text size="sm">{lane.name} <Text span c="dimmed">({lane.code})</Text></Text>{lane.status === "CONFIGURING" && <Badge size="xs" color="orange" variant="light">Not published</Badge>}</Group>)}</Stack>
-          <Button variant="subtle" size="xs" disabled={!structureChangesAllowed} onClick={() => { setName(""); setCode(""); setLaneGate(gate); }}>Add lane</Button>
+          <Stack gap={4}>{gate.lanes.map((lane) => <Group key={lane.id} gap="xs" justify="space-between">
+            <Group gap="xs"><Text size="sm">{lane.name} <Text span c="dimmed">({lane.code})</Text></Text>{lane.status === "CONFIGURING" && <Badge size="xs" color="orange" variant="light">Not published</Badge>}</Group>
+            <Group gap={4}>
+              <Button variant="subtle" size="xs" p={4} disabled={!structureChangesAllowed}
+                onClick={() => { setRenameValue(lane.name); setRenameLaneTarget({ gate, lane }); }} aria-label="Rename lane"><IconPencil size={12}/></Button>
+              <Button variant="subtle" size="xs" p={4} color="red" disabled={!structureChangesAllowed || gate.lanes.length <= 1}
+                onClick={() => removeLane(gate, lane)} aria-label="Delete lane"><IconTrash size={12}/></Button>
+            </Group>
+          </Group>)}</Stack>
+          <Button variant="subtle" size="xs" disabled={!structureChangesAllowed} onClick={() => { setName(""); setCode(""); setCodeEdited(false); setLaneGate(gate); }}>Add lane</Button>
         </Stack>
       </Card>)}
     </SimpleGrid>
@@ -200,8 +299,9 @@ export function GateRoutingManager({
       }
     </Stack></Card>
     <Modal opened={gateModal} onClose={() => setGateModal(false)} title="New entrance" centered>
-      <Stack><TextInput label="Entrance name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus/>
-        <Button loading={busy} disabled={!name.trim()} onClick={addGate}>Create entrance</Button></Stack>
+      <Stack><TextInput label="Entrance name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus
+          error={gateNameTaken ? "An entrance with this name already exists." : undefined}/>
+        <Button loading={busy} disabled={!name.trim() || gateNameTaken} onClick={addGate}>Create entrance</Button></Stack>
     </Modal>
     <Modal opened={confirmChange} onClose={() => setConfirmChange(false)} title="Prepare published routing change" centered>
       <Stack><Text size="sm">Mefie will generate every affected replacement ticket before changing canonical routing. Existing tickets remain valid during preparation.</Text>
@@ -211,9 +311,27 @@ export function GateRoutingManager({
       </Stack>
     </Modal>
     <Modal opened={laneGate !== null} onClose={() => setLaneGate(null)} title={`New lane · ${laneGate?.name ?? ""}`} centered>
-      <Stack><TextInput label="Lane name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus/>
-        <TextInput label="Lane code" description="Short operational identifier, for example vip-1" value={code} onChange={(e) => setCode(e.currentTarget.value)}/>
-        <Button loading={busy} disabled={!name.trim() || !code.trim()} onClick={addLane}>Create lane</Button></Stack>
+      <Stack><TextInput label="Lane name" value={name} autoFocus
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setName(value);
+            setCode((current) => nextLaneCode({
+              name: value, codeEdited, currentCode: current,
+              existingCodes: (laneGate?.lanes ?? []).map((lane) => lane.code),
+            }));
+          }}/>
+        <TextInput label="Lane code" description="Auto-filled from the lane name — edit if you'd like something different." value={code}
+          onChange={(e) => { setCode(e.currentTarget.value); setCodeEdited(true); }}
+          error={laneCodeTaken ? "A lane with this code already exists on this entrance." : undefined}/>
+        <Button loading={busy} disabled={!name.trim() || !code.trim() || laneCodeTaken} onClick={addLane}>Create lane</Button></Stack>
+    </Modal>
+    <Modal opened={renameGateTarget !== null} onClose={() => setRenameGateTarget(null)} title="Rename entrance" centered>
+      <Stack><TextInput label="Entrance name" value={renameValue} onChange={(e) => setRenameValue(e.currentTarget.value)} autoFocus/>
+        <Button loading={busy} disabled={!renameValue.trim()} onClick={submitRenameGate}>Save name</Button></Stack>
+    </Modal>
+    <Modal opened={renameLaneTarget !== null} onClose={() => setRenameLaneTarget(null)} title={`Rename lane · ${renameLaneTarget?.gate.name ?? ""}`} centered>
+      <Stack><TextInput label="Lane name" value={renameValue} onChange={(e) => setRenameValue(e.currentTarget.value)} autoFocus/>
+        <Button loading={busy} disabled={!renameValue.trim()} onClick={submitRenameLane}>Save name</Button></Stack>
     </Modal>
   </Stack>;
 }

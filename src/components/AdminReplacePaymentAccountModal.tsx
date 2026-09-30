@@ -102,7 +102,7 @@ export function AdminReplacePaymentAccountModal({
   const canSubmit = country.length === 2 && currency.length === 3 && reason.trim().length >= 3;
 
   return (
-    <Modal opened={opened} onClose={handleClose} title="Replace payment account" size="lg" closeOnClickOutside={!replace.isPending}>
+    <Modal opened={opened} onClose={handleClose} title="Replace payment account" centered size={820} closeOnClickOutside={!replace.isPending}>
       {preview.isLoading ? (
         <Group justify="center" py="xl">
           <Loader size="sm" />
@@ -120,28 +120,34 @@ export function AdminReplacePaymentAccountModal({
             </Alert>
           )}
 
-          <Text size="sm" c="dimmed">
-            This creates a new payment account for this organization&apos;s future events. Their existing account
-            isn&apos;t deleted.
+          <Text size="sm">
+            The new country and currency will automatically apply to future events.
           </Text>
-          <List size="sm" spacing={4}>
-            <List.Item>Events that already have sales keep their current currency and payment account.</List.Item>
+          <Text size="sm" fw={600}>What happens to their events</Text>
+          <List size="sm" spacing="sm">
+            <List.Item>Events that have already made a sale will keep their current payment account and currency.</List.Item>
             <List.Item>
-              Events with no sales yet {mutableCount > 0 ? `(${mutableCount})` : ""} will move to the new setup.
-              {draftCount > 0 ? ` ${draftCount} of those are currently live and will be set to Draft` : ""} so the
-              organizer can review ticket prices before publishing again — prices carry over as the same number, not
-              converted.
+              {mutableCount > 0
+                ? `${mutableCount} event${mutableCount === 1 ? "" : "s"} with no sales`
+                : "Events with no sales yet"} will move to the new account and currency. Ticket prices will keep the
+              same number; they won&apos;t be converted.
             </List.Item>
-            {lockedCount > 0 && (
+            {draftCount > 0 && (
               <List.Item>
-                {lockedCount} event{lockedCount === 1 ? "" : "s"} with sales stay untouched.
+                {draftCount} live event{draftCount === 1 ? "" : "s"} with no sales will return to Draft. The
+                organizer should review ticket prices before publishing again.
               </List.Item>
             )}
-            <List.Item>The new account will need its own payout verification before it can withdraw.</List.Item>
+            {lockedCount > 0 && (
+              <List.Item>{lockedCount} event{lockedCount === 1 ? "" : "s"} with sales will stay on the current account.</List.Item>
+            )}
           </List>
+          <Text size="xs" c="dimmed">
+            The organization must complete verification for the new account before withdrawing money.
+          </Text>
 
           <CountrySelector
-            label="New legal entity country"
+            label="Country where the business is legally registered"
             required
             value={country}
             onChange={(value) => {
@@ -151,7 +157,7 @@ export function AdminReplacePaymentAccountModal({
             }}
           />
           <CurrencySelector
-            label="New settlement currency"
+            label="Currency the organization will receive payouts in"
             required
             value={currency}
             onChange={(value) => setCurrency(value ?? "")}

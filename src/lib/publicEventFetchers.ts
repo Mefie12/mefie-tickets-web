@@ -8,7 +8,7 @@ import type { PublicEvent } from "@/lib/publicEventApi";
 import type { PublicEventSeries } from "@/lib/publicEventSeriesApi";
 
 export function getPublicEvent(organizationSlug: string, eventSlug: string) {
-  return backendRequest<{ event: PublicEvent }>(
+  return backendRequest<{ event: PublicEvent | null; can_buy: boolean; access_required: boolean; visibility: "PUBLIC" | "UNLISTED" | "INVITED" }>(
     `/api/public/organizations/${encodeURIComponent(organizationSlug)}/events/${encodeURIComponent(eventSlug)}`,
   );
 }
@@ -22,14 +22,14 @@ export function getPublicEvent(organizationSlug: string, eventSlug: string) {
  * under one organization.
  */
 export function getPublicSeries(organizationSlug: string, seriesSlug: string) {
-  return backendRequest<{ event_series: PublicEventSeries }>(
+  return backendRequest<{ event_series: PublicEventSeries | null; can_buy: boolean; access_required: boolean; visibility: "PUBLIC" | "UNLISTED" | "INVITED" }>(
     `/api/public/organizations/${encodeURIComponent(organizationSlug)}/series/${encodeURIComponent(seriesSlug)}`,
   );
 }
 
 /** A specific series occurrence, independently bookmarkable and shareable — see PublicEventSeriesOccurrencePage. */
 export function getPublicSeriesOccurrence(organizationSlug: string, seriesSlug: string, publicOccurrenceId: string) {
-  return backendRequest<{ event_series: PublicEventSeries }>(
+  return backendRequest<{ event_series: PublicEventSeries | null; can_buy: boolean; access_required: boolean; visibility: "PUBLIC" | "UNLISTED" | "INVITED" }>(
     `/api/public/organizations/${encodeURIComponent(organizationSlug)}/series/${encodeURIComponent(seriesSlug)}/occurrences/${encodeURIComponent(publicOccurrenceId)}`,
   );
 }
