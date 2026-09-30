@@ -7,6 +7,9 @@ import { CheckoutPage } from "@/components/CheckoutPage";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { RestrictedEventAccess } from "@/components/RestrictedEventAccess";
+import { readPreviewCookie } from "@/lib/tokenEntry";
+
+type InvitePreview = { masked_email: string };
 
 /**
  * Standalone event checkout (and a series' default occurrence, same
@@ -22,7 +25,10 @@ export default async function CheckoutRoutePage({
 
   const result = await getPublicEvent(organizationSlug, eventSlug);
 
-  if (result.status === 200 && result.data.access_required) return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}/checkout`} />;
+  if (result.status === 200 && result.data.access_required) {
+    const preview = await readPreviewCookie<InvitePreview>("mefie_invite_preview");
+    return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}/checkout`} inviteMaskedEmail={preview?.masked_email} />;
+  }
 
   let event;
   let backUrl;
@@ -33,7 +39,10 @@ export default async function CheckoutRoutePage({
   } else {
     const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
     if (seriesResult.status !== 200 || seriesResult.data.access_required || !seriesResult.data.event_series) {
-      if (seriesResult.status === 200 && seriesResult.data.access_required) return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}/checkout`} />;
+      if (seriesResult.status === 200 && seriesResult.data.access_required) {
+        const preview = await readPreviewCookie<InvitePreview>("mefie_invite_preview");
+        return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}/checkout`} inviteMaskedEmail={preview?.masked_email} />;
+      }
       notFound();
     }
     if (!seriesResult.data.can_buy) redirect(`/${organizationSlug}/${eventSlug}`);

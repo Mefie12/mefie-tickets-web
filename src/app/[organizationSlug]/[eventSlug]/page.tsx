@@ -18,6 +18,9 @@ import { PublicContentSections } from "@/components/PublicContentSections";
 import { PublicEventSeriesView } from "@/components/PublicEventSeriesView";
 import { MobileBuyBar } from "@/components/MobileBuyBar";
 import { RestrictedEventAccess } from "@/components/RestrictedEventAccess";
+import { readPreviewCookie } from "@/lib/tokenEntry";
+
+type InvitePreview = { masked_email: string };
 
 export async function generateMetadata({ params }: { params: Promise<{ organizationSlug: string; eventSlug: string }> }): Promise<Metadata> {
   const { organizationSlug, eventSlug } = await params;
@@ -79,13 +82,17 @@ export default async function PublicEventPage({
   const result = await getPublicEvent(organizationSlug, eventSlug);
 
   if (result.status === 200 && result.data.access_required) {
-    return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}`} />;
+    const preview = await readPreviewCookie<InvitePreview>("mefie_invite_preview");
+    return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}`} inviteMaskedEmail={preview?.masked_email} />;
   }
 
   if (result.status !== 200 || !result.data.event) {
     const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
     if (seriesResult.status !== 200 || seriesResult.data.access_required || !seriesResult.data.event_series) {
-      if (seriesResult.status === 200 && seriesResult.data.access_required) return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}`} />;
+      if (seriesResult.status === 200 && seriesResult.data.access_required) {
+        const preview = await readPreviewCookie<InvitePreview>("mefie_invite_preview");
+        return <RestrictedEventAccess next={`/${organizationSlug}/${eventSlug}`} inviteMaskedEmail={preview?.masked_email} />;
+      }
       notFound();
     }
     return (
