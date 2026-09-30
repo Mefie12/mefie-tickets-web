@@ -6,8 +6,3 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   const { id, invitationId } = await params;
   return relayResponse(await backendRequest(`/api/event-series/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}`, { method: "DELETE" }));
 }
-
-export async function POST(_: NextRequest, { params }: { params: Promise<{ id: string; invitationId: string }> }) {
-  const { id, invitationId } = await params;
-  return relayResponse(await backendRequest(`/api/event-series/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}/resend`, { method: "POST" }));
-}

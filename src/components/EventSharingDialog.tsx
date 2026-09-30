@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Badge, Button, Card, Checkbox, Group, Modal, Select, Stack, Table, Text, Textarea, Title, Tooltip } from "@mantine/core";
+import { Alert, Badge, Button, Card, Group, Modal, Select, Stack, Table, Text, Textarea, Title, Tooltip } from "@mantine/core";
 import { IconChevronDown, IconEyeOff, IconLink, IconLock, IconWorld } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { modals } from "@mantine/modals";
@@ -16,11 +16,15 @@ type DeliveryStatus = "ACCEPTED" | "DELIVERED" | "BOUNCED" | "COMPLAINED" | "FAI
 type Invitation = {
   id: number;
   email: string;
-  notify_on_publish: boolean;
   sent_at: string | null;
   delivery_status: DeliveryStatus;
   delivery_error: string | null;
 };
+
+/** Never-sent, or the last attempt FAILED/BOUNCED — mirrors the backend's EventInvitationService::outstandingQuery(). Deliberately excludes COMPLAINED. */
+function isOutstanding(invitation: Invitation): boolean {
+  return !invitation.sent_at || invitation.delivery_status === "FAILED" || invitation.delivery_status === "BOUNCED";
+}
 
 /**
  * `sent_at` alone only ever meant "we attempted to send" — never whether
@@ -73,7 +77,6 @@ export function EventSharingDialog({
 }) {
   const [opened, setOpened] = useState(false);
   const [emails, setEmails] = useState("");
-  const [notify, setNotify] = useState(true);
   const queryClient = useQueryClient();
   const base = `/api/${target}/${id}`;
   const itemLabel = target === "event-series" ? "series" : "event";
@@ -145,21 +148,48 @@ export function EventSharingDialog({
   const addMutation = useMutation({
     mutationFn: async () => {
       const normalized = [...new Set(emails.split(/[\s,;]+/).map((value) => value.trim()).filter(Boolean))];
-      const response = await fetch(`${base}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails: normalized, notify }) });
+      const response = await fetch(`${base}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails: normalized }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.message ?? "Could not add invitees.");
       return body;
     },
-    onSuccess: () => { setEmails(""); refresh(); notifications.show({ color: "teal", message: live && notify ? "Invitation sent." : "Invitees added." }); },
+    // Adding never sends anything, no exceptions — sending is a fully
+    // separate, explicit action (mutateInvitation "send" / sendOutstandingMutation below).
+    onSuccess: () => { setEmails(""); refresh(); notifications.show({ color: "teal", message: "Invitees added." }); },
     onError: (error) => notifications.show({ color: "red", message: error.message }),
   });
-  async function mutateInvitation(invitation: Invitation, action: "remove" | "resend") {
-    const method = action === "remove" ? "DELETE" : "POST";
-    const response = await fetch(`${base}/invitations/${invitation.id}`, { method });
+  async function mutateInvitation(invitation: Invitation, action: "remove" | "send") {
+    const url = action === "remove" ? `${base}/invitations/${invitation.id}` : `${base}/invitations/${invitation.id}/send`;
+    const response = await fetch(url, { method: action === "remove" ? "DELETE" : "POST" });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.message ?? "That action could not be completed.");
     await refresh();
     notifications.show({ color: "teal", message: action === "remove" ? "Access removed." : "Invitation sent." });
+  }
+  const outstanding = sharing.data?.invitations.filter(isOutstanding) ?? [];
+  const sendOutstandingMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`${base}/invitations/send-outstanding`, { method: "POST" });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message ?? "Could not send invitations.");
+      return body as { message: string; count: number };
+    },
+    onSuccess: (result) => { refresh(); notifications.show({ color: "teal", message: result.message }); },
+    onError: (error) => notifications.show({ color: "red", message: error.message }),
+  });
+  /** A bulk click of exactly one outstanding invitee behaves like a single send — no confirmation dialog for a "bulk" action of one. */
+  function handleSendOutstandingClick() {
+    if (outstanding.length <= 1) {
+      sendOutstandingMutation.mutate();
+      return;
+    }
+    modals.openConfirmModal({
+      title: `Send to ${outstanding.length} people?`,
+      centered: true,
+      children: <Text size="sm">This emails everyone who hasn&apos;t been sent a working invite yet — never-sent invitees, and anyone whose last email failed or bounced.</Text>,
+      labels: { confirm: `Send to ${outstanding.length}`, cancel: "Cancel" },
+      onConfirm: () => sendOutstandingMutation.mutate(),
+    });
   }
 
   return <>
@@ -223,20 +253,13 @@ export function EventSharingDialog({
           <Text fw={600}>Invite people{target === "event-series" ? " to this series" : ""}</Text>
           {target === "event-series" && <Text size="sm" c="dimmed">An invitation applies to every current and future date in this series.</Text>}
           <Textarea label="Email addresses" description="Separate addresses with commas, spaces, or new lines." placeholder="name@example.com" value={emails} onChange={(event) => setEmails(event.currentTarget.value)} disabled={archived} autosize minRows={2} />
-          <Checkbox
-            label={!live && !archived ? "Email invitees automatically when I publish" : "Email invitees now"}
-            description={
-              !live && !archived
-                ? `The invitation link won't work until this ${itemLabel} is published, so we'll hold the email and send it the moment you publish.`
-                : `This ${itemLabel} is already live, so we'll send the invitation email right away.`
-            }
-            checked={notify}
-            onChange={(event) => setNotify(event.currentTarget.checked)}
-            disabled={archived}
-          />
+          <Text size="xs" c="dimmed">
+            Adding someone here only gives them access — it never emails them. Send invitations separately, below,
+            once you&apos;re ready.
+          </Text>
           <Group justify="flex-end">
             <Button onClick={() => addMutation.mutate()} loading={addMutation.isPending} disabled={archived || !emails.trim()}>
-              {live ? "Add invitees" : "Save invitees"}
+              Add invitees
             </Button>
           </Group>
         </Stack>
@@ -245,11 +268,22 @@ export function EventSharingDialog({
           <Text fw={600} size="sm">People with access</Text>
           {sharing.data && <Text size="xs" c="dimmed">{sharing.data.invitations.length} invitee{sharing.data.invitations.length === 1 ? "" : "s"}</Text>}
         </Group>
+        {!live && !archived && sharing.data?.invitations.length ? (
+          <Text size="xs" c="dimmed">Publish this {itemLabel} before sending invitations — the link won&apos;t work until then.</Text>
+        ) : null}
+        {live && outstanding.length > 0 && (
+          <Group justify="flex-end">
+            <Button size="xs" variant="light" loading={sendOutstandingMutation.isPending} disabled={archived} onClick={handleSendOutstandingClick}>
+              Send outstanding ({outstanding.length})
+            </Button>
+          </Group>
+        )}
         {sharing.data?.invitations.length ? <Table><Table.Thead><Table.Tr><Table.Th>Email</Table.Th><Table.Th>Invitation</Table.Th><Table.Th /></Table.Tr></Table.Thead><Table.Tbody>
           {sharing.data.invitations.map((invitation) => {
             const badge = deliveryBadge(invitation, live);
             const badgeEl = <Badge size="sm" variant="light" color={badge.color}>{badge.label}</Badge>;
-            return <Table.Tr key={invitation.id}><Table.Td>{invitation.email}</Table.Td><Table.Td>{badge.tooltip ? <Tooltip label={badge.tooltip} multiline w={260}>{badgeEl}</Tooltip> : badgeEl}</Table.Td><Table.Td><Group gap="xs" justify="flex-end">{live && <Button size="compact-xs" variant="subtle" disabled={archived} onClick={() => void mutateInvitation(invitation, "resend").catch((error) => notifications.show({ color: "red", message: error.message }))}>Resend</Button>}<Button size="compact-xs" color="red" variant="subtle" disabled={archived} onClick={() => void mutateInvitation(invitation, "remove").catch((error) => notifications.show({ color: "red", message: error.message }))}>Remove</Button></Group></Table.Td></Table.Tr>;
+            const sendLabel = invitation.sent_at ? "Resend" : "Send";
+            return <Table.Tr key={invitation.id}><Table.Td>{invitation.email}</Table.Td><Table.Td>{badge.tooltip ? <Tooltip label={badge.tooltip} multiline w={260}>{badgeEl}</Tooltip> : badgeEl}</Table.Td><Table.Td><Group gap="xs" justify="flex-end">{live && <Button size="compact-xs" variant="subtle" disabled={archived} onClick={() => void mutateInvitation(invitation, "send").catch((error) => notifications.show({ color: "red", message: error.message }))}>{sendLabel}</Button>}<Button size="compact-xs" color="red" variant="subtle" disabled={archived} onClick={() => void mutateInvitation(invitation, "remove").catch((error) => notifications.show({ color: "red", message: error.message }))}>Remove</Button></Group></Table.Td></Table.Tr>;
           })}
         </Table.Tbody></Table> : <Text size="sm" c="dimmed">No invitations yet.</Text>}
       </Stack>

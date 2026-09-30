@@ -42,6 +42,7 @@ import {
   type EventTaxonomies,
   type EventTaxonomyItem,
   type LocationType,
+  sendOutstandingInvitations,
   updateEvent,
   updateEventStatus,
 } from "@/lib/eventApi";
@@ -154,12 +155,47 @@ export function EventManager({
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  function handleStatusChangeSuccess(data: { event: Event }) {
+  const sendOutstandingMutation = useMutation({
+    mutationFn: () => sendOutstandingInvitations(event.id),
+    onSuccess: (result) => notifications.show({ color: "teal", message: result.message }),
+    onError: (error) => notifications.show({ color: "red", message: error instanceof ApiError ? error.message : "Could not send invitations." }),
+  });
+
+  function handleStatusChangeSuccess(data: { event: Event; outstanding_invitations?: number | null }) {
     setEvent(data.event);
     setRequestedStatus(null);
     setStatusError(null);
     setStatusErrorCode(null);
     notifications.show({ color: "teal", message: `Event is now ${data.event.status}.` });
+
+    // Sending is a fully separate, explicit action now (no more
+    // auto-send-at-publish) — this is the one-time nudge so an
+    // organizer with a ready invite list doesn't just forget about it.
+    // outstanding_invitations is only present on a transition to LIVE.
+    if (data.outstanding_invitations && data.outstanding_invitations > 0) {
+      const count = data.outstanding_invitations;
+      const id = "outstanding-invitations-nudge";
+      notifications.show({
+        id,
+        color: "blue",
+        autoClose: false,
+        title: `${count} invitee${count === 1 ? "" : "s"} haven't been emailed yet`,
+        message: (
+          <Group gap="sm" mt={4}>
+            <Button
+              size="xs"
+              loading={sendOutstandingMutation.isPending}
+              onClick={() => sendOutstandingMutation.mutate(undefined, { onSettled: () => notifications.hide(id) })}
+            >
+              Send now
+            </Button>
+            <Button size="xs" variant="subtle" onClick={() => notifications.hide(id)}>
+              I&apos;ll do it later
+            </Button>
+          </Group>
+        ),
+      });
+    }
   }
 
   function handleStatusChangeError(error: Error) {
