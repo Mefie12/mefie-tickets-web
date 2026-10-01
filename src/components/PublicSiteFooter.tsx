@@ -14,7 +14,7 @@ const LINK_STYLE = { color: "var(--mantine-color-dimmed)", fontSize: "var(--mant
  * gets its own tidy multi-column grid instead of fighting for one row.
  */
 export function PublicSiteFooter() {
-  const links = [["/discover", "Discover events"], ["/login", "Log in"], ["/register", "Sign up"], ["/organizers", "Why Mefie for organizers"], ["/organizers/register", "Create an organization"], ["/organizers/login", "Organizer login"]];
+  const links = [["/discover", "Discover events"], ["/login", "Log in"], ["/register", "Sign up"], ["/organizers", "Why Mefie for organizers"], ["/organizers/register", "Create an organization"], ["/organizers/login", "Organization login"]];
   return (
     <Box component="footer" mt={{ base: 40, sm: 56, xl: 80 }} py={{ base: 32, sm: 40, xl: 48 }} style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}>
       <Container size="xl">

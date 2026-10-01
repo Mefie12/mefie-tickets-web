@@ -130,14 +130,21 @@ export function EventSharingDialog({
       return;
     }
     const narrowing = visibility === "PUBLIC" ? next !== "PUBLIC" : visibility === "UNLISTED" && next === "INVITED";
+    // Only switching TO "Invited people only" actually gates viewing —
+    // PUBLIC -> UNLISTED stays narrowing (loses its listing) but a link
+    // anyone already has keeps working, so it gets its own copy instead
+    // of the "will be blocked" language that would otherwise be false.
+    const blocksExistingViewers = next === "INVITED";
     modals.openConfirmModal({
       title: `Change access to "${visibilityLabel(next)}"?`,
       centered: true,
       children: (
         <Text size="sm">
-          {narrowing
+          {blocksExistingViewers
             ? `This ${itemLabel} is currently ${visibilityName}, so people may already have its link, have it bookmarked, or have found it in search. Switching to "${visibilityLabel(next)}" takes effect immediately — anyone without access under the new setting will be blocked right away, even with a link they already had. Tickets already bought aren't affected.`
-            : `This makes the ${itemLabel} more open than it is now. As soon as you confirm, anyone who qualifies under "${visibilityLabel(next)}" will be able to view it — including via a link that was previously blocked.`}
+            : narrowing
+              ? `This ${itemLabel} is currently ${visibilityName}, so people may already have its link, have it bookmarked, or have found it in search. Switching to "${visibilityLabel(next)}" takes it out of listings and search — but a link anyone already has will keep working, same as before.`
+              : `This makes the ${itemLabel} more open than it is now. As soon as you confirm, anyone who qualifies under "${visibilityLabel(next)}" will be able to view it — including via a link that was previously blocked.`}
         </Text>
       ),
       labels: { confirm: "Change access", cancel: "Cancel" },
