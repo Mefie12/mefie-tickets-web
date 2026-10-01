@@ -18,6 +18,7 @@ import { amountsFromQuote } from "@/lib/quoteAmounts";
 import { expandScope, lineDiscounts } from "@/lib/offerLineBadges";
 import { discountLabel } from "@/lib/offerFormat";
 import { PromoCodeField } from "@/components/PromoCodeField";
+import { QuoteProblemNotice } from "@/components/QuoteProblemNotice";
 import { OfferVerifyModal } from "@/components/OfferVerifyModal";
 
 /**
@@ -98,7 +99,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   }, [cartHydrated, cartItems, event.id]);
 
   const quoteEnabled = promoCode !== null || offerToken !== null || event.automatic_offer !== null;
-  const { quote, isLoading: quoting, isStale: quoteStale } = useOfferQuote({
+  const { quote, isLoading: quoting, isStale: quoteStale, problem: quoteProblem, retryAt: quoteRetryAt, refetch: refetchQuote } = useOfferQuote({
     eventId: event.id,
     items: cartItems,
     promoCode,
@@ -210,6 +211,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         onRemove={() => { setPromoCode(null); if (offerToken !== null) { setOfferToken(null); setBannerDismissed(true); } clearOffer(event.id); }}
         onVerify={() => setVerifyOpen(true)}
       />
+      <QuoteProblemNotice problem={quoteProblem} retryAt={quoteRetryAt} retrying={quoting} onRetry={() => void refetchQuote()} />
 
       {cartItems.length > 0 && (
         <Stack gap="xs" pt="sm" style={{ opacity: quoteStale ? 0.6 : 1, transition: "opacity 120ms" }} aria-busy={quoteStale}>

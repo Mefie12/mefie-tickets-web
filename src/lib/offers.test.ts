@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { localInputToUtcIso, utcIsoToLocalInput, zonedToUtcIso } from "@/lib/offerDates";
-import { discountLabel, previewDiscountedUnit, shareUrl } from "@/lib/offerFormat";
+import { discountLabel, offersByTab, PHASE_COLOR, PHASE_LABEL, previewDiscountedUnit, shareUrl } from "@/lib/offerFormat";
 import { isStaleOfferCode, offerErrorMessage } from "@/lib/offerErrors";
 import { amountsFromQuote } from "@/lib/quoteAmounts";
 import { expandScope, lineDiscounts } from "@/lib/offerLineBadges";
@@ -306,5 +306,26 @@ describe("persisted ticket selection", () => {
   it("uses one limit definition for the stepper and for restoration", () => {
     expect(maxQuantityFor(product({}), null)).toBe(10);
     expect(maxQuantityFor(product({ max_attendees_per_registration: 50, quantity_remaining: 30 }), null)).toBe(30);
+  });
+});
+
+describe("offer phases and tabs", () => {
+  const o = (phase: "DRAFT" | "SCHEDULED" | "LIVE" | "PAUSED" | "EXPIRED" | "ENDED") => ({ phase });
+  const all = [o("LIVE"), o("LIVE"), o("SCHEDULED"), o("DRAFT"), o("PAUSED"), o("EXPIRED"), o("ENDED")];
+
+  it("keeps Active to offers usable right now and puts Scheduled in its own tab", () => {
+    expect(offersByTab(all, "LIVE")).toHaveLength(2);
+    expect(offersByTab(all, "SCHEDULED")).toHaveLength(1);
+  });
+  it("groups expired offers with ended ones", () => {
+    expect(offersByTab(all, "ENDED").map((x) => x.phase)).toEqual(["EXPIRED", "ENDED"]);
+  });
+  it("All shows everything and every phase has a label and colour", () => {
+    expect(offersByTab(all, "ALL")).toHaveLength(7);
+    for (const phase of ["DRAFT", "SCHEDULED", "LIVE", "PAUSED", "EXPIRED", "ENDED"] as const) {
+      expect(PHASE_LABEL[phase]).toBeTruthy();
+      expect(PHASE_COLOR[phase]).toBeTruthy();
+    }
+    expect(PHASE_LABEL.LIVE).toBe("Active");
   });
 });

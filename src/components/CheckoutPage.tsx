@@ -17,6 +17,7 @@ import { CheckoutDetailsForm } from "@/components/CheckoutDetailsForm";
 import { CheckoutTicketEditor } from "@/components/CheckoutTicketEditor";
 import { CheckoutPaymentStep } from "@/components/CheckoutPaymentStep";
 import { CheckoutOrderSummary } from "@/components/CheckoutOrderSummary";
+import { QuoteProblemNotice } from "@/components/QuoteProblemNotice";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
 import { clearCheckoutDraft, loadCheckoutDraft, saveCheckoutDraft } from "@/lib/checkoutDraftStorage";
 import { createCheckoutDraft, reconcileCheckoutDraft, type CheckoutCartLine, type CheckoutDraft } from "@/lib/checkoutDraft";
@@ -194,7 +195,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     [cart],
   );
   const offerInPlay = offer !== null && (!!offer.promo_code || !!offer.offer_token);
-  const { quote, isLoading: quoteLoading, refetch: refetchQuote } = useOfferQuote({
+  const { quote, isLoading: quoteLoading, refetch: refetchQuote, problem: quoteProblem, retryAt: quoteRetryAt } = useOfferQuote({
     eventId: event.id,
     items: cartForQuote,
     promoCode: offer?.promo_code,
@@ -333,6 +334,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
 
         <GridCol span={{ base: 12, md: 5 }} order={{ base: 1, md: 2 }}>
           <Box pos={{ base: "static", md: "sticky" }} top={84}>
+            {!order && <Box mb="sm"><QuoteProblemNotice problem={quoteProblem} retryAt={quoteRetryAt} retrying={quoteLoading} onRetry={() => void refetchQuote()} /></Box>}
             <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
               <CheckoutOrderSummary event={event} lines={order ? { order } : { lines: summaryLines }} discount={!order && quote && quote.discount_total_minor > 0 ? { label: quote.offer?.name ?? null, minor: quote.discount_total_minor } : null} />
             </Paper>

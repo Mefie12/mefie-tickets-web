@@ -8,7 +8,7 @@ import { Alert, Anchor, Badge, Breadcrumbs, Button, Card, Divider, Group, Progre
 import { IconArrowLeft, IconCopy, IconInfoCircle, IconLock } from "@tabler/icons-react";
 import { getOffer, type Offer, type OfferReport } from "@/lib/offersApi";
 import { useOfferActions } from "@/lib/useOfferActions";
-import { discountLabel, shareUrl, STATUS_COLOR, STATUS_LABEL } from "@/lib/offerFormat";
+import { discountLabel, shareUrl, PHASE_COLOR, PHASE_LABEL } from "@/lib/offerFormat";
 import { scopeLabels, type OfferTicketType } from "@/lib/offerInventory";
 import { formatMinorAmount } from "@/lib/money";
 import { formatEventDateTime } from "@/lib/eventDateTime";
@@ -55,8 +55,8 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
   const link = offer.share_token && origin ? shareUrl(`${origin}${publicEventPath}`, offer.share_token) : null;
   const limit = report.global_ticket_limit;
   const pct = limit ? Math.min(100, Math.round((report.consumed_ticket_units / limit) * 100)) : null;
-  const notYetStarted = offer.status === "ACTIVE" && new Date(offer.starts_at) > new Date();
-  const pastEnd = offer.status === "ACTIVE" && new Date(offer.ends_at) <= new Date();
+  const notYetStarted = offer.phase === "SCHEDULED";
+  const pastEnd = offer.phase === "EXPIRED";
 
   return (
     <Stack gap="lg">
@@ -71,7 +71,7 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
 
       <Group justify="space-between" align="flex-start" wrap="wrap">
         <Stack gap={6}>
-          <Group gap="xs"><Title order={2} fz={24}>{offer.name}</Title><Badge color={STATUS_COLOR[offer.status]} variant="light" size="lg">{STATUS_LABEL[offer.status]}</Badge></Group>
+          <Group gap="xs"><Title order={2} fz={24}>{offer.name}</Title><Badge color={PHASE_COLOR[offer.phase]} variant="light" size="lg">{PHASE_LABEL[offer.phase]}</Badge></Group>
           <Group gap="xs"><Badge variant="outline" color="gray">{offer.activation === "CODE" ? "Promo code" : "Automatic"}</Badge>{/* The zone abbreviation differs between Node and browser ICU ("GMT" vs "GMT+0"), so this one text node is exempt from the hydration check. */}
           <Text size="sm" c="dimmed" suppressHydrationWarning>{discountLabel(offer)} · {formatEventDateTime(offer.starts_at, timezone)} – {formatEventDateTime(offer.ends_at, timezone)}</Text></Group>
         </Stack>
@@ -92,7 +92,7 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
 
       {offer.status === "DRAFT" && <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />}>This offer is a draft — buyers can’t use it yet.{(offer.scope ?? []).length === 0 ? " Choose at least one ticket to activate it." : ""}</Alert>}
       {notYetStarted && <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />}><span suppressHydrationWarning>Scheduled — it goes live {formatEventDateTime(offer.starts_at, timezone)}.</span></Alert>}
-      {pastEnd && <Alert color="gray" variant="light" icon={<IconInfoCircle size={18} />}>This offer’s end time has passed, so it no longer applies. You can mark it as ended.</Alert>}
+      {pastEnd && <Alert color="gray" variant="light" icon={<IconInfoCircle size={18} />}>This offer’s end time has passed, so it no longer applies.</Alert>}
 
       {offer.status === "DRAFT" && editing ? (
         <OfferForm eventId={eventId} currency={currency} timezone={timezone} eventStart={eventStart} inventory={inventory} otherOffers={otherOffers} initial={offer} publicEventPath={publicEventPath} onSaved={() => setEditing(false)} />
