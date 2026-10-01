@@ -237,7 +237,7 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
           <Stack gap="xl">
             {prefill && !initial && (
               <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />} title={`Duplicating “${prefill.name}”`}>
-                This is a new draft. The discount, tickets and limits are copied; the code is left blank (a new one is generated), and the schedule starts now. The original isn’t changed.
+                This is a new draft. The discount, tickets and limits are copied; the code is left blank and a new one is generated — a code is never reused on the same event, even after its offer ends, so old links and past reports stay unambiguous. The schedule starts now. The original isn’t changed.
               </Alert>
             )}
             {formError && <Alert color="red" role="alert" icon={<IconAlertTriangle size={18} />}>{formError}</Alert>}

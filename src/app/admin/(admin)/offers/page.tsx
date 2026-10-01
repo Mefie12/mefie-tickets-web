@@ -8,7 +8,7 @@ import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { adminGetOffer, adminListOffers, adminOfferAction, type Offer, type OfferStatus } from "@/lib/offersApi";
-import { discountLabel, STATUS_COLOR, STATUS_LABEL } from "@/lib/offerFormat";
+import { discountLabel, PHASE_COLOR, PHASE_LABEL, STATUS_LABEL } from "@/lib/offerFormat";
 import { formatMinorAmount } from "@/lib/money";
 import { AdminReasonModal } from "@/components/AdminReasonModal";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
@@ -72,7 +72,7 @@ export default function AdminOffersPage() {
                     </Table.Td>
                     <Table.Td><Text size="sm">{offer.event?.title ?? `Event #${offer.event_id}`}</Text></Table.Td>
                     <Table.Td><Text size="sm">{discountLabel(offer)}</Text></Table.Td>
-                    <Table.Td><Badge color={STATUS_COLOR[offer.status]} variant="light">{STATUS_LABEL[offer.status]}</Badge></Table.Td>
+                    <Table.Td><Badge color={PHASE_COLOR[offer.phase]} variant="light">{PHASE_LABEL[offer.phase]}</Badge></Table.Td>
                     <Table.Td><Text size="sm">{offer.consumed_ticket_units}{offer.global_ticket_limit ? ` / ${offer.global_ticket_limit}` : ""}</Text></Table.Td>
                     <Table.Td ta="right"><Button size="compact-sm" variant="light" onClick={() => setSelected(offer.id)}>View</Button></Table.Td>
                   </Table.Tr>
@@ -86,7 +86,7 @@ export default function AdminOffersPage() {
       <Drawer opened={selected !== null} onClose={() => setSelected(null)} position="right" size="md" title={current?.offer.name ?? "Offer"}>
         {detail.isLoading || !current ? <Center py="xl"><Loader size="sm" /></Center> : (
           <Stack gap="md">
-            <Group gap="xs"><Badge color={STATUS_COLOR[current.offer.status]} variant="light">{STATUS_LABEL[current.offer.status]}</Badge><Text size="sm" c="dimmed">{current.offer.event?.title}</Text></Group>
+            <Group gap="xs"><Badge color={PHASE_COLOR[current.offer.phase]} variant="light">{PHASE_LABEL[current.offer.phase]}</Badge><Text size="sm" c="dimmed">{current.offer.event?.title}</Text></Group>
             <Stack gap={6}>
               <Row label="Discount" value={discountLabel(current.offer)} />
               <Row label="Window" value={`${new Date(current.offer.starts_at).toLocaleString()} – ${new Date(current.offer.ends_at).toLocaleString()}`} />

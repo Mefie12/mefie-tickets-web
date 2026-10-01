@@ -1,4 +1,5 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { clientIpFromHeaders } from "@/lib/clientIp";
 
 /**
  * Server-only Sanctum SPA cookie relay.
@@ -23,7 +24,20 @@ export type BackendResult<T> = {
   ok: boolean;
   data: T;
   setCookieHeaders: string[];
+  /** Retry-After from the API (seconds), present on rate-limit responses. */
+  retryAfter?: string | null;
 };
+
+/**
+ * Tells the API which visitor this server-to-server call is for (so its per-IP rate limits are per visitor),
+ * authenticated by a secret the API shares with us. Sent only when both the secret and an address exist.
+ */
+async function proxyHeaders(): Promise<Record<string, string>> {
+  const secret = process.env.API_PROXY_SECRET;
+  if (!secret) return {};
+  const ip = clientIpFromHeaders(await headers(), Number(process.env.CLIENT_IP_TRUSTED_HOPS ?? 1));
+  return ip ? { "X-Client-IP": ip, "X-Web-Proxy-Secret": secret } : {};
+}
 
 function parseCookiePairs(cookieHeaderOrSetCookies: string[]): Map<string, string> {
   const pairs = new Map<string, string>();
@@ -82,7 +96,7 @@ async function prepareAuthenticatedRequest(
 
   if (needsCsrf) {
     const csrfRes = await fetch(`${API_URL}/sanctum/csrf-cookie`, {
-      headers: { Cookie: cookieHeader, Origin: APP_URL, Referer: `${APP_URL}/` },
+      headers: { Cookie: cookieHeader, Origin: APP_URL, Referer: `${APP_URL}/`, ...(await proxyHeaders()) },
     });
     const csrfSetCookies = csrfRes.headers.getSetCookie();
     setCookieHeaders.push(...csrfSetCookies);
@@ -113,6 +127,7 @@ export async function backendRequest<T = unknown>(
       Cookie: cookieHeader,
       Origin: APP_URL,
       Referer: `${APP_URL}/`,
+      ...(await proxyHeaders()),
       ...(xsrfToken ? { "X-XSRF-TOKEN": xsrfToken } : {}),
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
@@ -123,7 +138,7 @@ export async function backendRequest<T = unknown>(
 
   const data = (await res.json().catch(() => null)) as T;
 
-  return { status: res.status, ok: res.ok, data, setCookieHeaders };
+  return { status: res.status, ok: res.ok, data, setCookieHeaders, retryAfter: res.headers.get("retry-after") };
 }
 
 /**
@@ -141,6 +156,7 @@ export async function backendUpload<T = unknown>(path: string, formData: FormDat
       Cookie: cookieHeader,
       Origin: APP_URL,
       Referer: `${APP_URL}/`,
+      ...(await proxyHeaders()),
       ...(xsrfToken ? { "X-XSRF-TOKEN": xsrfToken } : {}),
     },
     body: formData,
@@ -151,5 +167,5 @@ export async function backendUpload<T = unknown>(path: string, formData: FormDat
 
   const data = (await res.json().catch(() => null)) as T;
 
-  return { status: res.status, ok: res.ok, data, setCookieHeaders };
+  return { status: res.status, ok: res.ok, data, setCookieHeaders, retryAfter: res.headers.get("retry-after") };
 }

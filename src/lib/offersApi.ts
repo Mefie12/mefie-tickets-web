@@ -8,6 +8,8 @@
 import { ApiError } from "@/lib/authApi";
 
 export type OfferStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
+/** What an offer is doing right now: its stored status plus the schedule (see Offer::phase() on the API). */
+export type OfferPhase = "DRAFT" | "SCHEDULED" | "LIVE" | "PAUSED" | "EXPIRED" | "ENDED";
 export type OfferActivation = "CODE" | "AUTOMATIC";
 export type OfferDiscountType = "PERCENTAGE" | "FIXED_PER_TICKET";
 
@@ -20,6 +22,7 @@ export type Offer = {
   name: string;
   internal_description: string | null;
   status: OfferStatus;
+  phase: OfferPhase;
   activation: OfferActivation;
   is_currently_eligible: boolean;
   starts_at: string;
@@ -153,7 +156,12 @@ async function request<T>(path: string, options: { method?: Method; body?: unkno
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+  if (!res.ok) {
+    const error = new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+    const retryAfter = Number(res.headers.get("retry-after"));
+    if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = retryAfter;
+    throw error;
+  }
   return data as T;
 }
 
