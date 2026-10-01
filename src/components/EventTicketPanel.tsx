@@ -9,8 +9,9 @@ import { cheapestPriceLabel, type PublicEvent } from "@/lib/publicEventApi";
 import { computeBuyerCosts } from "@/lib/fees";
 import { TicketSelector, ticketLineKey } from "@/components/TicketSelector";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
-import { saveCart, type StoredCartItem } from "@/lib/cartStorage";
-import { clearOffer, loadOffer, saveOffer } from "@/lib/offerSession";
+import { clearCart, loadCart, saveCart, type StoredCartItem } from "@/lib/cartStorage";
+import { restoreQuantities } from "@/lib/ticketLimits";
+import { clearOffer, loadOffer, offerAfterQuote, saveOffer } from "@/lib/offerSession";
 import { getShareOffer, type PublicOffer } from "@/lib/offersApi";
 import { useOfferQuote } from "@/lib/useOfferQuote";
 import { amountsFromQuote } from "@/lib/quoteAmounts";
@@ -30,6 +31,9 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   const router = useRouter();
   const pathname = usePathname();
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  // Set once the stored selection has been read back, so the persist effect below
+  // never overwrites it with the initial empty state.
+  const [cartHydrated, setCartHydrated] = useState(false);
   // The buyer's offer *input* — a typed code or a share-link token. What it is
   // worth is decided only by the server quote below.
   const [promoCode, setPromoCode] = useState<string | null>(null);
@@ -37,6 +41,18 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [quoteVersion, setQuoteVersion] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // Restore the buyer's selection after a reload / coming back from checkout,
+  // re-validated against the live event (unavailable lines dropped, quantities clamped).
+  useEffect(() => {
+    const stored = loadCart(event.id);
+    Promise.resolve().then(() => {
+      if (stored) setQuantities(restoreQuantities(stored, event.products));
+      setCartHydrated(true);
+    });
+    // Restore once per event; later product data refreshes must not undo the buyer's edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event.id]);
 
   // Hydrate the offer input from ?promo= / ?offer= (campaign links), else from
   // what the buyer applied before navigating to checkout and back.
@@ -74,6 +90,13 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
     [event.products, quantities],
   );
 
+  // Keep the stored selection in step with the stepper (an empty selection clears it).
+  useEffect(() => {
+    if (!cartHydrated) return;
+    if (cartItems.length > 0) saveCart(event.id, cartItems);
+    else clearCart(event.id);
+  }, [cartHydrated, cartItems, event.id]);
+
   const quoteEnabled = promoCode !== null || offerToken !== null || event.automatic_offer !== null;
   const { quote, isLoading: quoting, isStale: quoteStale } = useOfferQuote({
     eventId: event.id,
@@ -89,6 +112,17 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
     return offer ? expandScope(offer, event.products) : null;
   }, [shareOffer.data, event.automatic_offer, event.products]);
   const badges = useMemo(() => lineDiscounts({ quote, advertised, timezone: event.timezone }), [quote, advertised, event.timezone]);
+
+  // Persist the buyer's offer as soon as the server has answered for the
+  // CURRENT input (not a placeholder from the previous one): keep a usable
+  // code with the discount now shown, drop one the server rejected.
+  const quoteSettled = !quoting && !quoteStale;
+  useEffect(() => {
+    if (!quoteSettled || !quote) return;
+    const next = offerAfterQuote({ promo_code: promoCode, offer_token: offerToken }, quote);
+    if (next === "REMOVE") clearOffer(event.id);
+    else if (next !== "KEEP") saveOffer(event.id, next);
+  }, [quoteSettled, quote, promoCode, offerToken, event.id]);
 
   const total = useMemo(() => {
     return event.products.reduce((sum, product) => {
@@ -168,8 +202,11 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         usingShareLink={offerToken !== null}
         quote={quote}
         loading={quoting && !quoteStale}
-        settled={!quoting && !quoteStale}
-        onApply={(code) => { setOfferToken(null); setPromoCode(code); }}
+        settled={quoteSettled}
+        // Remember the typed input right away (the buyer's intent survives a reload even before
+        // the quote returns, or while the cart is empty); the effect above reconciles it with the
+        // server's answer.
+        onApply={(code) => { setOfferToken(null); setPromoCode(code); saveOffer(event.id, { promo_code: code, offer_token: null, expected_discount_minor: 0 }); }}
         onRemove={() => { setPromoCode(null); if (offerToken !== null) { setOfferToken(null); setBannerDismissed(true); } clearOffer(event.id); }}
         onVerify={() => setVerifyOpen(true)}
       />

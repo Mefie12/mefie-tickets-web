@@ -18,6 +18,7 @@ import { CheckoutTicketEditor } from "@/components/CheckoutTicketEditor";
 import { CheckoutPaymentStep } from "@/components/CheckoutPaymentStep";
 import { CheckoutOrderSummary } from "@/components/CheckoutOrderSummary";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
+import { clearCheckoutDraft, loadCheckoutDraft, saveCheckoutDraft } from "@/lib/checkoutDraftStorage";
 import { createCheckoutDraft, reconcileCheckoutDraft, type CheckoutCartLine, type CheckoutDraft } from "@/lib/checkoutDraft";
 
 type Step = "details" | "payment" | "confirmation";
@@ -109,6 +110,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
           sessionStorage.removeItem(checkoutStorageKey(event.id));
           clearCart(event.id);
           clearOffer(event.id);
+          clearCheckoutDraft(event.id);
           // Prefer the fresh order the status check just returned (real
           // unassigned_count/attendees) over the stale RESERVED snapshot
           // — the persisted copy predates payment completion.
@@ -153,10 +155,25 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     if (cart === "loading" || cart === null || draft !== null) return;
     const deferred = event.deferred_assignment_enabled;
     const inlineOffered = deferred && event.acceptance_policy === "PURCHASER_GROUP";
-    Promise.resolve().then(() => setDraft(createCheckoutDraft(toCartLines(cart), deferred, inlineOffered)));
+    // Restore what the buyer had typed (this tab, last few hours, never consent),
+    // fitted to the cart they are buying now; otherwise start a fresh draft.
+    const lines = toCartLines(cart);
+    const restored = loadCheckoutDraft(event.id);
+    const next = restored
+      ? reconcileCheckoutDraft(restored, lines, [], deferred, inlineOffered)
+      : createCheckoutDraft(lines, deferred, inlineOffered);
+    Promise.resolve().then(() => setDraft(next));
     // Draft creation is intentionally one-shot; later cart changes go through reconciliation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cart, draft, event.deferred_assignment_enabled, event.acceptance_policy]);
+
+  // Save the details as they are typed (debounced), until the order completes.
+  // Not while an order exists: from then on the order itself is what is resumed.
+  useEffect(() => {
+    if (draft === null || order !== null) return;
+    const handle = window.setTimeout(() => saveCheckoutDraft(event.id, draft), 400);
+    return () => window.clearTimeout(handle);
+  }, [draft, order, event.id]);
 
   const total = useMemo(() => {
     return cartItems.reduce((sum, item) => {
@@ -226,6 +243,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     if (newOrder.status === "COMPLETED") {
       clearCart(event.id);
       clearOffer(event.id);
+      clearCheckoutDraft(event.id);
       setStep("confirmation");
     } else {
       setStep("payment");
@@ -275,6 +293,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                     sessionStorage.removeItem(checkoutStorageKey(event.id));
                     clearCart(event.id);
                     clearOffer(event.id);
+                    clearCheckoutDraft(event.id);
                     setOrder(updatedOrder);
                     setClientSecret(null);
                     setStep("confirmation");

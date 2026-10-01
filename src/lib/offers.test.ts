@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { localInputToUtcIso, utcIsoToLocalInput, zonedToUtcIso } from "@/lib/offerDates";
 import { discountLabel, previewDiscountedUnit, shareUrl } from "@/lib/offerFormat";
 import { isStaleOfferCode, offerErrorMessage } from "@/lib/offerErrors";
@@ -6,6 +6,9 @@ import { amountsFromQuote } from "@/lib/quoteAmounts";
 import { expandScope, lineDiscounts } from "@/lib/offerLineBadges";
 import { offerInventory, samplePriceMinor, scopeLabels } from "@/lib/offerInventory";
 import { serializeCheckoutOrder, createCheckoutDraft } from "@/lib/checkoutDraft";
+import { OFFER_TTL_MS, clearOffer, loadOffer, offerAfterQuote, saveOffer } from "@/lib/offerSession";
+import { CART_TTL_MS, clearCart, loadCart, saveCart } from "@/lib/cartStorage";
+import { maxQuantityFor, restoreQuantities } from "@/lib/ticketLimits";
 import { endError, startError } from "@/lib/offerSchedule";
 import { createRejectionNotifier, normalizePromoCode, promoCodeFormatError } from "@/lib/offerCodeFormat";
 import type { PublicOffer, Quote } from "@/lib/offersApi";
@@ -202,5 +205,106 @@ describe("offer schedule feedback", () => {
     expect(endError("2026-06-01T09:00", "2026-06-30T09:00", tz, now)).toMatch(/in the future/);
     expect(endError("2026-07-05T09:00", "2026-07-04T09:00", tz, now)).toMatch(/after the start/);
     expect(endError("2026-07-02T09:00", "2026-07-03T09:00", tz, now)).toBeNull();
+  });
+});
+
+describe("persisting the applied offer", () => {
+  let store: Record<string, string>;
+  beforeEach(() => {
+    store = {};
+    (globalThis as unknown as { sessionStorage: Storage }).sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v; },
+      removeItem: (k: string) => { delete store[k]; },
+    } as Storage;
+  });
+
+  it("round-trips the input and the last-shown discount", () => {
+    saveOffer(7, { promo_code: "SUMMER20", offer_token: null, expected_discount_minor: 2000 }, 1_000);
+    expect(loadOffer(7, 2_000)).toEqual({ promo_code: "SUMMER20", offer_token: null, expected_discount_minor: 2000 });
+    expect(loadOffer(8, 2_000)).toBeNull(); // scoped per event
+  });
+
+  it("expires after the TTL and discards the entry", () => {
+    saveOffer(7, { promo_code: "SUMMER20", expected_discount_minor: 0 }, 0);
+    expect(loadOffer(7, OFFER_TTL_MS - 1)).not.toBeNull();
+    expect(loadOffer(7, OFFER_TTL_MS + 1)).toBeNull();
+    expect(store["mefie-offer:7"]).toBeUndefined();
+  });
+
+  it("ignores legacy, wrong-version and malformed data", () => {
+    store["mefie-offer:7"] = JSON.stringify({ promo_code: "OLD", expected_discount_minor: 0 }); // pre-envelope shape
+    expect(loadOffer(7)).toBeNull();
+    store["mefie-offer:7"] = JSON.stringify({ v: 99, saved_at: Date.now(), offer: { promo_code: "X", expected_discount_minor: 0 } });
+    expect(loadOffer(7)).toBeNull();
+    store["mefie-offer:7"] = "{not json";
+    expect(loadOffer(7)).toBeNull();
+  });
+
+  it("clears the entry", () => {
+    saveOffer(7, { promo_code: "SUMMER20", expected_discount_minor: 0 });
+    clearOffer(7);
+    expect(loadOffer(7)).toBeNull();
+  });
+
+  it("reconciles with the server's answer: keep usable codes, drop rejected ones, never invent one", () => {
+    const input = { promo_code: "SUMMER20", offer_token: null };
+    expect(offerAfterQuote(input, { status: "APPLIED", discount_total_minor: 4000 })).toEqual({ promo_code: "SUMMER20", offer_token: null, expected_discount_minor: 4000 });
+    expect(offerAfterQuote(input, { status: "VERIFICATION_REQUIRED", discount_total_minor: 0 })).toEqual({ promo_code: "SUMMER20", offer_token: null, expected_discount_minor: 0 });
+    expect(offerAfterQuote(input, { status: "REJECTED", discount_total_minor: 0 })).toBe("REMOVE");
+    expect(offerAfterQuote(input, { status: "NONE", discount_total_minor: 0 })).toBe("KEEP");
+    // No buyer input (automatic-only quote): never writes anything.
+    expect(offerAfterQuote({ promo_code: null, offer_token: null }, { status: "APPLIED", discount_total_minor: 500 })).toBe("KEEP");
+  });
+});
+
+describe("persisted ticket selection", () => {
+  let store: Record<string, string>;
+  beforeEach(() => {
+    store = {};
+    (globalThis as unknown as { sessionStorage: Storage }).sessionStorage = {
+      getItem: (k: string) => store[k] ?? null,
+      setItem: (k: string, v: string) => { store[k] = v; },
+      removeItem: (k: string) => { delete store[k]; },
+    } as Storage;
+  });
+
+  const product = (over: Record<string, unknown>) => ({ id: 1, type: "PAID", is_on_sale: true, is_sold_out: false, quantity_remaining: null, max_attendees_per_registration: null, options: [], ...over }) as never;
+
+  it("round-trips, expires, and ignores malformed or legacy data", () => {
+    saveCart(5, [{ product_id: 1, ticket_option_id: null, quantity: 2 }], 0);
+    expect(loadCart(5, 1)).toEqual([{ product_id: 1, ticket_option_id: null, quantity: 2 }]);
+    expect(loadCart(5, CART_TTL_MS + 1)).toBeNull();
+    expect(store["mefie-cart:5"]).toBeUndefined();
+    store["mefie-cart:5"] = JSON.stringify([{ product_id: 1, ticket_option_id: null, quantity: 2 }]); // pre-envelope shape
+    expect(loadCart(5)).toBeNull();
+    store["mefie-cart:5"] = JSON.stringify({ v: 1, saved_at: Date.now(), items: [{ product_id: "x", quantity: 2 }, { product_id: 1, ticket_option_id: null, quantity: 0 }] });
+    expect(loadCart(5)).toBeNull(); // nothing valid left
+    clearCart(5);
+  });
+
+  it("restores quantities but re-validates against the live event", () => {
+    const products = [
+      product({ id: 1 }),
+      product({ id: 2, is_sold_out: true }),
+      product({ id: 3, quantity_remaining: 2 }),
+      product({ id: 4, type: "TIERED", options: [{ id: 41, is_available: true, quantity_remaining: 5, max_attendees_per_registration: 3 }, { id: 42, is_available: false }] }),
+    ];
+    const restored = restoreQuantities([
+      { product_id: 1, ticket_option_id: null, quantity: 4 },
+      { product_id: 2, ticket_option_id: null, quantity: 1 }, // sold out since
+      { product_id: 3, ticket_option_id: null, quantity: 9 }, // clamp to 2 remaining
+      { product_id: 4, ticket_option_id: 41, quantity: 8 }, // clamp to per-order cap 3
+      { product_id: 4, ticket_option_id: 42, quantity: 1 }, // option unavailable
+      { product_id: 4, ticket_option_id: 99, quantity: 1 }, // option removed
+      { product_id: 1, ticket_option_id: 7, quantity: 1 }, // option on a non-tiered product
+      { product_id: 77, ticket_option_id: null, quantity: 1 }, // product removed
+    ], products);
+    expect(restored).toEqual({ "1:direct": 4, "3:direct": 2, "4:41": 3 });
+  });
+
+  it("uses one limit definition for the stepper and for restoration", () => {
+    expect(maxQuantityFor(product({}), null)).toBe(10);
+    expect(maxQuantityFor(product({ max_attendees_per_registration: 50, quantity_remaining: 30 }), null)).toBe(30);
   });
 });

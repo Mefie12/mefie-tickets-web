@@ -5,7 +5,9 @@ import { IconMinus, IconPlus } from "@tabler/icons-react";
 import type { PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
 import { formatMoney } from "@/lib/money";
 
-export const ticketLineKey = (productId: number, optionId: number | null) => `${productId}:${optionId ?? "direct"}`;
+import { isLineAvailable, maxQuantityFor, ticketLineKey } from "@/lib/ticketLimits";
+
+export { ticketLineKey };
 
 export function TicketSelector({ products, quantities, onQuantityChange, currencyCode, lineDiscounts }: {
   products: PublicProduct[];
@@ -84,7 +86,7 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode, di
   onChange: (quantity: number) => void; currencyCode: string; discountBadge?: string;
 }) {
   const status = option?.status ?? (product.is_sold_out ? "SOLD_OUT" : product.is_on_sale ? "AVAILABLE" : "PAUSED");
-  const available = option ? option.is_available : product.is_on_sale && !product.is_sold_out;
+  const available = isLineAvailable(product, option);
   const remaining = option?.quantity_remaining ?? product.quantity_remaining;
   // Only worth surfacing once stock is actually running low — see
   // Product::isLowStock() for the exact (complimentary-aware) threshold.
@@ -92,7 +94,6 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode, di
   // Per-order cap: the organizer's max-per-registration (10 when unset),
   // further limited by what's actually left. No extra hardcoded ceiling —
   // an organizer allowing 50 per order should get 50.
-  const limit = option?.max_attendees_per_registration ?? product.max_attendees_per_registration ?? 10;
   const price = option?.price ?? product.current_price;
   const heading = option?.name ?? product.title;
   const subtitleParts = [
@@ -128,7 +129,7 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode, di
           <QuantityStepper
             value={quantity}
             onChange={onChange}
-            max={Math.min(limit, remaining ?? limit)}
+            max={maxQuantityFor(product, option)}
             disabled={!available}
           />
         </Group>
