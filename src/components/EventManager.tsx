@@ -136,14 +136,25 @@ export function EventManager({
 }) {
   const [event, setEvent] = useState(initialEvent);
   const sellsPaidTickets = initialProducts.some((product) => ["PAID", "TIERED", "DONATION"].includes(product.type));
-  const [requestedStatus, setRequestedStatus] = useState<EventStatus | null>(null);
-  const [statusError, setStatusError] = useState<string | null>(null);
-  const [statusErrorCode, setStatusErrorCode] = useState<string | null>(null);
-  const archived = event.status === "ARCHIVED";
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  // ?publish=1 (deep link from an offer's "event isn't published" notice) opens the publish
+  // confirmation straight away. Derived from the URL at first render rather than set in an effect:
+  // the flag is only dropped once the confirmation is closed or completed (dropPublishFlag), so a
+  // re-render or reload while it is open simply reopens it.
+  const [requestedStatus, setRequestedStatus] = useState<EventStatus | null>(
+    () => (initialEvent.status === "DRAFT" && searchParams.get("publish") === "1" ? "LIVE" : null),
+  );
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [statusErrorCode, setStatusErrorCode] = useState<string | null>(null);
+  const archived = event.status === "ARCHIVED";
 
+  // Deep link from elsewhere in the console (e.g. an offer's "event isn't published" warning):
+  // ?publish=1 opens the publish confirmation right away, and ?returnTo= brings the organizer back
+  // once the event is live. returnTo is only honoured for this event's own offers pages.
+  const rawReturnTo = searchParams.get("returnTo") ?? "";
+  const returnTo = new RegExp(`^/events/${initialEvent.id}/offers(/\\d+)?$`).test(rawReturnTo) ? rawReturnTo : null;
   const requestedTab = searchParams.get("tab") ?? "";
   const [tab, setTab] = useState(VALID_TABS.includes(requestedTab) ? requestedTab : "details");
 
@@ -152,6 +163,8 @@ export function EventManager({
     setTab(next);
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", next);
+    // A one-shot deep-link flag; it must never survive an in-page tab change (returnTo does).
+    params.delete("publish");
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
@@ -162,11 +175,14 @@ export function EventManager({
   });
 
   function handleStatusChangeSuccess(data: { event: Event; outstanding_invitations?: number | null }) {
+    dropPublishFlag();
     setEvent(data.event);
     setRequestedStatus(null);
     setStatusError(null);
     setStatusErrorCode(null);
     notifications.show({ color: "teal", message: `Event is now ${data.event.status}.` });
+    // Came here from an offer to publish the event: take the organizer straight back.
+    if (data.event.status === "LIVE" && returnTo) router.push(returnTo);
 
     // Sending is a fully separate, explicit action now (no more
     // auto-send-at-publish) — this is the one-time nudge so an
@@ -241,7 +257,16 @@ export function EventManager({
     setRequestedStatus(status);
   };
 
+  // Drop ?publish=1 (history API: no navigation, so nothing re-renders or resets) once its job is done.
+  function dropPublishFlag() {
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("publish")) return;
+    params.delete("publish");
+    window.history.replaceState(null, "", `${pathname}${params.toString() ? `?${params}` : ""}`);
+  }
+
   function closeStatusModal() {
+    dropPublishFlag();
     setRequestedStatus(null);
     setStatusError(null);
     setStatusErrorCode(null);
@@ -268,6 +293,11 @@ export function EventManager({
   return (
     <Stack gap="xl">
       <Stack gap="xs">
+        {returnTo && (
+          <Anchor component={Link} href={returnTo} size="sm" style={{ width: "fit-content" }}>
+            ← Back to your offer
+          </Anchor>
+        )}
         <Title order={2} fz={28}>
           Event settings
         </Title>
