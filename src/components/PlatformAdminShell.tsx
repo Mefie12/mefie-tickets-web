@@ -14,6 +14,7 @@ import {
   IconUsers,
   IconBuildingStore,
   IconCategory,
+  IconGift,
   IconStar,
   IconDevices,
   IconFileText,
@@ -128,6 +129,14 @@ export function PlatformAdminShell({
             label="Featured Events"
             icon={<IconStar size={20} />}
             active={pathname.startsWith("/admin/featured-events")}
+          />
+        )}
+        {has("offers.view") && (
+          <ConsoleNavItem
+            href="/admin/offers"
+            label="Offers"
+            icon={<IconGift size={20} />}
+            active={pathname.startsWith("/admin/offers")}
           />
         )}
         {has("platform_legal_documents.view") && (

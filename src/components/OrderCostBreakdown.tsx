@@ -16,11 +16,18 @@ import { formatMinorAmount } from "@/lib/money";
  */
 type Amounts = {
   currency: string;
+  /** Pre-discount subtotal when a discount applies, otherwise the subtotal. */
   subtotalMinor: number;
   serviceFeeMinor: number;
   taxMinor: number;
   totalMinor: number;
+  /** Offers: shown as a "Discount" row between Subtotal and the fees. */
+  discountMinor?: number;
+  discountLabel?: string | null;
 };
+
+// Theme-aware savings colour (AA on both the light and dark card surfaces).
+const SAVINGS_COLOR = "light-dark(#18794e, #5fd39a)";
 
 function toMinor(amount: string | number): number {
   return Math.round(Number(amount) * 100);
@@ -31,12 +38,16 @@ function fromOrder(order: Order): Amounts {
     (order.platform_fee_bearer === "ATTENDEE" ? toMinor(order.platform_fee) : 0) +
     (order.processing_fee_bearer === "ATTENDEE" ? toMinor(order.processing_fee) : 0);
   const taxMinor = order.tax_bearer === "ATTENDEE" ? toMinor(order.tax_amount) : 0;
+  const discountMinor = order.discount_total_minor ?? 0;
   return {
     currency: order.currency,
-    subtotalMinor: toMinor(order.subtotal),
+    // order.subtotal is the post-discount subtotal; show the original above the discount row.
+    subtotalMinor: toMinor(order.subtotal) + discountMinor,
     serviceFeeMinor,
     taxMinor,
     totalMinor: toMinor(order.total_amount),
+    discountMinor,
+    discountLabel: order.offer_name ?? null,
   };
 }
 
@@ -55,6 +66,17 @@ export function OrderCostBreakdown(props: { order: Order } | { amounts: Amounts 
         </Text>
         <Text size="sm">{formatMinorAmount(a.subtotalMinor, a.currency)}</Text>
       </Group>
+
+      {(a.discountMinor ?? 0) > 0 && (
+        <Group justify="space-between" wrap="nowrap" gap="sm">
+          <Text size="sm" c="dimmed" style={{ overflowWrap: "anywhere" }}>
+            Discount{a.discountLabel ? ` (${a.discountLabel})` : ""}
+          </Text>
+          <Text size="sm" fw={500} c={SAVINGS_COLOR} style={{ whiteSpace: "nowrap" }}>
+            −{formatMinorAmount(a.discountMinor ?? 0, a.currency)}
+          </Text>
+        </Group>
+      )}
 
       {rows.map((row) => (
         <Group key={row.label} justify="space-between">
