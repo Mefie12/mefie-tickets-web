@@ -25,6 +25,7 @@ export default async function OfferDetailPage({ params }: { params: Promise<{ ev
       timezone={event.timezone}
       eventStart={event.start_date}
       publicEventPath={`/${organization.slug}/${event.slug}`}
+      eventStatus={event.status}
       inventory={offerInventory(products.data.products)}
       otherOffers={offers.data.offers}
       initialOffer={detail.data.offer}
