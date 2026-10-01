@@ -96,6 +96,10 @@ export function PhoneInput({
 
   function handleNationalChange(raw: string) {
     const formatted = activeCountry ? new AsYouType(activeCountry).input(raw) : raw;
+    // The browser-locale default only applies while the field is empty; once the buyer starts typing it
+    // becomes their chosen country. Without this the code blanked after the first digit and every later
+    // keystroke produced an empty number ("Enter a valid phone number").
+    if (country === null && activeCountry !== null) setCountry(activeCountry);
     setNational(formatted);
     emit(activeCountry, formatted);
   }
