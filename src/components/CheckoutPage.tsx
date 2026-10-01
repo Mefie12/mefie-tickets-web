@@ -10,6 +10,8 @@ import { ApiError } from "@/lib/authApi";
 import { createPaymentIntent, getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { loadCart, saveCart, clearCart, type StoredCartItem } from "@/lib/cartStorage";
+import { clearOffer, loadOffer, type StoredOffer } from "@/lib/offerSession";
+import { useOfferQuote } from "@/lib/useOfferQuote";
 import { summaryLinesFromCart } from "@/lib/orderSummaryLines";
 import { CheckoutDetailsForm } from "@/components/CheckoutDetailsForm";
 import { CheckoutTicketEditor } from "@/components/CheckoutTicketEditor";
@@ -49,6 +51,8 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
   const [draft, setDraft] = useState<CheckoutDraft | null>(null);
   const [ticketEditorOpen, setTicketEditorOpen] = useState(false);
+  const [offer, setOffer] = useState<StoredOffer | null>(null);
+  const [quoteVersion, setQuoteVersion] = useState(0);
   const reconciling = useRef(false);
 
   // No cart handed off (direct visit, bookmark, expired tab) — nothing
@@ -57,7 +61,10 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   // as reacting to an external read, matching the reconciliation effect
   // below.
   useEffect(() => {
-    Promise.resolve().then(() => setCart(loadCart(event.id)));
+    Promise.resolve().then(() => {
+      setCart(loadCart(event.id));
+      setOffer(loadOffer(event.id));
+    });
   }, [event.id]);
 
   useEffect(() => {
@@ -101,6 +108,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         if (authoritative.status === "COMPLETED") {
           sessionStorage.removeItem(checkoutStorageKey(event.id));
           clearCart(event.id);
+          clearOffer(event.id);
           // Prefer the fresh order the status check just returned (real
           // unassigned_count/attendees) over the stale RESERVED snapshot
           // — the persisted copy predates payment completion.
@@ -161,6 +169,28 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
 
   const summaryLines = useMemo(() => summaryLinesFromCart(cartItems, event.products), [cartItems, event.products]);
 
+  // Advisory server quote for the cart + the offer carried from the event page.
+  // Order creation recalculates under lock; this only drives what is displayed
+  // and the discount the order asserts it was shown.
+  const cartForQuote = useMemo(
+    () => (cart === "loading" || cart === null ? [] : cart.map(({ product_id, ticket_option_id, quantity }) => ({ product_id, ticket_option_id, quantity }))),
+    [cart],
+  );
+  const offerInPlay = offer !== null && (!!offer.promo_code || !!offer.offer_token);
+  const { quote, isLoading: quoteLoading, refetch: refetchQuote } = useOfferQuote({
+    eventId: event.id,
+    items: cartForQuote,
+    promoCode: offer?.promo_code,
+    offerToken: offer?.offer_token,
+    enabled: offerInPlay || event.automatic_offer !== null,
+    version: quoteVersion,
+  });
+
+  function removeOffer() {
+    clearOffer(event.id);
+    setOffer(null);
+  }
+
   const paymentIntentMutation = useMutation({
     mutationFn: (o: Order) => createPaymentIntent(event.id, o.short_id),
     onSuccess: (data: { client_secret: string; provider: "STRIPE"; provider_account_id: string; reservation_expires_at: string | null }) => {
@@ -195,6 +225,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     setOrder(newOrder);
     if (newOrder.status === "COMPLETED") {
       clearCart(event.id);
+      clearOffer(event.id);
       setStep("confirmation");
     } else {
       setStep("payment");
@@ -243,6 +274,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                   onPaid={(updatedOrder) => {
                     sessionStorage.removeItem(checkoutStorageKey(event.id));
                     clearCart(event.id);
+                    clearOffer(event.id);
                     setOrder(updatedOrder);
                     setClientSecret(null);
                     setStep("confirmation");
@@ -268,6 +300,13 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                 onDraftChange={(updater) => setDraft((current) => current ? updater(current) : current)}
                 onEditTickets={() => setTicketEditorOpen(true)}
                 onOrderCreated={handleOrderCreated}
+                quote={quote}
+                quoteLoading={quoteLoading}
+                offer={offer}
+                onRemoveOffer={removeOffer}
+                onRequote={async () => (await refetchQuote()).data}
+                onVerified={() => setQuoteVersion((v) => v + 1)}
+                backUrl={backUrl}
               />
             ) : null}
           </Paper>
@@ -276,7 +315,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         <GridCol span={{ base: 12, md: 5 }} order={{ base: 1, md: 2 }}>
           <Box pos={{ base: "static", md: "sticky" }} top={84}>
             <Paper withBorder radius="lg" p={{ base: "md", sm: "lg" }}>
-              <CheckoutOrderSummary event={event} lines={order ? { order } : { lines: summaryLines }} />
+              <CheckoutOrderSummary event={event} lines={order ? { order } : { lines: summaryLines }} discount={!order && quote && quote.discount_total_minor > 0 ? { label: quote.offer?.name ?? null, minor: quote.discount_total_minor } : null} />
             </Paper>
           </Box>
         </GridCol>

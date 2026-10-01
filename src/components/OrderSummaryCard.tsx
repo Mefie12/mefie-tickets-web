@@ -8,9 +8,15 @@ function linesFromOrder(order: Order): OrderSummaryLine[] {
   return order.items.map((item) => ({
     label: item.ticket_display_name,
     quantity: item.quantity,
-    totalMinor: Math.round(Number(item.item_total) * 100),
+    // With an offer, list each line at its ORIGINAL amount and show the
+    // discount as its own row below, so the lines reconcile to the total.
+    totalMinor: item.discount_minor && item.original_price_minor != null
+      ? item.original_price_minor * item.quantity
+      : Math.round(Number(item.item_total) * 100),
   }));
 }
+
+export type OrderSummaryDiscount = { label: string | null; minor: number };
 
 /**
  * Per-ticket-type line items ("VIP × 2  ₦165,000") plus their own
@@ -24,10 +30,13 @@ function linesFromOrder(order: Order): OrderSummaryLine[] {
  * pre-order `lines` computed from the cart (details step) — same dual
  * shape as OrderCostBreakdown.
  */
-export function OrderSummaryCard(props: { order: Order } | { lines: OrderSummaryLine[]; currency: string }) {
+export function OrderSummaryCard(props: { order: Order } | { lines: OrderSummaryLine[]; currency: string; discount?: OrderSummaryDiscount | null }) {
   const lines = "order" in props ? linesFromOrder(props.order) : props.lines;
   const currency = "order" in props ? props.order.currency : props.currency;
-  const totalMinor = lines.reduce((sum, line) => sum + line.totalMinor, 0);
+  const discount: OrderSummaryDiscount | null = "order" in props
+    ? ((props.order.discount_total_minor ?? 0) > 0 ? { label: props.order.offer_name ?? null, minor: props.order.discount_total_minor ?? 0 } : null)
+    : (props.discount && props.discount.minor > 0 ? props.discount : null);
+  const totalMinor = lines.reduce((sum, line) => sum + line.totalMinor, 0) - (discount?.minor ?? 0);
 
   // This card's background is deliberately light regardless of the
   // site's own color scheme (matches the Figma design, which is
@@ -62,6 +71,17 @@ export function OrderSummaryCard(props: { order: Order } | { lines: OrderSummary
             </Text>
           </Group>
         ))}
+        {discount && (
+          <Group justify="space-between" wrap="nowrap" align="flex-start" gap="sm">
+            <Text size="sm" c={mutedColor}>
+              Discount{discount.label ? ` (${discount.label})` : ""}
+            </Text>
+            {/* This card is always light, so the savings colour is fixed to a light-surface AA green. */}
+            <Text size="sm" fw={600} c="#18794e" style={{ whiteSpace: "nowrap" }}>
+              −{formatMinorAmount(discount.minor, currency)}
+            </Text>
+          </Group>
+        )}
       </Stack>
       <Divider color="var(--mantine-color-grey-2)" />
       <Group justify="space-between">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Badge, Button, Card, Checkbox, Divider, Group, Pagination, Radio, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -8,6 +8,12 @@ import { ApiError } from "@/lib/authApi";
 import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { computeBuyerCosts } from "@/lib/fees";
+import type { Quote } from "@/lib/offersApi";
+import type { StoredOffer } from "@/lib/offerSession";
+import { amountsFromQuote } from "@/lib/quoteAmounts";
+import { isStaleOfferCode, offerErrorMessage } from "@/lib/offerErrors";
+import { StaleOfferPanel } from "@/components/StaleOfferPanel";
+import { OfferVerifyModal } from "@/components/OfferVerifyModal";
 import { EditableQuestionField } from "@/components/EditableQuestionField";
 import { LegalDocumentLinksLine } from "@/components/LegalDocumentLinks";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
@@ -28,7 +34,7 @@ import classes from "./checkoutDetailsForm.module.css";
 
 const TERMS_TRIGGERING_TYPES = new Set(["PAID", "TIERED", "REGISTRATION", "DONATION"]);
 
-export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraftChange, onEditTickets, onOrderCreated }: {
+export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraftChange, onEditTickets, onOrderCreated, quote, quoteLoading, offer, onRemoveOffer, onRequote, onVerified, backUrl }: {
   event: PublicEvent;
   cartItems: CheckoutCartLine[];
   totalDue: number;
@@ -36,6 +42,16 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
   onDraftChange: (updater: (current: CheckoutDraft) => CheckoutDraft) => void;
   onEditTickets: () => void;
   onOrderCreated: (order: Order) => void;
+  /** Advisory server quote for the cart + applied offer; undefined when no offer is in play. */
+  quote?: Quote;
+  quoteLoading: boolean;
+  /** The buyer's stored offer input (typed code / share token). */
+  offer: StoredOffer | null;
+  onRemoveOffer: () => void;
+  /** Fetch a fresh quote now (after a 409). */
+  onRequote: () => Promise<Quote | undefined>;
+  onVerified: () => void;
+  backUrl: string;
 }) {
   const deferred = event.deferred_assignment_enabled;
   const inlineAssignmentOffered = deferred && event.acceptance_policy === "PURCHASER_GROUP";
@@ -45,6 +61,18 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
   const [announcement, setAnnouncement] = useState("");
   const checkoutIdempotencyKey = useRef(crypto.randomUUID());
   const costs = useMemo(() => computeBuyerCosts(Math.round(totalDue * 100), event.pricing), [totalDue, event.pricing]);
+  const [stale, setStale] = useState<{ code: string; previousTotalMinor: number | null } | null>(null);
+  const [offerError, setOfferError] = useState<string | null>(null);
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  // The quote the NEXT order attempt asserts against. A ref so "Continue at
+  // new price" can swap in the fresh quote and submit in the same tick.
+  const quoteRef = useRef<Quote | undefined>(quote);
+  useEffect(() => { quoteRef.current = quote; }, [quote]);
+  // A typed code the server rejected is never sent with the order.
+  const rejected = quote?.status === "REJECTED";
+  const needsVerification = quote?.status === "VERIFICATION_REQUIRED" && (offer?.promo_code || offer?.offer_token);
+  const amounts = quote ? amountsFromQuote(quote) : { currency: event.currency_code, ...costs };
+  const payableMinor = quote ? quote.total_minor : Math.round(totalDue * 100);
   const orderQuestions = event.questions.filter((q) => q.scope === "ORDER").sort((a, b) => a.sort_order - b.sort_order);
   const attendeeQuestions = event.questions.filter((q) => q.scope === "ATTENDEE").sort((a, b) => a.sort_order - b.sort_order);
   const productTypeById = new Map(event.products.map((p) => [p.id, p.type]));
@@ -59,17 +87,49 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
   const questionContext = { orderQuestions, attendeeQuestions, termsRequired };
 
   const mutation = useMutation({
-    mutationFn: () => createOrder(event.id, serializeCheckoutOrder(draft, cartItems, {
-      ...questionContext,
-      termsVersionId: event.terms?.version_id ?? null,
-      checkoutIdempotencyKey: checkoutIdempotencyKey.current,
-    })),
+    mutationFn: () => {
+      const q = quoteRef.current;
+      return createOrder(event.id, serializeCheckoutOrder(draft, cartItems, {
+        ...questionContext,
+        termsVersionId: event.terms?.version_id ?? null,
+        // A new key per attempt that asserts a different price: the same key
+        // with changed details would (correctly) be refused as a conflict.
+        checkoutIdempotencyKey: checkoutIdempotencyKey.current,
+        offer: q ? {
+          promo_code: q.status === "REJECTED" ? null : offer?.promo_code,
+          offer_token: q.status === "REJECTED" ? null : offer?.offer_token,
+          expected_discount_minor: q.discount_total_minor,
+        } : null,
+      }));
+    },
     onSuccess: (data: { order: Order }) => onOrderCreated(data.order),
     onError: (error: Error) => {
       if (error instanceof ApiError && error.code === "TERMS_VERSION_CHANGED") return setTermsVersionChanged(true);
+      if (error instanceof ApiError && isStaleOfferCode(error.code)) {
+        // The failed attempt never created an order, but its idempotency key
+        // is now bound to the old assertion — take a fresh one for the retry.
+        checkoutIdempotencyKey.current = crypto.randomUUID();
+        setStale({ code: error.code as string, previousTotalMinor: quoteRef.current?.total_minor ?? null });
+        void onRequote();
+        return;
+      }
+      if (error instanceof ApiError && error.code === "OFFER_VERIFICATION_REQUIRED") return setVerifyOpen(true);
+      if (error instanceof ApiError && error.code?.startsWith("OFFER_")) {
+        checkoutIdempotencyKey.current = crypto.randomUUID();
+        setOfferError(offerErrorMessage(error.code, error.message));
+        void onRequote();
+        return;
+      }
       notifications.show({ color: "red", message: error instanceof ApiError ? error.message : "Something went wrong." });
     },
   });
+
+  async function acceptNewPrice() {
+    const fresh = await onRequote();
+    if (fresh) quoteRef.current = fresh;
+    setStale(null);
+    mutation.mutate();
+  }
 
   const changeDraft = (patch: Partial<CheckoutDraft>) => onDraftChange((current) => ({ ...current, ...patch }));
 
@@ -195,7 +255,12 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
       <LegalDocumentLinksLine placement="ticket-checkout" className={classes.platformLegalNotice} linkClassName={classes.termsLink} />
     </Stack>
     {termsVersionChanged && <Alert color="orange" title="Terms & Conditions updated"><Stack gap="xs"><Text size="sm">The organizer published new Terms &amp; Conditions. Reload to review them before continuing.</Text><Button size="xs" style={{ alignSelf: "flex-start" }} onClick={() => window.location.reload()}>Reload page</Button></Stack></Alert>}
-    {totalDue > 0 && <Card withBorder radius="md" p="md"><OrderCostBreakdown amounts={{ currency: event.currency_code, subtotalMinor: costs.subtotalMinor, serviceFeeMinor: costs.serviceFeeMinor, taxMinor: costs.taxMinor, totalMinor: costs.totalMinor }} /></Card>}
-    <Group justify="space-between" wrap="wrap-reverse" gap="sm"><Button variant="subtle" color="gray" onClick={onEditTickets} disabled={mutation.isPending}>Edit tickets</Button><Button size="md" onClick={submit} loading={mutation.isPending} disabled={termsVersionChanged} style={{ flex: "1 1 auto" }}>{totalDue === 0 ? "Register for free" : "Continue to payment"}</Button></Group>
+    {(totalDue > 0) && <Card withBorder radius="md" p="md" aria-busy={quoteLoading} style={{ opacity: quoteLoading ? 0.7 : 1, transition: "opacity 120ms" }}><OrderCostBreakdown amounts={{ ...amounts, discountLabel: quote?.offer?.name ?? null }} /></Card>}
+    {offerError && <Alert color="red" role="alert" withCloseButton onClose={() => setOfferError(null)} title="Offer not applied"><Group justify="space-between" gap="xs"><Text size="sm">{offerError}</Text>{(offer?.promo_code || offer?.offer_token) && <Button size="compact-xs" variant="default" onClick={() => { setOfferError(null); onRemoveOffer(); }}>Remove code</Button>}</Group></Alert>}
+    {rejected && !offerError && !stale && <Alert color="orange" role="status" title="Code not applied"><Group justify="space-between" gap="xs"><Text size="sm">{offerErrorMessage(quote?.code, quote?.message ?? undefined)}</Text><Button size="compact-xs" variant="default" onClick={onRemoveOffer}>Remove code</Button></Group></Alert>}
+    {needsVerification && <Alert color="blue" role="status" title="Verify your email"><Group justify="space-between" gap="xs"><Text size="sm">This offer is limited per customer. Verify your email to use it.</Text><Group gap="xs"><Button size="compact-xs" onClick={() => setVerifyOpen(true)}>Verify email</Button><Button size="compact-xs" variant="default" onClick={onRemoveOffer}>Remove code</Button></Group></Group></Alert>}
+    {stale && <StaleOfferPanel code={stale.code} currency={event.currency_code} previousTotalMinor={stale.previousTotalMinor} newTotalMinor={quote?.total_minor ?? null} busy={mutation.isPending || quoteLoading} onAccept={() => void acceptNewPrice()} onBack={() => { window.location.assign(backUrl); }} />}
+    <OfferVerifyModal opened={verifyOpen} onClose={() => setVerifyOpen(false)} onVerified={onVerified} returnPath={typeof window === "undefined" ? backUrl : window.location.pathname} defaultEmail={draft.email} />
+    <Group justify="space-between" wrap="wrap-reverse" gap="sm"><Button variant="subtle" color="gray" onClick={onEditTickets} disabled={mutation.isPending}>Edit tickets</Button><Button size="md" onClick={submit} loading={mutation.isPending} disabled={termsVersionChanged || !!needsVerification || !!stale} style={{ flex: "1 1 auto" }}>{payableMinor === 0 ? (totalDue === 0 ? "Register for free" : "Complete registration") : "Continue to payment"}</Button></Group>
   </Stack>;
 }

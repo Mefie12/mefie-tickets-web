@@ -7,11 +7,13 @@ import { formatMoney } from "@/lib/money";
 
 export const ticketLineKey = (productId: number, optionId: number | null) => `${productId}:${optionId ?? "direct"}`;
 
-export function TicketSelector({ products, quantities, onQuantityChange, currencyCode }: {
+export function TicketSelector({ products, quantities, onQuantityChange, currencyCode, lineDiscounts }: {
   products: PublicProduct[];
   quantities: Record<string, number>;
   onQuantityChange: (productId: number, optionId: number | null, quantity: number) => void;
   currencyCode: string;
+  /** Per-line offer badge (see lib/offerLineBadges.ts), keyed by ticketLineKey. */
+  lineDiscounts?: Record<string, { badge: string }>;
 }) {
   if (products.length === 0) return <Text c="dimmed" size="sm">No tickets available for this event yet.</Text>;
 
@@ -19,11 +21,13 @@ export function TicketSelector({ products, quantities, onQuantityChange, currenc
     product.type === "TIERED" ? product.options?.map((option) => (
       <TicketOptionRow key={ticketLineKey(product.id, option.id)} product={product} option={option}
         quantity={quantities[ticketLineKey(product.id, option.id)] ?? 0}
-        onChange={(quantity) => onQuantityChange(product.id, option.id, quantity)} currencyCode={currencyCode} />
+        onChange={(quantity) => onQuantityChange(product.id, option.id, quantity)} currencyCode={currencyCode}
+        discountBadge={lineDiscounts?.[ticketLineKey(product.id, option.id)]?.badge} />
     )) : (
       <TicketOptionRow key={ticketLineKey(product.id, null)} product={product} option={null}
         quantity={quantities[ticketLineKey(product.id, null)] ?? 0}
-        onChange={(quantity) => onQuantityChange(product.id, null, quantity)} currencyCode={currencyCode} />
+        onChange={(quantity) => onQuantityChange(product.id, null, quantity)} currencyCode={currencyCode}
+        discountBadge={lineDiscounts?.[ticketLineKey(product.id, null)]?.badge} />
     )
   ))}</Stack>;
 }
@@ -75,9 +79,9 @@ function QuantityStepper({ value, onChange, max, disabled }: {
   );
 }
 
-function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: {
+function TicketOptionRow({ product, option, quantity, onChange, currencyCode, discountBadge }: {
   product: PublicProduct; option: PublicTicketOption | null; quantity: number;
-  onChange: (quantity: number) => void; currencyCode: string;
+  onChange: (quantity: number) => void; currencyCode: string; discountBadge?: string;
 }) {
   const status = option?.status ?? (product.is_sold_out ? "SOLD_OUT" : product.is_on_sale ? "AVAILABLE" : "PAUSED");
   const available = option ? option.is_available : product.is_on_sale && !product.is_sold_out;
@@ -109,6 +113,10 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode }: 
           <Text fw={500} size="sm" c={textColor} style={{ overflowWrap: "anywhere" }}>{heading}</Text>
           <Text fw={500} size="sm" c={textColor} style={{ whiteSpace: "nowrap" }}>{formatMoney(price, currencyCode)}</Text>
         </Group>
+        {discountBadge && available && (
+          // Savings colour: 4.5:1+ on this card's always-light background.
+          <Text size="xs" fw={600} c="#18794e" role="status">{discountBadge}</Text>
+        )}
         {(subtitleParts.length > 0 || !available) && (
           <Group justify="space-between" align="center" gap="xs">
             <Text size="xs" c={mutedColor}>{subtitleParts.join(" · ")}</Text>

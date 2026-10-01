@@ -58,6 +58,10 @@ export type CreateOrderInput = {
   terms_accepted?: boolean;
   terms_version_id?: number;
   checkout_idempotency_key?: string;
+  /** Offer activation (mutually exclusive) and the discount the buyer was last shown — an assertion only, never a price. */
+  promo_code?: string;
+  offer_token?: string;
+  expected_discount_minor?: number;
 };
 
 export type OrderTermsAcceptance = {
@@ -79,6 +83,11 @@ export type OrderItemSummary = {
   quantity: number;
   item_total: string;
   currency_code: string;
+  /** Offers: original unit price and the line's discount (minor units); discount_minor is 0 when none applied. */
+  original_price_minor?: number | null;
+  discounted_units?: number;
+  discount_minor?: number;
+  final_total_minor?: number | null;
 };
 
 export type OrderAttendeeSummary = {
@@ -100,6 +109,10 @@ export type Order = {
   platform_fee: string;
   processing_fee: string;
   total_amount: string;
+  /** Offers: what the buyer saved, and the pre-discount subtotal (minor units). */
+  discount_total_minor?: number;
+  gross_subtotal_minor?: number;
+  offer_name?: string | null;
   currency: string;
   /** Who each fee is charged to; a fee row is shown to the buyer only when its bearer is "ATTENDEE". */
   tax_bearer: "ATTENDEE" | "ORGANIZER" | null;

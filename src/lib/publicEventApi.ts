@@ -1,3 +1,4 @@
+import type { PublicOffer } from "@/lib/offersApi";
 /**
  * Types matching the backend's app/Http/Resources/Public/* Resource
  * classes — see PublicEventResource, PublicProductResource,
@@ -254,4 +255,6 @@ export type PublicEvent = {
   acceptance_policy: string | null;
   /** UTC assignment/reassignment cutoff; null means the organizer has not set one. */
   admission_closes_at: string | null;
+  /** The single currently-usable automatic offer (public fields only), or null. Code offers are never advertised. */
+  automatic_offer: PublicOffer | null;
 };
