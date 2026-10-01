@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Badge, Button, Card, Group, Progress, SegmentedControl, SimpleGrid, Stack, Table, Text, Title, UnstyledButton } from "@mantine/core";
-import { IconBolt, IconDiscount2, IconPercentage, IconPlus, IconTicket } from "@tabler/icons-react";
+import { Badge, Card, Group, Progress, SegmentedControl, SimpleGrid, Stack, Table, Text, Title, UnstyledButton } from "@mantine/core";
+import { IconBolt, IconDiscount2, IconPercentage, IconTicket } from "@tabler/icons-react";
 import { listOffers, type Offer, type OfferStatus } from "@/lib/offersApi";
 import { discountLabel, STATUS_COLOR, STATUS_LABEL } from "@/lib/offerFormat";
 import { formatEventDate } from "@/lib/eventDateTime";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
+import { CopyableCode } from "@/components/CopyableCode";
+import { OfferRowMenu } from "@/components/OfferRowMenu";
+import { CreateOfferMenu } from "@/components/CreateOfferMenu";
+import type { OfferTicketType } from "@/lib/offerInventory";
 
 type Filter = "ALL" | OfferStatus;
 
@@ -16,10 +20,12 @@ type Filter = "ALL" | OfferStatus;
  * Organizer offers list for one event: status tabs, a table with a usage
  * meter per offer, and a purposeful empty state with three starting points.
  */
-export function OffersList({ eventId, timezone, initialOffers, canManage = true }: {
+export function OffersList({ eventId, timezone, initialOffers, inventory, publicEventPath, canManage = true }: {
   eventId: number;
   timezone: string;
   initialOffers: Offer[];
+  inventory: OfferTicketType[];
+  publicEventPath: string;
   canManage?: boolean;
 }) {
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -31,7 +37,7 @@ export function OffersList({ eventId, timezone, initialOffers, canManage = true 
   if (all.length === 0) {
     return (
       <Stack gap="lg">
-        <Header eventId={eventId} canManage={canManage} />
+        <Header eventId={eventId} canManage={false} />
         <Card withBorder radius="lg" p="xl">
           <Stack gap="lg" align="center" ta="center" maw={560} mx="auto">
             <IconDiscount2 size={36} stroke={1.5} />
@@ -70,7 +76,7 @@ export function OffersList({ eventId, timezone, initialOffers, canManage = true 
       />
 
       <Card withBorder radius="lg" p={0}>
-        <TableScrollShadow minWidth={760}>
+        <TableScrollShadow minWidth={820}>
           <Table verticalSpacing="sm" horizontalSpacing="md" highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -79,11 +85,12 @@ export function OffersList({ eventId, timezone, initialOffers, canManage = true 
                 <Table.Th>Schedule</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th w={190}>Tickets discounted</Table.Th>
+                <Table.Th w={56}><span style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)" }}>Actions</span></Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {visible.length === 0 && (
-                <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" size="sm" ta="center" py="md">No {filter.toLowerCase()} offers.</Text></Table.Td></Table.Tr>
+                <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" size="sm" ta="center" py="md">No {filter.toLowerCase()} offers.</Text></Table.Td></Table.Tr>
               )}
               {visible.map((offer) => {
                 const limit = offer.global_ticket_limit;
@@ -96,7 +103,7 @@ export function OffersList({ eventId, timezone, initialOffers, canManage = true 
                       </UnstyledButton>
                       <Group gap={6} mt={2}>
                         <Badge size="xs" variant="outline" color="gray">{offer.activation === "CODE" ? "Code" : "Automatic"}</Badge>
-                        {offer.activation === "CODE" && offer.code && <Text size="xs" c="dimmed" ff="monospace">{offer.code}</Text>}
+                        {offer.activation === "CODE" && offer.code && <CopyableCode value={offer.code} />}
                       </Group>
                     </Table.Td>
                     <Table.Td><Text size="sm">{discountLabel(offer)}</Text></Table.Td>
@@ -116,6 +123,9 @@ export function OffersList({ eventId, timezone, initialOffers, canManage = true 
                         )}
                       </Stack>
                     </Table.Td>
+                    <Table.Td ta="right">
+                      <OfferRowMenu offer={offer} eventId={eventId} timezone={timezone} inventory={inventory} publicEventPath={publicEventPath} canManage={canManage} />
+                    </Table.Td>
                   </Table.Tr>
                 );
               })}
@@ -134,7 +144,7 @@ function Header({ eventId, canManage }: { eventId: number; canManage: boolean })
         <Title order={2} fz={24}>Offers</Title>
         <Text size="sm" c="dimmed">Discount codes, share links and automatic sales for this event.</Text>
       </Stack>
-      {canManage && <Button component={Link} href={`/events/${eventId}/offers/new`} leftSection={<IconPlus size={16} />}>Create offer</Button>}
+      {canManage && <CreateOfferMenu eventId={eventId} />}
     </Group>
   );
 }

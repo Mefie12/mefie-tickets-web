@@ -74,8 +74,22 @@ function defaultWindow(timezone: string, eventStart: string | null): { starts: s
   return { starts, ends };
 }
 
-function initialState(args: { initial?: Offer; template?: Template; timezone: string; eventStart: string | null }): FormState {
-  const { initial, template, timezone, eventStart } = args;
+function initialState(args: { initial?: Offer; prefill?: Offer; template?: Template; timezone: string; eventStart: string | null }): FormState {
+  const { initial, prefill, template, timezone, eventStart } = args;
+  if (!initial && prefill) {
+    // Duplicate: same economics, scope and limits; a blank code (codes are unique per event, so the
+    // server generates one), and a fresh schedule that starts now. The original's end is kept
+    // only if it is still in the future.
+    const fresh = defaultWindow(timezone, eventStart);
+    const originalEnd = utcIsoToLocalInput(prefill.ends_at, timezone);
+    return {
+      ...initialState({ initial: prefill, timezone, eventStart }),
+      name: `${prefill.name} (copy)`,
+      code: "",
+      starts: fresh.starts,
+      ends: new Date(prefill.ends_at) > new Date() ? originalEnd : fresh.ends,
+    };
+  }
   if (initial) {
     return {
       name: initial.name,
@@ -119,7 +133,7 @@ const generateCode = () => Array.from({ length: 8 }, () => CODE_ALPHABET[Math.fl
  * converted to basis points / minor units here, and the server validates
  * everything again — including that the discounted price still covers fees.
  */
-export function OfferForm({ eventId, currency, timezone, eventStart, inventory, otherOffers, initial, template, publicEventPath, onSaved }: {
+export function OfferForm({ eventId, currency, timezone, eventStart, inventory, otherOffers, initial, prefill, template, publicEventPath, onSaved }: {
   eventId: number;
   currency: string;
   timezone: string;
@@ -127,6 +141,8 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
   inventory: OfferTicketType[];
   otherOffers: Offer[];
   initial?: Offer;
+  /** Duplicate: start a new draft from this existing offer (never edits it). */
+  prefill?: Offer;
   template?: Template;
   publicEventPath?: string;
   /** Edit mode: called after a successful save so the host can leave edit mode (the URL doesn't change). */
@@ -134,7 +150,7 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<FormState>(() => initialState({ initial, template, timezone, eventStart }));
+  const [form, setForm] = useState<FormState>(() => initialState({ initial, prefill, template, timezone, eventStart }));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   // Client-side format feedback for the promo code, shown when the field is left (blank = auto-generate).
@@ -219,6 +235,11 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
           mutation.mutate();
         }}>
           <Stack gap="xl">
+            {prefill && !initial && (
+              <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />} title={`Duplicating “${prefill.name}”`}>
+                This is a new draft. The discount, tickets and limits are copied; the code is left blank (a new one is generated), and the schedule starts now. The original isn’t changed.
+              </Alert>
+            )}
             {formError && <Alert color="red" role="alert" icon={<IconAlertTriangle size={18} />}>{formError}</Alert>}
 
             <Section title="1. Name and how it’s used">

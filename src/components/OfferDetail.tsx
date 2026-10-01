@@ -2,20 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Badge, Button, Card, Divider, Group, Progress, SimpleGrid, Stack, Table, Text, Textarea, Title } from "@mantine/core";
-import { modals } from "@mantine/modals";
-import { notifications } from "@mantine/notifications";
-import { IconArrowLeft, IconInfoCircle, IconLock } from "@tabler/icons-react";
-import { ApiError } from "@/lib/authApi";
-import { deleteOffer, getOffer, offerAction, type Offer, type OfferAction, type OfferReport } from "@/lib/offersApi";
-import { offerErrorMessage } from "@/lib/offerErrors";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, Anchor, Badge, Breadcrumbs, Button, Card, Divider, Group, Progress, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { IconArrowLeft, IconCopy, IconInfoCircle, IconLock } from "@tabler/icons-react";
+import { getOffer, type Offer, type OfferReport } from "@/lib/offersApi";
+import { useOfferActions } from "@/lib/useOfferActions";
 import { discountLabel, shareUrl, STATUS_COLOR, STATUS_LABEL } from "@/lib/offerFormat";
 import { scopeLabels, type OfferTicketType } from "@/lib/offerInventory";
 import { formatMinorAmount } from "@/lib/money";
 import { formatEventDateTime } from "@/lib/eventDateTime";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
+import { CopyableCode } from "@/components/CopyableCode";
 import { OfferForm } from "@/components/OfferForm";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
 
@@ -25,12 +23,14 @@ import { TableScrollShadow } from "@/components/TableScrollShadow";
  * economics are read-only with a clear "locked" explanation, and only
  * pause / resume / end remain.
  */
-export function OfferDetail({ eventId, currency, timezone, eventStart, publicEventPath, inventory, otherOffers, initialOffer, initialReport, canManage = true }: {
+export function OfferDetail({ eventId, currency, timezone, eventStart, publicEventPath, eventStatus, inventory, otherOffers, initialOffer, initialReport, canManage = true }: {
   eventId: number;
   currency: string;
   timezone: string;
   eventStart: string | null;
   publicEventPath: string;
+  /** The event's own status: only a LIVE event has a public page for the code/link to open. */
+  eventStatus: string;
   inventory: OfferTicketType[];
   otherOffers: Offer[];
   initialOffer: Offer;
@@ -38,92 +38,19 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
   canManage?: boolean;
 }) {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["offer", eventId, initialOffer.id],
     queryFn: () => getOffer(eventId, initialOffer.id),
     initialData: { offer: initialOffer, report: initialReport },
   });
   const { offer, report } = query.data;
-  const [editing, setEditing] = useState(false);
+  const searchParams = useSearchParams();
+  // ?edit=1 (from the list's row menu) opens a draft straight in edit mode.
+  const [editing, setEditing] = useState(() => initialOffer.status === "DRAFT" && searchParams.get("edit") === "1");
   const [origin, setOrigin] = useState("");
   useEffect(() => { Promise.resolve().then(() => setOrigin(window.location.origin)); }, []);
 
-  const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ["offer", eventId, offer.id] });
-    void queryClient.invalidateQueries({ queryKey: ["offers", eventId] });
-    router.refresh();
-  };
-
-  const act = useMutation({
-    mutationFn: ({ action, reason }: { action: OfferAction; reason?: string }) => offerAction(eventId, offer.id, action, reason),
-    onSuccess: (_, { action }) => {
-      notifications.show({ color: "teal", message: { activate: "Offer is live.", pause: "Offer paused.", resume: "Offer resumed.", end: "Offer ended." }[action] });
-      refresh();
-    },
-    onError: (error: Error) => {
-      const code = error instanceof ApiError ? error.code : undefined;
-      notifications.show({ color: "red", title: "Couldn’t update the offer", message: offerErrorMessage(code, error.message), autoClose: 8000 });
-    },
-  });
-
-  const remove = useMutation({
-    mutationFn: () => deleteOffer(eventId, offer.id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["offers", eventId] });
-      notifications.show({ color: "teal", message: "Draft deleted." });
-      router.push(`/events/${eventId}/offers`);
-      router.refresh();
-    },
-    onError: (error: Error) => notifications.show({ color: "red", message: offerErrorMessage(error instanceof ApiError ? error.code : undefined, error.message) }),
-  });
-
-  function confirmActivate() {
-    modals.openConfirmModal({
-      title: "Make this offer live?",
-      centered: true,
-      labels: { confirm: "Activate offer", cancel: "Not yet" },
-      children: (
-        <Stack gap="sm">
-          <Text size="sm">{offer.name} — {discountLabel(offer)} on {scopeLabels(offer.scope ?? [], inventory).join(", ") || "no tickets"}.</Text>
-          <Text size="sm">Starts {formatEventDateTime(offer.starts_at, timezone)} and ends {formatEventDateTime(offer.ends_at, timezone)}.</Text>
-          <Alert color="yellow" variant="light" icon={<IconLock size={16} />}>
-            Once active, the discount, tickets, dates, limits and code can’t be changed. You can still pause or end the offer at any time.
-          </Alert>
-        </Stack>
-      ),
-      onConfirm: () => act.mutate({ action: "activate" }),
-    });
-  }
-
-  function confirmWithReason(action: "pause" | "end") {
-    let reason = "";
-    modals.openConfirmModal({
-      title: action === "pause" ? "Pause this offer?" : "End this offer for good?",
-      centered: true,
-      labels: { confirm: action === "pause" ? "Pause offer" : "End offer", cancel: "Keep it" },
-      confirmProps: { color: action === "end" ? "red" : undefined },
-      children: (
-        <Stack gap="sm">
-          <Text size="sm">
-            {action === "pause"
-              ? "New customers won’t be able to use it. People already in checkout can finish their purchase. You can resume it whenever you like."
-              : "Nobody will be able to use it any more, and it can’t be reopened. People already in checkout can finish. Past orders and results are kept."}
-          </Text>
-          <Textarea label="Reason (optional)" description="Recorded in the activity log." autosize minRows={2} maxLength={500} onChange={(e) => { reason = e.currentTarget.value; }} />
-        </Stack>
-      ),
-      onConfirm: () => act.mutate({ action, reason: reason.trim() || undefined }),
-    });
-  }
-
-  function confirmDelete() {
-    modals.openConfirmModal({
-      title: "Delete this draft?", centered: true, labels: { confirm: "Delete draft", cancel: "Keep it" }, confirmProps: { color: "red" },
-      children: <Text size="sm">This draft hasn’t been used by anyone. Deleting it can’t be undone.</Text>,
-      onConfirm: () => remove.mutate(),
-    });
-  }
+  const actions = useOfferActions({ eventId, timezone, inventory, onDeleted: () => router.push(`/events/${eventId}/offers`) });
 
   const link = offer.share_token && origin ? shareUrl(`${origin}${publicEventPath}`, offer.share_token) : null;
   const limit = report.global_ticket_limit;
@@ -133,7 +60,14 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
 
   return (
     <Stack gap="lg">
-      <Button component={Link} href={`/events/${eventId}/offers`} variant="subtle" color="gray" size="compact-sm" leftSection={<IconArrowLeft size={14} />} style={{ alignSelf: "flex-start" }}>All offers</Button>
+      {/* Always-visible way back to the list: breadcrumb for orientation + an explicit button. */}
+      <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+        <Breadcrumbs separator="›" aria-label="Breadcrumb">
+          <Anchor component={Link} href={`/events/${eventId}/offers`} size="sm">Offers</Anchor>
+          <Text size="sm" c="dimmed" style={{ overflowWrap: "anywhere" }}>{offer.name}</Text>
+        </Breadcrumbs>
+        <Button component={Link} href={`/events/${eventId}/offers`} variant="default" size="compact-md" leftSection={<IconArrowLeft size={14} />}>Back to all offers</Button>
+      </Group>
 
       <Group justify="space-between" align="flex-start" wrap="wrap">
         <Stack gap={6}>
@@ -143,13 +77,15 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
         </Stack>
         {canManage && (
           <Group gap="xs">
+            {/* Any offer can be duplicated into a new editable draft — the way to change the terms of a live one. */}
+            <Button component={Link} href={`/events/${eventId}/offers/new?from=${offer.id}`} variant="default" leftSection={<IconCopy size={14} />}>Duplicate</Button>
             {offer.status === "DRAFT" && <>
               <Button variant="default" onClick={() => setEditing((e) => !e)}>{editing ? "Cancel editing" : "Edit"}</Button>
-              <Button color="red" variant="subtle" onClick={confirmDelete} loading={remove.isPending}>Delete</Button>
-              <Button onClick={confirmActivate} loading={act.isPending} disabled={(offer.scope ?? []).length === 0}>Activate</Button>
+              <Button color="red" variant="subtle" onClick={() => actions.remove(offer)} loading={actions.busy}>Delete</Button>
+              <Button onClick={() => actions.activate(offer)} loading={actions.busy} disabled={(offer.scope ?? []).length === 0}>Activate</Button>
             </>}
-            {offer.status === "ACTIVE" && <><Button variant="default" onClick={() => confirmWithReason("pause")} loading={act.isPending}>Pause</Button><Button color="red" variant="light" onClick={() => confirmWithReason("end")}>End</Button></>}
-            {offer.status === "PAUSED" && <><Button onClick={() => act.mutate({ action: "resume" })} loading={act.isPending}>Resume</Button><Button color="red" variant="light" onClick={() => confirmWithReason("end")}>End</Button></>}
+            {offer.status === "ACTIVE" && <><Button variant="default" onClick={() => actions.pause(offer)} loading={actions.busy}>Pause</Button><Button color="red" variant="light" onClick={() => actions.end(offer)}>End</Button></>}
+            {offer.status === "PAUSED" && <><Button onClick={() => actions.resume(offer)} loading={actions.busy}>Resume</Button><Button color="red" variant="light" onClick={() => actions.end(offer)}>End</Button></>}
           </Group>
         )}
       </Group>
@@ -212,15 +148,15 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
               <Stack gap="md">
                 <Text fw={600}>Share this offer</Text>
                 <Group justify="space-between" wrap="nowrap" gap="sm">
-                  <Stack gap={0}><Text size="xs" c="dimmed">Promo code</Text><Text ff="monospace" fw={600} fz={18}>{offer.code}</Text></Stack>
-                  {offer.code && <CopyLinkButton value={offer.code} />}
+                  <Stack gap={6}><Text size="xs" c="dimmed">Promo code — click to copy</Text>{offer.code && <CopyableCode value={offer.code} size="lg" />}</Stack>
                 </Group>
                 <Divider />
                 <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-end">
                   <Stack gap={0} style={{ minWidth: 0 }}><Text size="xs" c="dimmed">Share link — applies the offer without showing the code</Text><Text size="sm" style={{ overflowWrap: "anywhere" }}>{link ?? "…"}</Text></Stack>
                   {link && <CopyLinkButton value={link} />}
                 </Group>
-                {offer.status === "DRAFT" && <Text size="xs" c="dimmed">The code and link only work once the offer is active.</Text>}
+                {eventStatus !== "LIVE" && <EventNotLiveNotice eventId={eventId} offerId={offer.id} eventStatus={eventStatus} />}
+                {offer.status !== "ACTIVE" && <Text size="xs" c="dimmed">The code and link only work once the offer is active{offer.status === "PAUSED" ? " again" : ""}.</Text>}
               </Stack>
             </Card>
           )}
@@ -237,7 +173,7 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
               <Config label="Per customer" value={offer.per_customer_ticket_limit ? `${offer.per_customer_ticket_limit} (email verification required)` : "No limit"} />
               <Config label="Per order" value={offer.per_order_ticket_limit ? String(offer.per_order_ticket_limit) : "No limit"} />
               {offer.internal_description && <Config label="Internal note" value={offer.internal_description} />}
-              {offer.is_locked && <Text size="xs" c="dimmed">The discount, tickets, dates, limits and code can’t be changed once an offer has been activated. Pause or end it and create a new one instead.</Text>}
+              {offer.is_locked && <Text size="xs" c="dimmed">The discount, tickets, dates, limits and code can’t be changed once an offer has been activated. To change them, duplicate this offer into a new draft (button at the top), then end this one when the new one is live.</Text>}
             </Stack>
           </Card>
         </>
@@ -264,5 +200,35 @@ function Config({ label, value }: { label: string; value: string }) {
       <Text size="sm" c="dimmed" style={{ flex: "0 0 40%" }}>{label}</Text>
       <Text size="sm" ta="right" style={{ overflowWrap: "anywhere" }}>{value}</Text>
     </Group>
+  );
+}
+
+/**
+ * The share link opens the event's public page, which only exists once the
+ * event is published. Instead of leaving the organizer to find the switch,
+ * this deep-links to Event settings with the publish confirmation already
+ * open (and brings them back here afterwards); any publish blocker (missing
+ * cover image, payment setup, …) is handled by that confirmation.
+ */
+function EventNotLiveNotice({ eventId, offerId, eventStatus }: { eventId: number; offerId: number; eventStatus: string }) {
+  const back = encodeURIComponent(`/events/${eventId}/offers/${offerId}`);
+  const archived = eventStatus === "ARCHIVED";
+
+  return (
+    <Alert color="yellow" variant="light" icon={<IconInfoCircle size={18} />} title={archived ? "This event is archived" : "This event isn’t published yet"}>
+      <Stack gap="sm">
+        <Text size="sm">
+          {archived
+            ? "Archived events have no public page, so this link and code can’t be used. Restore the event as a draft, then publish it."
+            : "The link and code open the event’s public page, which doesn’t exist until the event is published. Until then, buyers see “page does not exist”."}
+        </Text>
+        <Group gap="xs">
+          <Button component={Link} href={`/events/${eventId}/settings?${archived ? "" : "publish=1&"}returnTo=${back}`} size="compact-md">
+            {archived ? "Open event settings" : "Publish event"}
+          </Button>
+          {!archived && <Text size="xs" c="dimmed">You’ll confirm on the next screen, then come straight back here.</Text>}
+        </Group>
+      </Stack>
+    </Alert>
   );
 }
