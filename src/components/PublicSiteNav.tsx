@@ -30,7 +30,7 @@ import {
 } from "@/components/PublicAccountMenu";
 
 const organizerLinks = [
-  { label: "Create Organizer Account", href: "/organizers/register", icon: <IconBuildingStore size={16} /> },
+  { label: "Create Organization Account", href: "/organizers/register", icon: <IconBuildingStore size={16} /> },
   { label: "Log in to Organization Account", href: "/organizers/login", icon: <IconLogin size={16} /> },
   { label: "Explore Mefie for Organizers", href: "/organizers", icon: <IconInfoCircle size={16} /> },
 ];

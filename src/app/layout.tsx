@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "@mantine/core/styles.css";
 import "@mantine/notifications/styles.css";
 import "@mantine/tiptap/styles.css";
@@ -33,7 +32,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" {...mantineHtmlProps}>
       <head>
-        <Script id="mantine-color-scheme" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: colorSchemeScript }} />
+        <script id="mantine-color-scheme" suppressHydrationWarning dangerouslySetInnerHTML={{ __html: colorSchemeScript }} />
       </head>
       <body>
         <Providers>{children}</Providers>
