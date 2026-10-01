@@ -284,7 +284,11 @@ export function validateCheckoutDraft(draft: CheckoutDraft, context: CheckoutQue
 export function serializeCheckoutOrder(
   draft: CheckoutDraft,
   cartItems: CheckoutCartLine[],
-  context: CheckoutQuestionContext & { termsVersionId: number | null; checkoutIdempotencyKey: string },
+  context: CheckoutQuestionContext & {
+    termsVersionId: number | null;
+    checkoutIdempotencyKey: string;
+    offer?: { promo_code?: string | null; offer_token?: string | null; expected_discount_minor: number } | null;
+  },
 ): CreateOrderInput {
   return {
     first_name: draft.firstName,
@@ -295,6 +299,13 @@ export function serializeCheckoutOrder(
     items: cartItems.map(({ product_id, ticket_option_id, quantity }) => ({ product_id, ticket_option_id, quantity })),
     order_answers: context.orderQuestions.map((q) => ({ question_id: q.id, answer: draft.orderAnswers[q.id] ?? "" })),
     notify_attendees: draft.notifyAttendees,
+    ...(context.offer
+      ? {
+          ...(context.offer.promo_code ? { promo_code: context.offer.promo_code } : {}),
+          ...(context.offer.offer_token ? { offer_token: context.offer.offer_token } : {}),
+          expected_discount_minor: context.offer.expected_discount_minor,
+        }
+      : {}),
     ...(context.termsRequired && context.termsVersionId !== null
       ? { terms_accepted: draft.termsAccepted, terms_version_id: context.termsVersionId }
       : {}),

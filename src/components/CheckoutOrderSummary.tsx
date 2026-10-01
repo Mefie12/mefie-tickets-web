@@ -3,7 +3,7 @@ import { IconCalendar, IconMapPin, IconWorld } from "@tabler/icons-react";
 import type { Order } from "@/lib/checkoutApi";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import type { PublicEvent } from "@/lib/publicEventApi";
-import { OrderSummaryCard, type OrderSummaryLine } from "@/components/OrderSummaryCard";
+import { OrderSummaryCard, type OrderSummaryDiscount, type OrderSummaryLine } from "@/components/OrderSummaryCard";
 
 /**
  * The checkout page's persistent Order Summary panel — event identity
@@ -14,9 +14,11 @@ import { OrderSummaryCard, type OrderSummaryLine } from "@/components/OrderSumma
 export function CheckoutOrderSummary({
   event,
   lines,
+  discount = null,
 }: {
   event: PublicEvent;
   lines: { order: Order } | { lines: OrderSummaryLine[] };
+  discount?: OrderSummaryDiscount | null;
 }) {
   const showVenue = event.location?.location_type === "IN_PERSON" || event.location?.location_type === "HYBRID";
   const showOnline = event.location?.location_type === "ONLINE" || event.location?.location_type === "HYBRID";
@@ -54,7 +56,7 @@ export function CheckoutOrderSummary({
       {"order" in lines ? (
         <OrderSummaryCard order={lines.order} />
       ) : (
-        <OrderSummaryCard lines={lines.lines} currency={event.currency_code} />
+        <OrderSummaryCard lines={lines.lines} currency={event.currency_code} discount={discount} />
       )}
     </Stack>
   );

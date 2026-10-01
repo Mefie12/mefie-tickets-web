@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NavLink, Stack, Text, Tooltip } from "@mantine/core";
 import {
+  IconDiscount2,
   IconGift,
   IconLayoutDashboard,
   IconRoute,
@@ -33,7 +34,8 @@ const sections: NavSection[] = [
     items: [
       { label: "Orders & Attendees", suffix: "/orders", icon: IconUsers, alsoActiveOn: ["/attendees"] },
       { label: "Responses", suffix: "/responses", icon: IconForms },
-      { label: "Complimentary", suffix: "/complimentary", icon: IconGift },
+      { label: "Offers", suffix: "/offers", icon: IconGift },
+      { label: "Complimentary", suffix: "/complimentary", icon: IconDiscount2 },
     ],
   },
   {
