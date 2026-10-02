@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import { IconDiscount2, IconTicket } from "@tabler/icons-react";
-import { cheapestPriceLabel, type PublicEvent } from "@/lib/publicEventApi";
+import { cheapestPriceLabel, eventHasPaidTickets, type PublicEvent } from "@/lib/publicEventApi";
 import { computeBuyerCosts } from "@/lib/fees";
 import { TicketSelector, ticketLineKey } from "@/components/TicketSelector";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
@@ -42,6 +42,9 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [quoteVersion, setQuoteVersion] = useState(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  // A promo code can only discount a price: an all-free event gets no promo box,
+  // ignores ?promo= / ?offer= links, and never requests quotes.
+  const offersApply = eventHasPaidTickets(event);
 
   // Restore the buyer's selection after a reload / coming back from checkout,
   // re-validated against the live event (unavailable lines dropped, quantities clamped).
@@ -58,6 +61,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   // Hydrate the offer input from ?promo= / ?offer= (campaign links), else from
   // what the buyer applied before navigating to checkout and back.
   useEffect(() => {
+    if (!offersApply) return;
     const params = new URLSearchParams(window.location.search);
     const fromUrlCode = params.get("promo")?.trim();
     const fromUrlToken = params.get("offer")?.trim();
@@ -70,7 +74,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         setOfferToken(stored.offer_token ?? null);
       }
     });
-  }, [event.id]);
+  }, [event.id, offersApply]);
 
   const shareOffer = useQuery<PublicOffer | null>({
     queryKey: ["share-offer", event.id, offerToken],
@@ -98,7 +102,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
     else clearCart(event.id);
   }, [cartHydrated, cartItems, event.id]);
 
-  const quoteEnabled = promoCode !== null || offerToken !== null || event.automatic_offer !== null;
+  const quoteEnabled = offersApply && (promoCode !== null || offerToken !== null || event.automatic_offer !== null);
   const { quote, isLoading: quoting, isStale: quoteStale, problem: quoteProblem, retryAt: quoteRetryAt, refetch: refetchQuote } = useOfferQuote({
     eventId: event.id,
     items: cartItems,
@@ -198,7 +202,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         currencyCode={event.currency_code}
       />
 
-      <PromoCodeField
+      {offersApply && <PromoCodeField
         appliedCode={promoCode}
         usingShareLink={offerToken !== null}
         quote={quote}
@@ -210,7 +214,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         onApply={(code) => { setOfferToken(null); setPromoCode(code); saveOffer(event.id, { promo_code: code, offer_token: null, expected_discount_minor: 0 }); }}
         onRemove={() => { setPromoCode(null); if (offerToken !== null) { setOfferToken(null); setBannerDismissed(true); } clearOffer(event.id); }}
         onVerify={() => setVerifyOpen(true)}
-      />
+      />}
       <QuoteProblemNotice problem={quoteProblem} retryAt={quoteRetryAt} retrying={quoting} onRetry={() => void refetchQuote()} />
 
       {cartItems.length > 0 && (

@@ -143,6 +143,17 @@ export function isEventFree(event: { products: PublicProduct[] }): boolean {
   return cheapestPrice(event) === 0;
 }
 
+/**
+ * True when at least one ticket type on the event costs money. A promo code
+ * can only discount a price, so an event whose every ticket is free or a
+ * plain registration has nothing for one to apply to. Deliberately
+ * independent of stock/sale windows (unlike isEventFree) so the answer never
+ * flips as tickets sell out, and a mixed free + paid event still counts.
+ */
+export function eventHasPaidTickets(event: { products: PublicProduct[] }): boolean {
+  return event.products.some((product) => product.type !== "FREE" && product.type !== "REGISTRATION");
+}
+
 export type PublicQuestion = {
   id: number;
   title: string;
