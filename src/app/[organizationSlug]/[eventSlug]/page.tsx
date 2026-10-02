@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: { params: Promise<{ organizat
 
   const eventResult = await getPublicEvent(organizationSlug, eventSlug);
   if (eventResult.status === 200 && eventResult.data.access_required) {
-    return { title: "Invitation required | Mefie Tickets", robots: { index: false, follow: false } };
+    return { title: "Invite-only event | Mefie Tickets", robots: { index: false, follow: false } };
   }
   if (eventResult.status === 200 && eventResult.data.event) {
     const { event } = eventResult.data;
@@ -55,7 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ organizat
   }
 
   const seriesResult = await getPublicSeries(organizationSlug, eventSlug);
-  if (seriesResult.status !== 200 || !seriesResult.data.event_series || seriesResult.data.access_required) return { title: "Invitation required | Mefie Tickets", robots: { index: false, follow: false } };
+  if (seriesResult.status !== 200 || !seriesResult.data.event_series || seriesResult.data.access_required) return { title: "Invite-only event | Mefie Tickets", robots: { index: false, follow: false } };
   const { event_series: series } = seriesResult.data;
   const description = series.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${series.title}.`;
   const canonical = `${APP_URL}/${series.organization.slug}/${series.slug}`;
