@@ -120,6 +120,10 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
         void onRequote();
         return;
       }
+      if (error instanceof ApiError && error.status === 429) {
+        // Our own rate limit, not the buyer's fault — nothing was charged or reserved.
+        return notifications.show({ color: "yellow", title: "Please wait a moment", message: `Lots of people are checking out right now. Try again in ${error.retryAfter ?? 10} seconds.` });
+      }
       notifications.show({ color: "red", message: error instanceof ApiError ? error.message : "Something went wrong." });
     },
   });

@@ -1,5 +1,5 @@
 import { formatBasisPointsAsPercent, formatMinorAmount } from "@/lib/money";
-import type { Offer, OfferStatus, PublicOffer } from "@/lib/offersApi";
+import type { Offer, OfferPhase, OfferStatus, PublicOffer } from "@/lib/offersApi";
 
 type DiscountShape = Pick<Offer | PublicOffer, "discount_type" | "discount_value" | "currency_code">;
 
@@ -32,6 +32,43 @@ export const STATUS_COLOR: Record<OfferStatus, string> = {
   PAUSED: "yellow",
   ENDED: "gray",
 };
+
+/** What organizers read: "Active" means usable right now; Scheduled/Expired are told apart from it. */
+export const PHASE_LABEL: Record<OfferPhase, string> = {
+  DRAFT: "Draft",
+  SCHEDULED: "Scheduled",
+  LIVE: "Active",
+  PAUSED: "Paused",
+  EXPIRED: "Expired",
+  ENDED: "Ended",
+};
+
+export const PHASE_COLOR: Record<OfferPhase, string> = {
+  DRAFT: "gray",
+  SCHEDULED: "blue",
+  LIVE: "teal",
+  PAUSED: "yellow",
+  EXPIRED: "gray",
+  ENDED: "gray",
+};
+
+export type OfferTab = "ALL" | "LIVE" | "SCHEDULED" | "DRAFT" | "PAUSED" | "ENDED";
+
+export const OFFER_TABS: { value: OfferTab; label: string }[] = [
+  { value: "ALL", label: "All" },
+  { value: "LIVE", label: "Active" },
+  { value: "SCHEDULED", label: "Scheduled" },
+  { value: "DRAFT", label: "Draft" },
+  { value: "PAUSED", label: "Paused" },
+  { value: "ENDED", label: "Ended" },
+];
+
+/** Expired offers (end time passed, not yet stored as ended) belong with the ended ones. */
+export const tabOfPhase = (phase: OfferPhase): Exclude<OfferTab, "ALL"> => (phase === "EXPIRED" ? "ENDED" : phase);
+
+export function offersByTab<T extends { phase: OfferPhase }>(offers: T[], tab: OfferTab): T[] {
+  return tab === "ALL" ? offers : offers.filter((o) => tabOfPhase(o.phase) === tab);
+}
 
 /** Share URL for a code offer, built from the public event URL the page passes in. */
 export function shareUrl(eventUrl: string, token: string): string {

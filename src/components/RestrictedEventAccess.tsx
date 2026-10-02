@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Button, Container, Stack, Text, Title } from "@mantine/core";
+import { Container, Stack, Text, Title } from "@mantine/core";
+import { LinkButton } from "@/components/LinkButton";
 import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { VerifyInviteFlow } from "@/components/VerifyInviteFlow";
@@ -17,18 +17,18 @@ export function RestrictedEventAccess({ next, inviteMaskedEmail }: { next: strin
     <PublicSiteHeader />
     <Container size="sm" py={100}>
       <Stack align="center" gap="md" ta="center">
-        <Title order={1}>Invitation required</Title>
+        <Title order={1}>This is an invite-only event</Title>
         {inviteMaskedEmail ? (
           <>
-            <Text c="dimmed">Verify it&apos;s you to view this event.</Text>
+            <Text c="dimmed">You were invited to this event. Verify it&apos;s you to view it.</Text>
             <Container size="xs" w="100%" p={0}>
               <VerifyInviteFlow maskedEmail={inviteMaskedEmail} />
             </Container>
           </>
         ) : (
           <>
-            <Text c="dimmed">Sign in with the email address that received the invitation to view this event.</Text>
-            <Button component={Link} href={`/login?next=${encodeURIComponent(next)}`}>Sign in</Button>
+            <Text c="dimmed">You&apos;re trying to view an invite-only event. Sign in with the email address that received the invitation to continue.</Text>
+            <LinkButton href={`/login?next=${encodeURIComponent(next)}`}>Sign in</LinkButton>
           </>
         )}
       </Stack>

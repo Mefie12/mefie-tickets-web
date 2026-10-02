@@ -47,6 +47,8 @@ export class ApiError extends Error {
   status: number;
   /** Machine-readable error code (e.g. EMAIL_NOT_VERIFIED, SESSION_REVOKED, RESEND_COOLDOWN) — see app/Exceptions/ApiException.php. Absent for ordinary field-validation errors. */
   code?: string;
+  /** Seconds to wait before retrying, from a 429's Retry-After header. */
+  retryAfter?: number;
 
   constructor(message: string, status: number, errors?: Record<string, string[]>, code?: string) {
     super(message);

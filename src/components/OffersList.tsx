@@ -5,8 +5,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Card, Group, Progress, SegmentedControl, SimpleGrid, Stack, Table, Text, Title, UnstyledButton } from "@mantine/core";
 import { IconBolt, IconDiscount2, IconPercentage, IconTicket } from "@tabler/icons-react";
-import { listOffers, type Offer, type OfferStatus } from "@/lib/offersApi";
-import { discountLabel, STATUS_COLOR, STATUS_LABEL } from "@/lib/offerFormat";
+import { listOffers, type Offer } from "@/lib/offersApi";
+import { discountLabel, OFFER_TABS, offersByTab, PHASE_COLOR, PHASE_LABEL, type OfferTab } from "@/lib/offerFormat";
 import { formatEventDate } from "@/lib/eventDateTime";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { CopyableCode } from "@/components/CopyableCode";
@@ -14,7 +14,6 @@ import { OfferRowMenu } from "@/components/OfferRowMenu";
 import { CreateOfferMenu } from "@/components/CreateOfferMenu";
 import type { OfferTicketType } from "@/lib/offerInventory";
 
-type Filter = "ALL" | OfferStatus;
 
 /**
  * Organizer offers list for one event: status tabs, a table with a usage
@@ -28,11 +27,10 @@ export function OffersList({ eventId, timezone, initialOffers, inventory, public
   publicEventPath: string;
   canManage?: boolean;
 }) {
-  const [filter, setFilter] = useState<Filter>("ALL");
+  const [filter, setFilter] = useState<OfferTab>("ALL");
   const offers = useQuery({ queryKey: ["offers", eventId], queryFn: () => listOffers(eventId).then((r) => r.offers), initialData: initialOffers });
   const all = offers.data;
-  const visible = filter === "ALL" ? all : all.filter((o) => o.status === filter);
-  const count = (status: OfferStatus) => all.filter((o) => o.status === status).length;
+  const visible = offersByTab(all, filter);
 
   if (all.length === 0) {
     return (
@@ -63,14 +61,8 @@ export function OffersList({ eventId, timezone, initialOffers, inventory, public
       <Header eventId={eventId} canManage={canManage} />
       <SegmentedControl
         value={filter}
-        onChange={(v) => setFilter(v as Filter)}
-        data={[
-          { value: "ALL", label: `All (${all.length})` },
-          { value: "ACTIVE", label: `Active (${count("ACTIVE")})` },
-          { value: "DRAFT", label: `Draft (${count("DRAFT")})` },
-          { value: "PAUSED", label: `Paused (${count("PAUSED")})` },
-          { value: "ENDED", label: `Ended (${count("ENDED")})` },
-        ]}
+        onChange={(v) => setFilter(v as OfferTab)}
+        data={OFFER_TABS.map((t) => ({ value: t.value, label: `${t.label} (${offersByTab(all, t.value).length})` }))}
         style={{ alignSelf: "flex-start", maxWidth: "100%", overflowX: "auto" }}
         aria-label="Filter offers by status"
       />
@@ -90,7 +82,7 @@ export function OffersList({ eventId, timezone, initialOffers, inventory, public
             </Table.Thead>
             <Table.Tbody>
               {visible.length === 0 && (
-                <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" size="sm" ta="center" py="md">No {filter.toLowerCase()} offers.</Text></Table.Td></Table.Tr>
+                <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" size="sm" ta="center" py="md">No {(OFFER_TABS.find((t) => t.value === filter)?.label ?? "").toLowerCase()} offers.</Text></Table.Td></Table.Tr>
               )}
               {visible.map((offer) => {
                 const limit = offer.global_ticket_limit;
@@ -111,8 +103,7 @@ export function OffersList({ eventId, timezone, initialOffers, inventory, public
                       <Text size="sm">{formatEventDate(offer.starts_at, timezone)} – {formatEventDate(offer.ends_at, timezone)}</Text>
                     </Table.Td>
                     <Table.Td>
-                      <Badge color={STATUS_COLOR[offer.status]} variant="light">{STATUS_LABEL[offer.status]}</Badge>
-                      {offer.status === "ACTIVE" && !offer.is_currently_eligible && <Text size="xs" c="dimmed" mt={2}>Outside its dates</Text>}
+                      <Badge color={PHASE_COLOR[offer.phase]} variant="light">{PHASE_LABEL[offer.phase]}</Badge>
                     </Table.Td>
                     <Table.Td>
                       <Stack gap={4}>

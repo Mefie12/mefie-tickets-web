@@ -15,6 +15,7 @@ export function relayResponse<T>(result: BackendResult<T>): NextResponse {
   const response = NULL_BODY_STATUSES.has(result.status)
     ? new NextResponse(null, { status: result.status })
     : NextResponse.json(result.data, { status: result.status });
+  if (result.retryAfter) response.headers.set("Retry-After", result.retryAfter);
   for (const cookie of result.setCookieHeaders) {
     response.headers.append("Set-Cookie", cookie);
   }
