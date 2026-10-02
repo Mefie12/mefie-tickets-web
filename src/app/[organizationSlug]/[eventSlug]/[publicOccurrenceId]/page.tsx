@@ -22,7 +22,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { organizationSlug, eventSlug, publicOccurrenceId } = await params;
   const result = await getPublicSeriesOccurrence(organizationSlug, eventSlug, publicOccurrenceId);
-  if (result.status !== 200 || result.data.access_required || !result.data.event_series) return { title: "Invitation required | Mefie Tickets", robots: { index: false, follow: false } };
+  if (result.status !== 200 || result.data.access_required || !result.data.event_series) return { title: "Invite-only event | Mefie Tickets", robots: { index: false, follow: false } };
   const { event_series: series } = result.data;
   const description = series.description.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200) || `Get tickets for ${series.title}.`;
   const canonical = `${APP_URL}/${series.organization.slug}/${series.slug}/${publicOccurrenceId}`;
