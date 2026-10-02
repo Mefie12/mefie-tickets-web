@@ -13,8 +13,9 @@ const SAVINGS = "light-dark(#18794e, #5fd39a)";
 
 /**
  * "Have a promo code?" — collapsed by default, expands to one field.
- * Always rendered (even for events with no code offers) so its presence
- * doesn't reveal which events have codes. Every state is announced via
+ * Rendered for every event that sells at least one paid ticket (even with no
+ * code offers) so its presence doesn't reveal which events have codes; the
+ * panel omits it for all-free events, where there is no price to discount. Every state is announced via
  * aria-live; messages come from lib/offerErrors.ts. The state shown is
  * derived from the server quote, never decided client-side.
  */
