@@ -61,6 +61,13 @@ export const sendNewScannerSetupCode = (eventId: number, setupId: string) =>
     { method: "POST" },
   );
 
+/** Re-show a lost link/QR. Rotates the token: the previous link and QR stop working. */
+export const regenerateScannerSetupLink = (eventId: number, setupId: string) =>
+  request<{ setup_url: string; setup_qr: string }>(
+    `/api/events/${eventId}/scanner-setups/${encodeURIComponent(setupId)}/regenerate-link`,
+    { method: "POST" },
+  );
+
 export const revokeScannerSetup = (eventId: number, setupId: string) =>
   request<{ status: "REVOKED" }>(`/api/events/${eventId}/scanner-setups/${encodeURIComponent(setupId)}`, { method: "DELETE" });
 

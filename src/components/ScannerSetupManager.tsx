@@ -3,19 +3,21 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ActionIcon, Alert, Badge, Button, Card, CopyButton, Group, Image, List, Modal, Select, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
-import { IconTrash } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { IconRefresh, IconTrash } from "@tabler/icons-react";
 import type { EventGate } from "@/lib/gateRoutingApi";
 import { GateConfigStatus } from "@/components/GateConfigStatus";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
 import {
   createScannerSetup,
   listScannerSetups,
+  regenerateScannerSetupLink,
   revokeScannerSetup,
   scannerSetupLabel,
   sendNewScannerSetupCode,
-  type CreateScannerSetupResult,
   type ScannerSetup,
 } from "@/lib/scannerSetupApi";
+import { addIssuedLink, dismissIssuedLink, type IssuedLink } from "@/lib/issuedScannerLinks";
 
 const SETUP_BADGE: Record<ScannerSetup["setup_status"], string> = {
   AVAILABLE: "blue",
@@ -74,7 +76,8 @@ export function ScannerSetupManager({
   const [label, setLabel] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [recipientName, setRecipientName] = useState("");
-  const [created, setCreated] = useState<CreateScannerSetupResult>();
+  // Every freshly issued link/QR stays on screen until dismissed — creating another scanner must not erase it.
+  const [issuedLinks, setIssuedLinks] = useState<IssuedLink[]>([]);
   const [error, setError] = useState<string>();
   const [confirmFirstScanner, setConfirmFirstScanner] = useState(false);
   // The gate config lock is server-computed and delivered at page load;
@@ -104,7 +107,16 @@ export function ScannerSetupManager({
       device_label: label.trim() || undefined,
     }),
     onSuccess: (result) => {
-      setCreated(result);
+      setIssuedLinks((links) => addIssuedLink(links, {
+        setupId: result.scanner_setup.id,
+        heading: `Scanner setup created${result.scanner_setup.device_label ? ` · ${result.scanner_setup.device_label}` : ""}`,
+        message: result.code_send_status === "SEND_FAILED"
+          ? `We couldn't send the activation email to ${result.recipient_email}. Use "Send new code" on the row below to retry.`
+          : `Activation code emailed to ${result.recipient_email}. Show this QR (or send the link) to the device — it's inert without the code.`,
+        failed: result.code_send_status === "SEND_FAILED",
+        url: result.setup_url,
+        qr: result.setup_qr,
+      }));
       setError(undefined);
       setLabel("");
       setRecipientEmail("");
@@ -115,15 +127,56 @@ export function ScannerSetupManager({
     onError: (e) => setError(e instanceof Error ? e.message : "Unable to create setup link."),
   });
 
+  // These used to fail silently (a resend cooldown or send limit just did nothing).
+  const failure = (fallback: string) => (e: unknown) =>
+    notifications.show({ color: "red", message: e instanceof Error && e.message ? e.message : fallback });
+
   const resend = useMutation({
     mutationFn: (setupId: string) => sendNewScannerSetupCode(eventId, setupId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["scanner-setups", eventId] }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["scanner-setups", eventId] });
+      notifications.show(result.code_send_status === "SEND_FAILED"
+        ? { color: "red", message: "We couldn't send the email. Check the address and try again." }
+        : { color: "teal", message: "A new activation code was emailed." });
+    },
+    onError: failure("Could not send a new code."),
   });
 
   const revoke = useMutation({
     mutationFn: (setupId: string) => revokeScannerSetup(eventId, setupId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["scanner-setups", eventId] }),
+    onSuccess: (_result, setupId) => {
+      setIssuedLinks((links) => dismissIssuedLink(links, setupId));
+      queryClient.invalidateQueries({ queryKey: ["scanner-setups", eventId] });
+    },
+    onError: failure("Could not revoke this setup."),
   });
+
+  const regenerate = useMutation({
+    mutationFn: (setupId: string) => regenerateScannerSetupLink(eventId, setupId),
+    onSuccess: (result, setupId) => {
+      const setup = (setups.data ?? []).find((row) => row.id === setupId);
+      setIssuedLinks((links) => addIssuedLink(links, {
+        setupId,
+        heading: `New link${setup?.device_label ? ` · ${setup.device_label}` : ""}`,
+        message: "The previous link and QR for this scanner no longer work. Show this QR or send this link instead.",
+        failed: false,
+        url: result.setup_url,
+        qr: result.setup_qr,
+      }));
+    },
+    onError: failure("Could not create a new link."),
+  });
+
+  const confirmRevoke = (setup: ScannerSetup) => {
+    if (window.confirm(`Revoke this setup link${setup.recipient_email ? ` for ${setup.recipient_email}` : ""}? The device will not be able to enroll with it.`)) {
+      revoke.mutate(setup.id);
+    }
+  };
+  const confirmRegenerate = (setup: ScannerSetup) => {
+    if (window.confirm("Create a new link and QR for this scanner? The current ones will stop working.")) {
+      regenerate.mutate(setup.id);
+    }
+  };
 
   const rows = setups.data ?? [];
   const structureLocked = !structureChanges.allowed || locallyLocked;
@@ -207,20 +260,18 @@ export function ScannerSetupManager({
     </Modal>
 
     {error && <Alert color="red">{error}</Alert>}
-    {created && <Alert color={created.code_send_status === "SEND_FAILED" ? "red" : "blue"} title="Scanner setup created">
-      <Text size="sm">
-        {created.code_send_status === "SEND_FAILED"
-          ? `We couldn't send the activation email to ${created.recipient_email}. Use "Send new code" on the row below to retry.`
-          : `Activation code emailed to ${created.recipient_email}. Show this QR (or send the link) to the device — it's inert without the code.`}
-      </Text>
+    {issuedLinks.map((link) => <Alert key={link.setupId} color={link.failed ? "red" : "blue"} title={link.heading}
+      withCloseButton closeButtonLabel="Dismiss" onClose={() => setIssuedLinks((links) => dismissIssuedLink(links, link.setupId))}>
+      <Text size="sm">{link.message}</Text>
       <Group mt="sm" align="flex-start" gap="lg">
-        <Image src={created.setup_qr} alt="Scanner setup QR" w={160} h={160} />
+        <Image src={link.qr} alt="Scanner setup QR" w={160} h={160} />
         <Stack gap="xs" style={{ flex: 1, minWidth: 220 }}>
-          <Text size="xs" c="dimmed" style={{ wordBreak: "break-all" }}>{created.setup_url}</Text>
-          <CopyButton value={created.setup_url}>{({ copy, copied }) => <Button size="xs" variant="light" onClick={copy}>{copied ? "Copied" : "Copy setup link"}</Button>}</CopyButton>
+          <Text size="xs" c="dimmed" style={{ wordBreak: "break-all" }}>{link.url}</Text>
+          <CopyButton value={link.url}>{({ copy, copied }) => <Button size="xs" variant="light" onClick={copy}>{copied ? "Copied" : "Copy setup link"}</Button>}</CopyButton>
+          <Text size="xs" c="dimmed">This link is shown only now. Lost it later? Use &quot;New link&quot; on the scanner&apos;s row.</Text>
         </Stack>
       </Group>
-    </Alert>}
+    </Alert>)}
 
     <Card withBorder>
       <Group justify="space-between" mb="sm">
@@ -261,17 +312,29 @@ export function ScannerSetupManager({
               <Table.Td><Text size="xs" c="dimmed">{new Date(setup.created_at).toLocaleString()}</Text></Table.Td>
               <Table.Td ta="right">
                 {canManageCode && (
-                  <Tooltip label="Revoke this setup">
-                    <ActionIcon
-                      variant="subtle"
-                      color="red"
-                      aria-label="Revoke setup"
-                      loading={revoke.isPending && revoke.variables === setup.id}
-                      onClick={() => revoke.mutate(setup.id)}
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Tooltip>
+                  <Group gap={4} justify="flex-end" wrap="nowrap">
+                    <Tooltip label="Show a new link and QR (the current ones stop working)">
+                      <ActionIcon
+                        variant="subtle"
+                        aria-label="New link and QR"
+                        loading={regenerate.isPending && regenerate.variables === setup.id}
+                        onClick={() => confirmRegenerate(setup)}
+                      >
+                        <IconRefresh size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Revoke this setup">
+                      <ActionIcon
+                        variant="subtle"
+                        color="red"
+                        aria-label="Revoke setup"
+                        loading={revoke.isPending && revoke.variables === setup.id}
+                        onClick={() => confirmRevoke(setup)}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
                 )}
               </Table.Td>
             </Table.Tr>;
@@ -279,7 +342,7 @@ export function ScannerSetupManager({
         </Table></TableScrollShadow>}
       <Text size="xs" c="dimmed" mt="sm">
         The setup link stays valid for the whole event — only the activation code expires (resend it above).
-        To pause or retire a device without reassigning it, use{" "}
+        Once a device has enrolled, its link is spent: to cut that device off, use{" "}
         <Text span component="a" href={`/events/${eventId}/gate-operations`} c="blue">Gate operations</Text>.
         To move an already-enrolled device to a different entrance or lane, don&apos;t retire it there first —
         create a new scanner setup above for the correct entrance and lane and re-enroll the same device with it.
