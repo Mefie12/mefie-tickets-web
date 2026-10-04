@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Anchor, Button, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Button, Stack, Text, TextInput } from "@mantine/core";
 import { AuthLayout } from "@/components/AuthLayout";
 import { requestPasswordReset } from "@/lib/authApi";
+import { resetRequestErrorMessage } from "@/lib/passwordResetErrors";
 
 /**
  * Always shows the same confirmation regardless of whether the email
@@ -27,6 +28,7 @@ export default function ForgotPasswordPage() {
     mutationFn: requestPasswordReset,
     onSuccess: () => setSubmitted(true),
   });
+  const failure = mutation.isError ? resetRequestErrorMessage(mutation.error) : null;
 
   if (submitted) {
     return (
@@ -46,6 +48,7 @@ export default function ForgotPasswordPage() {
     <AuthLayout title="Forgot your password?" subtitle="Enter your email and we'll send you a reset link.">
       <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
         <Stack>
+          {failure && <Alert color="red" role="alert">{failure}</Alert>}
           <TextInput label="Email" placeholder="you@example.com" {...form.getInputProps("email")} />
           <Button type="submit" fullWidth loading={mutation.isPending} mt="sm">
             Send reset link

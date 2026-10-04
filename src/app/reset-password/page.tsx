@@ -9,6 +9,7 @@ import { Alert, Anchor, Button, PasswordInput, Stack, Text } from "@mantine/core
 import { notifications } from "@mantine/notifications";
 import { AuthLayout } from "@/components/AuthLayout";
 import { ApiError, resetPassword } from "@/lib/authApi";
+import { resetRequestErrorMessage } from "@/lib/passwordResetErrors";
 
 export default function ResetPasswordPage() {
   return (
@@ -54,6 +55,8 @@ function ResetPasswordForm() {
         // form has no visible email input to attach that to.
         const message = error.fieldError("email");
         if (message) notifications.show({ color: "red", message });
+      } else if (error instanceof ApiError && error.status === 429) {
+        notifications.show({ color: "red", message: resetRequestErrorMessage(error) });
       } else {
         notifications.show({ color: "red", message: error.message });
       }
@@ -78,9 +81,14 @@ function ResetPasswordForm() {
   if (done) {
     return (
       <AuthLayout title="Password updated" subtitle="Your password has been reset successfully.">
-        <Button component={Link} href="/organizers/login" fullWidth>
-          Log in
-        </Button>
+        <Stack>
+          <Text size="sm" ta="center" c="dimmed">
+            For your security you&apos;ve been signed out of your other devices. A confirmation email is on its way.
+          </Text>
+          <Button component={Link} href="/organizers/login" fullWidth>
+            Log in
+          </Button>
+        </Stack>
       </AuthLayout>
     );
   }
