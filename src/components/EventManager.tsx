@@ -24,6 +24,8 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { scannerNoticeToast, type ScannerNotice } from "@/lib/scannerNotice";
+import { RescheduleConfirmDialog } from "@/components/RescheduleConfirmDialog";
+import type { RescheduleImpact } from "@/lib/rescheduleImpact";
 import { TimezoneSelector } from "@/components/TimezoneSelector";
 import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
 import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
@@ -37,6 +39,7 @@ import { browserTimezone } from "@/lib/timezones";
 import type { MapboxSuggestion } from "@/lib/mapbox";
 import {
   getEventTaxonomies,
+  getRescheduleImpact,
   type Event,
   type EventLocationInput,
   type EventStatus,
@@ -557,8 +560,12 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
     if (form.values.end_at && form.values.end_at <= value) form.setFieldValue("end_at", "");
   };
 
+  type SaveVars = { values: typeof form.values; reschedule?: { acknowledged: boolean; notify_attendees: boolean } };
+  // Set while the organizer reads what a date change affects, before anything is saved.
+  const [review, setReview] = useState<{ vars: SaveVars; impact: RescheduleImpact } | null>(null);
+
   const updateMutation = useMutation({
-    mutationFn: (values: typeof form.values) => {
+    mutationFn: ({ values, reschedule }: SaveVars) => {
       const startParts = splitLocalDateTime(values.start_at);
       const endParts = splitLocalDateTime(values.end_at);
       return updateEvent(event.id, {
@@ -567,17 +574,24 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
         end_date: endParts.date,
         end_time: endParts.time,
         timezone: values.timezone,
+        ...(reschedule ? { reschedule } : {}),
       });
     },
     onSuccess: (data: { event: Event; scanner_notice?: ScannerNotice }) => {
+      setReview(null);
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Date and time updated." });
       const toast = scannerNoticeToast(data.scanner_notice);
       if (toast) notifications.show(toast);
       onSaved?.();
     },
-    onError: (error: Error) => {
+    onError: (error: Error, vars: SaveVars) => {
       if (redirectOnAuthError(error, router)) return;
+      if (error instanceof ApiError && error.code === "RESCHEDULE_ACKNOWLEDGEMENT_REQUIRED") {
+        // Orders appeared after the form was opened: show the confirmation instead of a bare error.
+        openReview(vars, true);
+        return;
+      }
       if (error instanceof ApiError && error.errors) {
         form.setErrors(
           Object.fromEntries(Object.entries(error.errors).map(([field, messages]) => [field, messages[0]])),
@@ -588,9 +602,57 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
     },
   });
 
+  const impactMutation = useMutation({
+    mutationFn: () => getRescheduleImpact(event.id),
+  });
+
+  /** Loads what the change affects and opens the confirmation; saves straight away when nobody has ordered. */
+  function openReview(vars: SaveVars, alreadyRejected: boolean) {
+    impactMutation.mutate(undefined, {
+      onSuccess: ({ impact }) => {
+        if (impact.has_orders) setReview({ vars, impact });
+        else if (!alreadyRejected) updateMutation.mutate(vars);
+        else notifications.show({ color: "red", message: "The date could not be changed. Please reload and try again." });
+      },
+      onError: (error: Error) => {
+        if (redirectOnAuthError(error, router)) return;
+        notifications.show({ color: "red", message: "We couldn't check what this change affects. Please try again." });
+      },
+    });
+  }
+
+  const wallClock = (value: string) => `${value.replace("T", " ")} (${event.timezone})`;
+  const savedStart = joinLocalDateTime(start);
+  const savedEnd = joinLocalDateTime(end);
+
+  function handleSubmit(values: typeof form.values) {
+    const startChanged = !!event.start_date && values.start_at !== savedStart;
+    const endChanged = !!event.end_date && values.end_at !== savedEnd;
+    if (!startChanged && !endChanged) {
+      updateMutation.mutate({ values });
+      return;
+    }
+    openReview({ values }, false);
+  }
+
   return (
     <Card withBorder radius="lg" p="xl">
-      <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
+      <RescheduleConfirmDialog
+        opened={review !== null}
+        impact={review?.impact ?? null}
+        before={{ start: wallClock(savedStart), end: wallClock(savedEnd) }}
+        after={{ start: wallClock(review?.vars.values.start_at ?? savedStart), end: wallClock(review?.vars.values.end_at ?? savedEnd) }}
+        change={{
+          startChanged: !!review && review.vars.values.start_at !== savedStart,
+          endChanged: !!review && review.vars.values.end_at !== savedEnd,
+        }}
+        submitting={updateMutation.isPending}
+        onCancel={() => setReview(null)}
+        onConfirm={({ notifyAttendees }) =>
+          review && updateMutation.mutate({ ...review.vars, reschedule: { acknowledged: true, notify_attendees: notifyAttendees } })
+        }
+      />
+      <form onSubmit={form.onSubmit(handleSubmit)}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -622,7 +684,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
             )}
 
             {!disabled ? (
-              <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>
+              <Button type="submit" loading={updateMutation.isPending || impactMutation.isPending} style={{ alignSelf: "flex-start" }}>
                 Save changes
               </Button>
             ) : (
