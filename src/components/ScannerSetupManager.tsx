@@ -23,6 +23,7 @@ const SETUP_BADGE: Record<ScannerSetup["setup_status"], string> = {
   AVAILABLE: "blue",
   CONSUMED: "teal",
   REVOKED: "gray",
+  EXPIRED: "orange",
   EVENT_CLOSED: "gray",
 };
 
