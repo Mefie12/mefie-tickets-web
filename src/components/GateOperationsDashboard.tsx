@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import type { EventGate } from "@/lib/gateRoutingApi";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
+import { deviceStatusPrompt } from "@/lib/gateDevicePrompts";
 import { closeGateOperations, getGateOperations, reviewGateConflict, updateGateDevice } from "@/lib/gateOperationsApi";
 
 export function GateOperationsDashboard({ eventId, gates = [] }: { eventId: number; gates?: EventGate[] }) {
@@ -14,6 +15,11 @@ export function GateOperationsDashboard({ eventId, gates = [] }: { eventId: numb
   const query = useQuery({ queryKey: ["gate-operations", eventId], queryFn: () => getGateOperations(eventId), refetchInterval: 15_000 });
   const refresh = () => client.invalidateQueries({ queryKey: ["gate-operations", eventId] });
   const device = useMutation({ mutationFn: ({ id, status }: { id: string; status: "ACTIVE" | "PAUSED" | "RETIRED" }) => updateGateDevice(eventId, id, status), onSuccess: refresh });
+  // Pausing and retiring used to act instantly with no warning, although they differ in what happens to
+  // check-ins still on the device: a paused scanner still uploads them, a retired one never will.
+  const changeStatus = (item: { device_registration_id: string; label?: string | null; pending?: number | null }, status: "PAUSED" | "RETIRED") => {
+    if (window.confirm(deviceStatusPrompt(item.label ?? null, status, item.pending ?? null))) device.mutate({ id: item.device_registration_id, status });
+  };
   const review = useMutation({ mutationFn: (id: number) => reviewGateConflict(eventId, id), onSuccess: refresh });
   const close = useMutation({ mutationFn: () => closeGateOperations(eventId), onSuccess: refresh });
   const data = query.data;
@@ -41,7 +47,7 @@ export function GateOperationsDashboard({ eventId, gates = [] }: { eventId: numb
         <Table.Td><Text size="sm">{gateName.get(item.gate_id) ?? `Gate ${item.gate_id}`}</Text><Text size="xs" c="dimmed">{laneName.get(item.lane_id) ?? `Lane ${item.lane_id}`}</Text></Table.Td>
         <Table.Td>{item.status}</Table.Td><Table.Td>{item.readiness ?? "Not reported"}</Table.Td>
         <Table.Td>{item.last_sync_at ? new Date(item.last_sync_at).toLocaleString() : "Never"}</Table.Td><Table.Td>{item.pending}</Table.Td><Table.Td>{item.conflicts}</Table.Td>
-        <Table.Td><Group gap="xs">{item.status === "ACTIVE" ? <Button size="xs" variant="light" color="yellow" onClick={() => device.mutate({ id: item.device_registration_id, status: "PAUSED" })}>Pause</Button> : item.status === "PAUSED" ? <Button size="xs" variant="light" onClick={() => device.mutate({ id: item.device_registration_id, status: "ACTIVE" })}>Resume</Button> : null}<Button size="xs" variant="subtle" color="red" disabled={item.status === "RETIRED"} onClick={() => device.mutate({ id: item.device_registration_id, status: "RETIRED" })}>Retire</Button></Group></Table.Td>
+        <Table.Td><Group gap="xs">{item.status === "ACTIVE" ? <Button size="xs" variant="light" color="yellow" onClick={() => changeStatus(item, "PAUSED")}>Pause</Button> : item.status === "PAUSED" ? <Button size="xs" variant="light" onClick={() => device.mutate({ id: item.device_registration_id, status: "ACTIVE" })}>Resume</Button> : null}<Button size="xs" variant="subtle" color="red" disabled={item.status === "RETIRED"} onClick={() => changeStatus(item, "RETIRED")}>Retire</Button></Group></Table.Td>
       </Table.Tr>)}</Table.Tbody>
     </Table></TableScrollShadow></Card>
     {data.conflicts.length > 0 && <Card withBorder><Title order={3} mb="md">Open conflicts</Title><Stack>{data.conflicts.map((conflict) => <Group justify="space-between" key={conflict.id}><Text>Operation {conflict.operation_id} · {new Date(conflict.created_at).toLocaleString()}</Text><Button size="xs" variant="light" onClick={() => review.mutate(conflict.id)}>Mark reviewed</Button></Group>)}</Stack></Card>}
