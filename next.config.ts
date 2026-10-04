@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import { TOKEN_ROUTE_SOURCES } from "./src/lib/tokenRoutes";
 
 // Token-exchange landing paths (docs/17 §18): no caching/storage, no
 // referrer leak of the raw {token} segment, never indexed. Defence in
@@ -18,11 +19,7 @@ const nextConfig: NextConfig = {
   // recognize — allow both so local browsing works either way.
   allowedDevOrigins: ["localhost", "127.0.0.1"],
   async headers() {
-    return [
-      { source: "/t/:path*", headers: TOKEN_ROUTE_HEADERS },
-      { source: "/claim/:path*", headers: TOKEN_ROUTE_HEADERS },
-      { source: "/accept/:path*", headers: TOKEN_ROUTE_HEADERS },
-    ];
+    return TOKEN_ROUTE_SOURCES.map((source) => ({ source, headers: TOKEN_ROUTE_HEADERS }));
   },
 };
 

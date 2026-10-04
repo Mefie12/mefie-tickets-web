@@ -76,7 +76,10 @@ async function request<T>(
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+    const error = new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+    const retryAfter = Number(res.headers.get("retry-after"));
+    if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = retryAfter;
+    throw error;
   }
 
   return data as T;
