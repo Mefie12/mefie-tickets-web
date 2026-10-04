@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Alert, Badge, Button, Card, Group, Modal, Select, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
+import { Alert, Badge, Button, Card, Group, Modal, Select, SimpleGrid, Stack, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconDoorEnter, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import type { Product } from "@/lib/productApi";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/gateRoutingApi";
 import { GateConfigStatus } from "@/components/GateConfigStatus";
 import { nextLaneCode } from "@/lib/laneSlug";
+import { gateStatusHint, routingBlockReasons, routingErrorMessages } from "@/lib/gateStatusHint";
 
 export function GateRoutingManager({
   eventId, eventStatus, products, productLoadError, initial,
@@ -38,6 +39,9 @@ export function GateRoutingManager({
   const structureDisabledReason = stagedChangeOpen
     ? "Finish or cancel the staged routing change before changing entrances or lanes."
     : initial.structure_changes.reason;
+  const routingBlockers = routingBlockReasons({ structureEditable, routingChanges: initial.routing_changes });
+  const unpublishedCount = gates.reduce((total, gate) => total + (gate.status === "CONFIGURING" ? 1 : 0)
+    + gate.lanes.filter((lane) => lane.status === "CONFIGURING").length, 0);
   const defaultGate = gates.find((gate) => gate.is_default)!;
   const gateOptions = useMemo(() => gates.map((gate) => ({ value: String(gate.id), label: gate.name })), [gates]);
   // Live duplicate checks against the already-loaded list, for a fast inline warning.
@@ -52,6 +56,27 @@ export function GateRoutingManager({
     }, 2000);
     return () => window.clearInterval(timer);
   }, [eventId, publication]);
+
+  /** Disabled buttons swallow pointer events, so the tooltip lives on a wrapper and only shows while the structure is locked. */
+  const lockTip = (node: React.ReactNode) => <Tooltip multiline w={260} label={structureDisabledReason}
+    disabled={structureChangesAllowed || !structureDisabledReason}><span>{node}</span></Tooltip>;
+
+  /** One toast per reason so multiple blockers are each readable, rather than one merged message. */
+  function showRoutingErrors(error: unknown, fallback: string) {
+    routingErrorMessages(error, fallback).forEach((message, index) => notifications.show({
+      id: `routing-error-${Date.now()}-${index}`, color: "red", message,
+    }));
+  }
+
+  function prepareRoutingClicked() {
+    if (routingBlockers.length > 0) {
+      routingBlockers.forEach((message, index) => notifications.show({
+        id: `routing-blocked-${Date.now()}-${index}`, color: "red", title: "Routing change unavailable", message,
+      }));
+      return;
+    }
+    setConfirmChange(true);
+  }
 
   async function addGate() {
     setBusy(true);
@@ -179,7 +204,7 @@ export function GateRoutingManager({
       ])));
       notifications.show({ color: "teal", message: "Gate routing saved." });
     } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not save routing." });
+      showRoutingErrors(error, "Could not save routing.");
     } finally { setBusy(false); }
   }
 
@@ -201,7 +226,7 @@ export function GateRoutingManager({
       })));
       notifications.show({ color: "teal", message: "New routing published. Replacement tickets are queued for delivery." });
     } catch (error) {
-      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not publish routing." });
+      showRoutingErrors(error, "Could not publish routing.");
     } finally { setBusy(false); }
   }
 
@@ -230,11 +255,26 @@ export function GateRoutingManager({
         Tickets show their entrance. Lanes remain operational and can change without reissuing tickets.
       </Text></Stack>
       <Group><Button component="a" href="#ticket-routing" variant="light">Ticket routing</Button>
-      <Button leftSection={<IconPlus size={16}/>} disabled={!structureChangesAllowed} onClick={() => { setName(""); setGateModal(true); }}>
+      {lockTip(<Button leftSection={<IconPlus size={16}/>} disabled={!structureChangesAllowed} onClick={() => { setName(""); setGateModal(true); }}>
         Add entrance
-      </Button></Group>
+      </Button>)}</Group>
     </Group>
     <GateConfigStatus locked={!structureChangesAllowed} reason={structureDisabledReason} eventStatus={eventStatus} />
+    {(unpublishedCount > 0 || routingBlockers.length > 0) && <Alert color="blue" title={unpublishedCount > 0
+      ? `${unpublishedCount} ${unpublishedCount === 1 ? "entrance or lane is" : "entrances and lanes are"} not published yet`
+      : "Routing changes are unavailable"}>
+      <Stack gap={4}>
+        {unpublishedCount > 0 && <Text size="sm">
+          {eventStatus === "DRAFT"
+            ? "Everything goes live when the event is published."
+            : "A new entrance or lane goes live once a ticket type is routed to it and the routing change is published."}
+        </Text>}
+        {routingBlockers.length > 0 && <>
+          <Text size="sm" fw={600}>Routing changes can&apos;t be published right now:</Text>
+          <ul style={{ margin: 0, paddingInlineStart: 20 }}>{routingBlockers.map((reason) => <li key={reason}><Text size="sm">{reason}</Text></li>)}</ul>
+        </>}
+      </Stack>
+    </Alert>}
     {eventStatus === "LIVE" && structureChangesAllowed && <Card withBorder bg="blue.0"><Stack gap={4}><Text fw={600}>Live-event routing changes are staged</Text><Text size="sm">
       You may add entrances and lanes before scanner setup begins. Once you create a scanner setup, this structure locks — new entrances and lanes will need every scanner setup revoked first.
     </Text></Stack></Card>}
@@ -249,21 +289,22 @@ export function GateRoutingManager({
     <SimpleGrid cols={{ base: 1, md: 2 }}>
       {gates.map((gate) => <Card key={gate.id} withBorder radius="lg">
         <Stack gap="sm"><Group justify="space-between"><Group gap="xs"><IconDoorEnter size={20}/><Text fw={700}>{gate.name}</Text>
-            <Button variant="subtle" size="xs" p={4} disabled={!structureChangesAllowed}
-              onClick={() => { setRenameValue(gate.name); setRenameGateTarget(gate); }} aria-label="Rename entrance"><IconPencil size={14}/></Button>
-            <Button variant="subtle" size="xs" p={4} color="red" disabled={!structureChangesAllowed || gate.is_default}
-              onClick={() => removeGate(gate)} aria-label="Delete entrance"><IconTrash size={14}/></Button></Group>
-          <Group gap="xs">{gate.status === "CONFIGURING" && <Badge color="orange" variant="light">Not published</Badge>}{gate.is_default && <Badge variant="light">Default</Badge>}</Group></Group>
+            {lockTip(<Button variant="subtle" size="xs" p={4} disabled={!structureChangesAllowed}
+              onClick={() => { setRenameValue(gate.name); setRenameGateTarget(gate); }} aria-label="Rename entrance"><IconPencil size={14}/></Button>)}
+            {lockTip(<Button variant="subtle" size="xs" p={4} color="red" disabled={!structureChangesAllowed || gate.is_default}
+              onClick={() => removeGate(gate)} aria-label="Delete entrance"><IconTrash size={14}/></Button>)}</Group>
+          <Group gap="xs">{gate.status === "CONFIGURING" && <Tooltip multiline w={260} label={gateStatusHint({ kind: "entrance", status: gate.status, eventStatus })}><Badge color="orange" variant="light">Not published</Badge></Tooltip>}{gate.is_default && <Badge variant="light">Default</Badge>}</Group></Group>
           <Stack gap={4}>{gate.lanes.map((lane) => <Group key={lane.id} gap="xs" justify="space-between">
-            <Group gap="xs"><Text size="sm">{lane.name} <Text span c="dimmed">({lane.code})</Text></Text>{lane.status === "CONFIGURING" && <Badge size="xs" color="orange" variant="light">Not published</Badge>}</Group>
+            <Stack gap={0}><Group gap="xs"><Text size="sm">{lane.name} <Text span c="dimmed">({lane.code})</Text></Text>{lane.status === "CONFIGURING" && <Tooltip multiline w={260} label={gateStatusHint({ kind: "lane", status: lane.status, eventStatus })}><Badge size="xs" color="orange" variant="light">Not published</Badge></Tooltip>}</Group>
+              {lane.status === "CONFIGURING" && <Text size="xs" c="dimmed">{gateStatusHint({ kind: "lane", status: lane.status, eventStatus })}</Text>}</Stack>
             <Group gap={4}>
-              <Button variant="subtle" size="xs" p={4} disabled={!structureChangesAllowed}
-                onClick={() => { setRenameValue(lane.name); setRenameLaneTarget({ gate, lane }); }} aria-label="Rename lane"><IconPencil size={12}/></Button>
-              <Button variant="subtle" size="xs" p={4} color="red" disabled={!structureChangesAllowed || gate.lanes.length <= 1}
-                onClick={() => removeLane(gate, lane)} aria-label="Delete lane"><IconTrash size={12}/></Button>
+              {lockTip(<Button variant="subtle" size="xs" p={4} disabled={!structureChangesAllowed}
+                onClick={() => { setRenameValue(lane.name); setRenameLaneTarget({ gate, lane }); }} aria-label="Rename lane"><IconPencil size={12}/></Button>)}
+              {lockTip(<Button variant="subtle" size="xs" p={4} color="red" disabled={!structureChangesAllowed || gate.lanes.length <= 1}
+                onClick={() => removeLane(gate, lane)} aria-label="Delete lane"><IconTrash size={12}/></Button>)}
             </Group>
           </Group>)}</Stack>
-          <Button variant="subtle" size="xs" disabled={!structureChangesAllowed} onClick={() => { setName(""); setCode(""); setCodeEdited(false); setLaneGate(gate); }}>Add lane</Button>
+          {lockTip(<Button variant="subtle" size="xs" disabled={!structureChangesAllowed} onClick={() => { setName(""); setCode(""); setCodeEdited(false); setLaneGate(gate); }}>Add lane</Button>)}
         </Stack>
       </Card>)}
     </SimpleGrid>
@@ -294,8 +335,8 @@ export function GateRoutingManager({
             }))}/>
         </SimpleGrid>;
       })}
-      {products.length > 0 && <Group justify="flex-end"><Button disabled={productLoadError || !routingEditable || stagedChangeOpen} loading={busy}
-        onClick={() => structureEditable ? saveRouting() : setConfirmChange(true)}>{structureEditable ? "Save routing" : "Prepare routing change"}</Button></Group>
+      {products.length > 0 && <Group justify="flex-end"><Button disabled={productLoadError || stagedChangeOpen || (routingBlockers.length === 0 && !routingEditable)} loading={busy}
+        onClick={() => structureEditable ? saveRouting() : prepareRoutingClicked()}>{structureEditable ? "Save routing" : "Prepare routing change"}</Button></Group>
       }
     </Stack></Card>
     <Modal opened={gateModal} onClose={() => setGateModal(false)} title="New entrance" centered>

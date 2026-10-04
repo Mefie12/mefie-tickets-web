@@ -23,6 +23,8 @@ export type GateConfiguration = {
   gates: EventGate[];
   generation: RoutingGeneration;
   structure_changes: { allowed: boolean; reason: string | null };
+  /** Every reason a published routing change is unavailable; absent from older API responses. */
+  routing_changes?: { allowed: boolean; reasons: string[] };
   publication?: RoutingChangePublication | null;
 };
 export type RoutingChangePublication = {
