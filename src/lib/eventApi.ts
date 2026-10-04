@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/authApi";
+import type { ScannerNotice } from "@/lib/scannerNotice";
 
 export type EventStatus = "DRAFT" | "LIVE" | "ARCHIVED";
 export type EventVisibility = "PUBLIC" | "UNLISTED" | "INVITED";
@@ -159,7 +160,7 @@ export function updateEvent(
     location?: EventLocationInput;
   },
 ) {
-  return request<{ event: Event }>(`/api/events/${id}`, { method: "PATCH", body: input });
+  return request<{ event: Event; scanner_notice?: ScannerNotice }>(`/api/events/${id}`, { method: "PATCH", body: input });
 }
 
 export function updateEventStatus(id: number, status: EventStatus) {

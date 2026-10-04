@@ -23,6 +23,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { scannerNoticeToast, type ScannerNotice } from "@/lib/scannerNotice";
 import { TimezoneSelector } from "@/components/TimezoneSelector";
 import { PaymentCurrencyExplainer } from "@/components/PaymentCurrencyExplainer";
 import { getOrganizationPaymentCurrency } from "@/lib/paymentAccountApi";
@@ -568,9 +569,11 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
         timezone: values.timezone,
       });
     },
-    onSuccess: (data: { event: Event }) => {
+    onSuccess: (data: { event: Event; scanner_notice?: ScannerNotice }) => {
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Date and time updated." });
+      const toast = scannerNoticeToast(data.scanner_notice);
+      if (toast) notifications.show(toast);
       onSaved?.();
     },
     onError: (error: Error) => {
