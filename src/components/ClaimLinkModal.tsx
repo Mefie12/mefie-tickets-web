@@ -15,6 +15,8 @@ import {
 import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
 import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { ticketLabel } from "@/lib/portalStatus";
+import { isValidEmail } from "@/lib/emailAddress";
+import { useEmailFieldError } from "@/lib/useEmailFieldError";
 
 /**
  * Create / rotate / revoke the guest claim link for one buyer-held
@@ -38,6 +40,9 @@ export function ClaimLinkModal({
   const [hideName, setHideName] = useState(false);
   const [expiresAt, setExpiresAt] = useState("");
   const [lockEmail, setLockEmail] = useState("");
+  // Optional field: empty is fine, anything typed must look like an email.
+  const lockEmailOk = lockEmail.trim() === "" || isValidEmail(lockEmail);
+  const lockEmailError = useEmailFieldError(lockEmail, lockEmailOk);
   const [sendToLocked, setSendToLocked] = useState(true);
   const [result, setResult] = useState<ClaimLinkDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +163,8 @@ export function ClaimLinkModal({
               description="The recipient can't change where the ticket is sent"
               value={lockEmail}
               onChange={(e) => setLockEmail(e.currentTarget.value)}
+              onBlur={lockEmailError.onBlur}
+              error={lockEmailError.error}
             />
             {lockEmail.trim() && (
               <Checkbox
@@ -166,7 +173,7 @@ export function ClaimLinkModal({
                 onChange={(e) => setSendToLocked(e.currentTarget.checked)}
               />
             )}
-            <Button onClick={() => create.mutate()} loading={create.isPending}>
+            <Button onClick={() => { if (lockEmailOk) create.mutate(); }} loading={create.isPending} disabled={!lockEmailOk}>
               Create invite link
             </Button>
           </>

@@ -89,8 +89,8 @@ function LoginForm() {
               You were signed out after a period of inactivity. Log in again to pick up where you left off.
             </Alert>
           )}
-          <TextInput label="Email" placeholder="you@example.com" {...form.getInputProps("email")} />
-          <PasswordInput label="Password" {...form.getInputProps("password")} />
+          <TextInput label="Email" placeholder="you@example.com" autoComplete="email" {...form.getInputProps("email")} />
+          <PasswordInput label="Password" autoComplete="current-password" {...form.getInputProps("password")} />
           <Group justify="space-between">
             <Checkbox label="Remember me" {...form.getInputProps("remember", { type: "checkbox" })} />
             <Anchor href="/forgot-password" size="sm">

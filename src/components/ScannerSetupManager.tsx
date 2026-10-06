@@ -17,6 +17,8 @@ import {
   sendNewScannerSetupCode,
   type ScannerSetup,
 } from "@/lib/scannerSetupApi";
+import { isValidEmail } from "@/lib/emailAddress";
+import { useEmailFieldError } from "@/lib/useEmailFieldError";
 import { addIssuedLink, dismissIssuedLink, type IssuedLink } from "@/lib/issuedScannerLinks";
 
 const SETUP_BADGE: Record<ScannerSetup["setup_status"], string> = {
@@ -77,6 +79,8 @@ export function ScannerSetupManager({
   const [label, setLabel] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [recipientName, setRecipientName] = useState("");
+  const emailValid = isValidEmail(recipientEmail);
+  const emailError = useEmailFieldError(recipientEmail, emailValid);
   // Every freshly issued link/QR stays on screen until dismissed — creating another scanner must not erase it.
   const [issuedLinks, setIssuedLinks] = useState<IssuedLink[]>([]);
   const [error, setError] = useState<string>();
@@ -121,6 +125,7 @@ export function ScannerSetupManager({
       setError(undefined);
       setLabel("");
       setRecipientEmail("");
+      emailError.reset();
       setRecipientName("");
       setLocallyLocked(true);
       queryClient.invalidateQueries({ queryKey: ["scanner-setups", eventId] });
@@ -186,6 +191,7 @@ export function ScannerSetupManager({
   const willFreezeStructure = eventStatus === "LIVE" && structureChanges.allowed && !locallyLocked && rows.length === 0;
 
   const submitCreate = () => {
+    if (!emailValid || create.isPending) return;
     if (willFreezeStructure) { setConfirmFirstScanner(true); return; }
     create.mutate();
   };
@@ -214,6 +220,8 @@ export function ScannerSetupManager({
         type="email"
         value={recipientEmail}
         onChange={(event) => setRecipientEmail(event.currentTarget.value)}
+        onBlur={emailError.onBlur}
+        error={emailError.error}
         placeholder="volunteer@example.com"
         description="We'll email the 6-digit activation code here. The link is inert without it."
       />
@@ -222,7 +230,7 @@ export function ScannerSetupManager({
       <Button
         onClick={submitCreate}
         loading={create.isPending}
-        disabled={!gateId || !laneId || !recipientEmail.trim()}
+        disabled={!gateId || !laneId || !emailValid}
       >
         Create scanner
       </Button>

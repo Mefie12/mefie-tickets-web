@@ -46,8 +46,8 @@ export function AdminLoginForm({ defaultEmail = "", returnTo = "/admin/dashboard
   return (
     <form onSubmit={form.onSubmit((values) => loginMutation.mutate(values))}>
       <Stack>
-        <TextInput label="Email" placeholder="you@example.com" {...form.getInputProps("email")} />
-        <PasswordInput label="Password" {...form.getInputProps("password")} />
+        <TextInput label="Email" placeholder="you@example.com" autoComplete="email" {...form.getInputProps("email")} />
+        <PasswordInput label="Password" autoComplete="current-password" {...form.getInputProps("password")} />
         <Button type="submit" fullWidth loading={loginMutation.isPending} mt="sm">
           Continue
         </Button>
