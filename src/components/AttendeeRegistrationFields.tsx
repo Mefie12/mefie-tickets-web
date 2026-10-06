@@ -5,6 +5,7 @@ import type { PublicQuestion } from "@/lib/publicEventApi";
 import type { AnswerValue } from "@/lib/checkoutApi";
 import type { AttendeeRegistration, RegistrationSchema } from "@/lib/portalApi";
 import { EditableQuestionField, isQuestionAnswered } from "@/components/EditableQuestionField";
+import { EmailTypoHint } from "@/components/EmailTypoHint";
 import { PhoneInput } from "@/components/PhoneInput";
 
 export type AttendeeFormValue = {
@@ -94,15 +95,18 @@ export function AttendeeRegistrationFields({
           required
         />
       </SimpleGrid>
-      <TextInput
-        label={contactRequired ? "Email" : "Email (optional)"}
-        description="Where their ticket is sent"
-        type="email"
-        inputMode="email"
-        value={value.email}
-        onChange={(e) => patch({ email: e.currentTarget.value })}
-        required={contactRequired}
-      />
+      <Stack gap={4}>
+        <TextInput
+          label={contactRequired ? "Email" : "Email (optional)"}
+          description="Where their ticket is sent"
+          type="email"
+          inputMode="email"
+          value={value.email}
+          onChange={(e) => patch({ email: e.currentTarget.value })}
+          required={contactRequired}
+        />
+        <EmailTypoHint email={value.email} onUse={(email) => patch({ email })} />
+      </Stack>
       <PhoneInput
         label="Phone (optional)"
         value={value.phone}

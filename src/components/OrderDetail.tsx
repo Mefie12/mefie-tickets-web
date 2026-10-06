@@ -51,6 +51,8 @@ import {
 } from "@/lib/orderApi";
 import { formatEventDateTime } from "@/lib/eventDateTime";
 import { formatAmount } from "@/lib/money";
+import { isValidEmail } from "@/lib/emailAddress";
+import { useEmailFieldError } from "@/lib/useEmailFieldError";
 import type { Event } from "@/lib/eventApi";
 
 /**
@@ -184,6 +186,9 @@ export function OrderDetail({
   const [emailResendTo, setEmailResendTo] = useState("");
   const [emailResendUpdate, setEmailResendUpdate] = useState(false);
   const [emailResendReason, setEmailResendReason] = useState("");
+  // Empty means "the order's own address"; an unchanged order address is left to the server (it may predate this check).
+  const emailResendToOk = emailResendTo.trim() === "" || emailResendTo.trim() === order.email || isValidEmail(emailResendTo);
+  const emailResendToError = useEmailFieldError(emailResendTo, emailResendToOk);
   const [emailResendBusy, setEmailResendBusy] = useState(false);
   const [openHistory, setOpenHistory] = useState<Record<number, boolean>>({});
 
@@ -330,12 +335,13 @@ export function OrderDetail({
   function openEmailResend(type: "receipt" | "assignment_invite") {
     setEmailResendType(type);
     setEmailResendTo(order.email);
+    emailResendToError.reset();
     setEmailResendUpdate(false);
     setEmailResendReason("");
   }
 
   async function handleEmailResend() {
-    if (!emailResendType || emailResendReason.trim().length < 3) return;
+    if (!emailResendType || emailResendReason.trim().length < 3 || !emailResendToOk) return;
     setEmailResendBusy(true);
     try {
       const { data } = await resendOrderEmail(eventId, order.id, {
@@ -751,6 +757,8 @@ export function OrderDetail({
             label="Send to"
             value={emailResendTo}
             onChange={(e) => setEmailResendTo(e.currentTarget.value)}
+            onBlur={emailResendToError.onBlur}
+            error={emailResendToError.error}
             placeholder={order.email}
           />
           <Checkbox
@@ -774,7 +782,7 @@ export function OrderDetail({
             <Button
               leftSection={<IconMail size={16} />}
               loading={emailResendBusy}
-              disabled={emailResendReason.trim().length < 3}
+              disabled={emailResendReason.trim().length < 3 || !emailResendToOk}
               onClick={handleEmailResend}
             >
               Send email
