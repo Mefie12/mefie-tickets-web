@@ -6,16 +6,7 @@ import { Alert, Badge, Button, Card, Group, Loader, Stack, Text, Textarea, Title
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
-
-type OrgRefundRequest = {
-  id: number;
-  status: "PENDING" | "APPROVED" | "DENIED" | "WITHDRAWN";
-  reason: string | null;
-  decision_note: string | null;
-  decided_by: string | null;
-  requested_at: string | null;
-  decided_at: string | null;
-};
+import { refundOutcomeLabel, type OrgRefundRequest } from "@/lib/refundOutcome";
 
 const STATUS_META: Record<OrgRefundRequest["status"], { color: string; label: string }> = {
   PENDING: { color: "yellow", label: "Awaiting review" },
@@ -71,6 +62,18 @@ export function RefundRequestReviewPanel({ eventId, orderId }: { eventId: number
     onError: (e) => notifications.show({ color: "red", message: resolveApiErrorMessage(e) }),
   });
 
+  const retry = useMutation({
+    mutationFn: (id: number) => req<{ refund_request: OrgRefundRequest; refund_error: string | null }>(`${base}/${id}/retry-refund`, { method: "POST", body: {} }),
+    onSuccess: (r) => {
+      notifications.show({
+        color: r.refund_error ? "orange" : "teal",
+        message: r.refund_error ? "The refund still could not be completed." : "Refund issued.",
+      });
+      qc.invalidateQueries({ queryKey: ["org-refund-requests", eventId, orderId] });
+    },
+    onError: (e) => notifications.show({ color: "red", message: resolveApiErrorMessage(e) }),
+  });
+
   if (isLoading) return <Loader size="sm" />;
   const requests = data?.refund_requests ?? [];
   if (requests.length === 0) return null;
@@ -85,13 +88,26 @@ export function RefundRequestReviewPanel({ eventId, orderId }: { eventId: number
 
       {requests.map((r) => {
         const meta = STATUS_META[r.status];
+        const outcome = refundOutcomeLabel(r);
         return (
           <Card key={r.id} withBorder radius="lg" p="md">
             <Group justify="space-between" align="flex-start">
               <Stack gap={2} style={{ minWidth: 0 }}>
-                <Badge color={meta.color} variant="light">
-                  {meta.label}
-                </Badge>
+                <Group gap="xs">
+                  <Badge color={meta.color} variant="light">
+                    {meta.label}
+                  </Badge>
+                  {outcome && (
+                    <Badge color={outcome.color} variant="light">
+                      {outcome.label}
+                    </Badge>
+                  )}
+                </Group>
+                {outcome?.detail && (
+                  <Text size="xs" c="dimmed">
+                    {outcome.detail}
+                  </Text>
+                )}
                 {r.reason && (
                   <Text size="sm" mt={4}>
                     “{r.reason}”
@@ -108,6 +124,14 @@ export function RefundRequestReviewPanel({ eventId, orderId }: { eventId: number
                 )}
               </Stack>
             </Group>
+
+            {r.can_retry_refund && (
+              <Group mt="md">
+                <Button variant="light" color="orange" onClick={() => retry.mutate(r.id)} loading={retry.isPending}>
+                  Retry refund
+                </Button>
+              </Group>
+            )}
 
             {r.status === "PENDING" && pending?.id === r.id && (
               <Stack gap="xs" mt="md">

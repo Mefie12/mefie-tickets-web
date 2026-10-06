@@ -1,4 +1,6 @@
 import { ApiError } from "@/lib/authApi";
+import type { RescheduleImpact } from "@/lib/rescheduleImpact";
+import type { ScannerNotice } from "@/lib/scannerNotice";
 
 export type EventStatus = "DRAFT" | "LIVE" | "ARCHIVED";
 export type EventVisibility = "PUBLIC" | "UNLISTED" | "INVITED";
@@ -140,6 +142,8 @@ export function createEvent(
     attribute_ids?: number[];
     currency_code?: string;
     location?: EventLocationInput;
+    /** Required by the API when the dates of an event with orders change: the organizer's confirmation. */
+    reschedule?: { acknowledged: boolean; notify_attendees: boolean };
   },
 ) {
   return request<{ event: Event }>("/api/events", { method: "POST", body: input });
@@ -159,7 +163,12 @@ export function updateEvent(
     location?: EventLocationInput;
   },
 ) {
-  return request<{ event: Event }>(`/api/events/${id}`, { method: "PATCH", body: input });
+  return request<{ event: Event; scanner_notice?: ScannerNotice }>(`/api/events/${id}`, { method: "PATCH", body: input });
+}
+
+/** Counts of what moving this event's dates would touch; shown before the organizer confirms a reschedule. */
+export function getRescheduleImpact(id: number) {
+  return request<{ impact: RescheduleImpact }>(`/api/events/${id}/reschedule-impact`);
 }
 
 export function updateEventStatus(id: number, status: EventStatus) {

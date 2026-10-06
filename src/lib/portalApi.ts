@@ -91,6 +91,7 @@ export type OrderDetailPayload = {
     decision_note: string | null;
     requested_at: string | null;
     decided_at: string | null;
+    refund_outcome?: "ISSUED" | "FAILED" | null;
   } | null;
 };
 

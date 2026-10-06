@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/authApi";
 
-export type ScannerSetupStatus = "AVAILABLE" | "CONSUMED" | "REVOKED" | "EVENT_CLOSED";
+export type ScannerSetupStatus = "AVAILABLE" | "CONSUMED" | "REVOKED" | "EXPIRED" | "EVENT_CLOSED";
 export type ScannerCodeStatus = "NONE" | "ACTIVE" | "EXPIRED" | "LOCKED" | "CONSUMED";
 
 export type ScannerSetupCodeState = {
@@ -61,6 +61,13 @@ export const sendNewScannerSetupCode = (eventId: number, setupId: string) =>
     { method: "POST" },
   );
 
+/** Re-show a lost link/QR. Rotates the token: the previous link and QR stop working. */
+export const regenerateScannerSetupLink = (eventId: number, setupId: string) =>
+  request<{ setup_url: string; setup_qr: string }>(
+    `/api/events/${eventId}/scanner-setups/${encodeURIComponent(setupId)}/regenerate-link`,
+    { method: "POST" },
+  );
+
 export const revokeScannerSetup = (eventId: number, setupId: string) =>
   request<{ status: "REVOKED" }>(`/api/events/${eventId}/scanner-setups/${encodeURIComponent(setupId)}`, { method: "DELETE" });
 
@@ -70,6 +77,7 @@ export function scannerSetupLabel(status: ScannerSetupStatus): string {
     case "AVAILABLE": return "Ready";
     case "CONSUMED": return "Enrolled";
     case "REVOKED": return "Revoked";
+    case "EXPIRED": return "Expired";
     case "EVENT_CLOSED": return "Event closed";
   }
 }

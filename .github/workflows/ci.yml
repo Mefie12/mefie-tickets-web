@@ -13,9 +13,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # package.json "engines" requires Node 24; the pipeline used to build on 20 and never ran the tests.
+          node-version-file: ".nvmrc"
           cache: "npm"
 
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
