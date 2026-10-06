@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title, UnstyledButton } from "@mantine/core";
 import type { EventGate } from "@/lib/gateRoutingApi";
 import { TableScrollShadow } from "@/components/TableScrollShadow";
 import { deviceStatusPrompt } from "@/lib/gateDevicePrompts";
 import { closeGateOperations, getGateOperations, reviewGateConflict, updateGateDevice } from "@/lib/gateOperationsApi";
+import { GateAdmissionsFeed } from "@/components/GateAdmissionsFeed";
 
 export function GateOperationsDashboard({ eventId, gates = [] }: { eventId: number; gates?: EventGate[] }) {
   const client = useQueryClient();
+  const [deviceFilter, setDeviceFilter] = useState<string | null>(null);
   const gateName = useMemo(() => new Map(gates.map((g) => [g.id, g.name])), [gates]);
   const laneName = useMemo(() => new Map(gates.flatMap((g) => g.lanes).map((l) => [l.id, l.name])), [gates]);
   const query = useQuery({ queryKey: ["gate-operations", eventId], queryFn: () => getGateOperations(eventId), refetchInterval: 15_000 });
@@ -23,6 +25,16 @@ export function GateOperationsDashboard({ eventId, gates = [] }: { eventId: numb
   const review = useMutation({ mutationFn: (id: number) => reviewGateConflict(eventId, id), onSuccess: refresh });
   const close = useMutation({ mutationFn: () => closeGateOperations(eventId), onSuccess: refresh });
   const data = query.data;
+  // Multiple scanners can be enrolled on one lane by design (any of them can admit, and the
+  // one-admission-per-ticket guarantee is what actually prevents double-entry) — surfacing how
+  // many are currently ACTIVE on a lane is what lets an organizer actually see that at a glance.
+  const laneActiveCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const item of data?.devices ?? []) {
+      if (item.status === "ACTIVE") counts.set(item.lane_id, (counts.get(item.lane_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [data?.devices]);
 
   if (query.isError) return <Alert color="red">Gate operations could not be loaded.</Alert>;
   if (!data) return <Text c="dimmed">Loading gate operations…</Text>;
@@ -41,15 +53,22 @@ export function GateOperationsDashboard({ eventId, gates = [] }: { eventId: numb
         <Card withBorder key={label as string}><Text size="xs" c="dimmed">{label}</Text><Text fw={700} size="xl">{value}</Text></Card>)}
     </SimpleGrid>
     <Card withBorder><Title order={3} mb="md">Devices</Title><TableScrollShadow minWidth={900}><Table striped highlightOnHover>
-      <Table.Thead><Table.Tr><Table.Th>Device</Table.Th><Table.Th>Entrance / lane</Table.Th><Table.Th>Status</Table.Th><Table.Th>Readiness</Table.Th><Table.Th>Last sync</Table.Th><Table.Th>Pending</Table.Th><Table.Th>Conflicts</Table.Th><Table.Th>Actions</Table.Th></Table.Tr></Table.Thead>
+      <Table.Thead><Table.Tr><Table.Th>Device</Table.Th><Table.Th>Entrance / lane</Table.Th><Table.Th>Status</Table.Th><Table.Th>Checked in</Table.Th><Table.Th>Readiness</Table.Th><Table.Th>Last sync</Table.Th><Table.Th>Pending</Table.Th><Table.Th>Conflicts</Table.Th><Table.Th>Actions</Table.Th></Table.Tr></Table.Thead>
       <Table.Tbody>{data.devices.map((item) => <Table.Tr key={item.device_registration_id}>
         <Table.Td>{item.label}</Table.Td>
-        <Table.Td><Text size="sm">{gateName.get(item.gate_id) ?? `Gate ${item.gate_id}`}</Text><Text size="xs" c="dimmed">{laneName.get(item.lane_id) ?? `Lane ${item.lane_id}`}</Text></Table.Td>
-        <Table.Td>{item.status}</Table.Td><Table.Td>{item.readiness ?? "Not reported"}</Table.Td>
+        <Table.Td><Text size="sm">{gateName.get(item.gate_id) ?? `Gate ${item.gate_id}`}</Text><Group gap={6}><Text size="xs" c="dimmed">{laneName.get(item.lane_id) ?? `Lane ${item.lane_id}`}</Text><Badge size="xs" variant="light" color="teal">{laneActiveCounts.get(item.lane_id) ?? 0} active</Badge></Group></Table.Td>
+        <Table.Td>{item.status}</Table.Td>
+        <Table.Td>{item.checked_in > 0 ? (
+          <UnstyledButton onClick={() => { setDeviceFilter(item.device_registration_id); document.getElementById("gate-admissions-feed")?.scrollIntoView({ behavior: "smooth" }); }}>
+            <Text size="sm" fw={600} c="blue">{item.checked_in}</Text>
+          </UnstyledButton>
+        ) : <Text size="sm" c="dimmed">0</Text>}</Table.Td>
+        <Table.Td>{item.readiness ?? "Not reported"}</Table.Td>
         <Table.Td>{item.last_sync_at ? new Date(item.last_sync_at).toLocaleString() : "Never"}</Table.Td><Table.Td>{item.pending}</Table.Td><Table.Td>{item.conflicts}</Table.Td>
         <Table.Td><Group gap="xs">{item.status === "ACTIVE" ? <Button size="xs" variant="light" color="yellow" onClick={() => changeStatus(item, "PAUSED")}>Pause</Button> : item.status === "PAUSED" ? <Button size="xs" variant="light" onClick={() => device.mutate({ id: item.device_registration_id, status: "ACTIVE" })}>Resume</Button> : null}<Button size="xs" variant="subtle" color="red" disabled={item.status === "RETIRED"} onClick={() => changeStatus(item, "RETIRED")}>Retire</Button></Group></Table.Td>
       </Table.Tr>)}</Table.Tbody>
     </Table></TableScrollShadow></Card>
     {data.conflicts.length > 0 && <Card withBorder><Title order={3} mb="md">Open conflicts</Title><Stack>{data.conflicts.map((conflict) => <Group justify="space-between" key={conflict.id}><Text>Operation {conflict.operation_id} · {new Date(conflict.created_at).toLocaleString()}</Text><Button size="xs" variant="light" onClick={() => review.mutate(conflict.id)}>Mark reviewed</Button></Group>)}</Stack></Card>}
+    <GateAdmissionsFeed eventId={eventId} gates={gates} devices={data.devices} deviceFilter={deviceFilter} onDeviceFilterChange={setDeviceFilter} />
   </Stack>;
 }
