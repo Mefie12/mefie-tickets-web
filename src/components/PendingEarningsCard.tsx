@@ -34,14 +34,14 @@ export function PendingEarningsCard({ earnings, currency }: { earnings: PendingE
             <Text size="xs" c="dimmed">
               Held
             </Text>
-            <Text fw={600}>{formatMinorAmount(earnings.held_minor, currency)}</Text>
+            <Text fw={600}>{formatMinorAmount(earnings.held_net_minor ?? earnings.held_minor, currency)}</Text>
           </Stack>
           <Stack gap={0}>
             <Text size="xs" c="dimmed">
               Ready to release
             </Text>
             <Text fw={600} c="brand">
-              {formatMinorAmount(earnings.release_eligible_minor, currency)}
+              {formatMinorAmount(earnings.release_eligible_net_minor ?? earnings.release_eligible_minor, currency)}
             </Text>
           </Stack>
           <Stack gap={0}>
@@ -51,6 +51,13 @@ export function PendingEarningsCard({ earnings, currency }: { earnings: PendingE
             <Text fw={600}>{formatMinorAmount(earnings.transferred_minor, currency)}</Text>
           </Stack>
         </Group>
+
+        {(earnings.advanced_outstanding_minor ?? 0) > 0 && (
+          <Text size="xs" c="dimmed">
+            {formatMinorAmount(earnings.advanced_outstanding_minor!, currency)} of your earnings has already been paid to you early; it is
+            deducted from what is shown above and from your final release.
+          </Text>
+        )}
 
         <Text size="xs" c="dimmed">
           Ticket sale proceeds are held for a short period after your event ends, then released to your bank via
@@ -63,7 +70,14 @@ export function PendingEarningsCard({ earnings, currency }: { earnings: PendingE
             <Stack gap="xs">
               {transfers.data.map((transfer) => (
                 <Group key={transfer.id} justify="space-between" align="flex-start">
-                  <Text size="sm">{formatMinorAmount(transfer.amount_minor, transfer.currency)}</Text>
+                  <Group gap="xs">
+                    <Text size="sm">{formatMinorAmount(transfer.amount_minor, transfer.currency)}</Text>
+                    {transfer.kind === "ADVANCE" && (
+                      <Badge variant="light" size="xs" color="teal">
+                        Early payout
+                      </Badge>
+                    )}
+                  </Group>
                   <Stack gap={0} align="flex-end">
                     <Badge variant="light" size="sm" color={STATUS_COLOR[transfer.status] ?? "gray"}>
                       {transfer.status}

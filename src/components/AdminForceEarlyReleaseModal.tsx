@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Alert, Button, Group, Loader, Modal, Select, Stack, Text, Textarea } from "@mantine/core";
 import { formatMinorAmount } from "@/lib/money";
-import type { ReleasePreview } from "@/lib/platformOrganizationApi";
+import type { ReleaseHeldBack, ReleasePreview } from "@/lib/platformOrganizationApi";
 
 const REASON_CATEGORIES = [
   { value: "ORGANIZER_HARDSHIP", label: "Organizer hardship request" },
@@ -55,7 +55,8 @@ export function AdminForceEarlyReleaseModal({
         </Group>
       ) : blocked ? (
         <Stack>
-          <Alert color="red">{blockedPreviewCopy(preview!.outcome, preview!.account?.account_status)}</Alert>
+          <Alert color={preview!.outcome === "ADVANCE_IN_FLIGHT" ? "orange" : "red"}>{blockedPreviewCopy(preview!.outcome, preview!.account?.account_status)}</Alert>
+          <HeldBackNotice heldBack={preview!.held_back} />
           <Group justify="flex-end">
             <Button onClick={handleClose}>Close</Button>
           </Group>
@@ -67,6 +68,7 @@ export function AdminForceEarlyReleaseModal({
             documented justification, is audited as a distinct event from a routine release, and may increase refund/dispute
             exposure — a later refund does not automatically reverse a transfer already sent to the organizer.
           </Alert>
+          <HeldBackNotice heldBack={preview?.held_back} />
           {preview?.account && (
             <Text size="sm" c="dimmed">
               Target account: {preview.account.provider} · {preview.account.environment} (routing {preview.account.routing_status})
@@ -136,9 +138,34 @@ export function blockedPreviewCopy(outcome: string, accountStatus?: string): str
         : "The account holding this money hasn't finished setup with the payment provider yet — releasing isn't possible until the organizer completes their outstanding requirements.";
     case "MULTIPLE_ACCOUNTS_ELIGIBLE":
       return "More than one payment account has releasable funds for this organization — this needs manual review before releasing, since this action can only target one account at a time.";
+    case "ADVANCE_IN_FLIGHT":
+      return "Everything releasable belongs to events with an early payout that hasn't finished yet. Wait for it to complete, or — if its outcome is unknown — reconcile it first.";
     case "NO_ELIGIBLE_FUNDS":
       return "Nothing is currently eligible to release.";
     default:
       return "This action isn't available right now.";
   }
+}
+
+/**
+ * Events a release skipped because an early payout for them hasn't finished
+ * (pending, processing, unknown outcome). Releasing them now could pay the
+ * organizer net of an advance that then fails — so they wait.
+ */
+export function HeldBackNotice({ heldBack }: { heldBack?: ReleaseHeldBack[] }) {
+  if (!heldBack || heldBack.length === 0) return null;
+  return (
+    <Alert color="orange" title={`${heldBack.length} event${heldBack.length === 1 ? "" : "s"} held back — early payout still processing`}>
+      <Stack gap={2}>
+        {heldBack.map((item) => (
+          <Text key={item.event_id} size="sm">
+            {item.event_title || `Event ${item.event_id}`}: {formatMinorAmount(item.amount_minor, item.currency)} waits for transfer #{item.transfer_id} ({item.status.toLowerCase().replace("_", " ")}).
+          </Text>
+        ))}
+        <Text size="xs" c="dimmed">
+          If a transfer&apos;s outcome is unknown, resolve it with <code>payouts:reconcile-transfer</code>; the event is released once the early payout succeeds or fails.
+        </Text>
+      </Stack>
+    </Alert>
+  );
 }

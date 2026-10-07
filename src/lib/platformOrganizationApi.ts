@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/authApi";
+import type { AdvanceSummary } from "@/lib/earlyPayout";
 
 /**
  * Client-side helpers for the Organizations tab of the Mefie Admin
@@ -166,23 +167,29 @@ export function replaceOrganizationPaymentAccount(
   });
 }
 
-export type ReleasePreviewOutcome = "PREVIEW_OK" | "NO_ELIGIBLE_FUNDS" | "PAYOUT_RESTRICTED" | "ACCOUNT_NOT_CONNECTED" | "ACCOUNT_NOT_READY" | "MULTIPLE_ACCOUNTS_ELIGIBLE";
+export type ReleasePreviewOutcome = "PREVIEW_OK" | "NO_ELIGIBLE_FUNDS" | "PAYOUT_RESTRICTED" | "ACCOUNT_NOT_CONNECTED" | "ACCOUNT_NOT_READY" | "MULTIPLE_ACCOUNTS_ELIGIBLE" | "ADVANCE_IN_FLIGHT";
 export type ReleaseOutcome = "RELEASE_REQUESTED" | "NO_ELIGIBLE_FUNDS" | "PAYOUT_RESTRICTED" | "ACCOUNT_NOT_CONNECTED" | "ACCOUNT_NOT_READY" | "MULTIPLE_ACCOUNTS_ELIGIBLE" | "PREVIEW_STALE";
 
 export type ReleaseAccountSummary = { id: number; provider: string; environment: string; routing_status: string; account_status: string };
-export type ReleaseBalance = { currency: string; amount_minor: number };
+/** amount_minor is what the transfer will actually pay (gross less early payouts already made). */
+export type ReleaseBalance = { currency: string; amount_minor: number; gross_minor?: number; advances_deducted_minor?: number };
+
+/** An event the release is skipping because its early payout hasn't reached a final answer from the provider. */
+export type ReleaseHeldBack = { event_id: number; event_title: string; transfer_id: number; status: string; amount_minor: number; currency: string };
 
 export type ReleasePreview = {
   outcome: ReleasePreviewOutcome;
   account?: ReleaseAccountSummary;
   balances?: ReleaseBalance[];
   preview_token?: string;
+  held_back?: ReleaseHeldBack[];
 };
 
 export type OrganizerTransfer = {
   id: number;
   currency: string;
   amount_minor: number;
+  kind?: "SETTLEMENT" | "ADVANCE";
   status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "OUTCOME_UNKNOWN" | "RECONCILING";
 };
 
@@ -243,5 +250,49 @@ export function reconnectOrganizationPaymentAccount(id: string, paymentAccountId
   return request<{ payment_account: Record<string, unknown> }>(`/api/admin/organizations/${id}/payments/reconnect`, {
     method: "POST",
     body: { payment_account_id: paymentAccountId, reason },
+  });
+}
+
+export type AdvancePreviewOutcome =
+  | "SUMMARY" | "PREVIEW_OK" | "DISABLED" | "DRAFT_EVENT" | "PAYOUT_RESTRICTED" | "NOTHING_ABOVE_FLOOR" | "USE_ROUTINE_RELEASE"
+  | "INVALID_AMOUNT" | "BELOW_MINIMUM" | "EXCEEDS_AVAILABLE" | "INSUFFICIENT_PROVIDER_BALANCE" | "PROVIDER_BALANCE_UNAVAILABLE"
+  | "ACCOUNT_NOT_CONNECTED" | "ACCOUNT_NOT_READY" | "MULTIPLE_ACCOUNTS_ELIGIBLE";
+
+export type AdvancePreview = {
+  outcome: AdvancePreviewOutcome;
+  summary: AdvanceSummary;
+  account?: ReleaseAccountSummary;
+  amount_minor?: number;
+  preview_token?: string;
+};
+
+export type AdvanceResult = {
+  outcome: AdvancePreviewOutcome | "ADVANCE_REQUESTED" | "PREVIEW_STALE";
+  summary: AdvanceSummary | null;
+  organizer_transfer: OrganizerTransfer | null;
+};
+
+/**
+ * Early payout (partial payout) — see EventAdvanceService on the API.
+ * Read-only. Without an amount: the event's live reserve summary. With
+ * one: validates it against the reserve floor, the account and the
+ * provider balance, and returns the token releaseAdvance() must present.
+ */
+export function getAdvancePreview(id: string, eventId: number, amountMinor?: number): Promise<AdvancePreview> {
+  const qs = new URLSearchParams({ event_id: String(eventId) });
+  if (amountMinor !== undefined) qs.set("amount_minor", String(amountMinor));
+  return request<AdvancePreview>(`/api/admin/organizations/${id}/payments/advance-preview?${qs.toString()}`);
+}
+
+/**
+ * Submits a previewed early payout. Reason category + a real
+ * explanation (10+ chars) are required and audited. PREVIEW_STALE means
+ * earnings or earlier payouts moved since the preview — fetch a fresh
+ * one and confirm again, never retry with the old token.
+ */
+export function releaseAdvance(id: string, previewToken: string, reasonCategory: string, reason: string): Promise<AdvanceResult> {
+  return request<AdvanceResult>(`/api/admin/organizations/${id}/payments/advance`, {
+    method: "POST",
+    body: { preview_token: previewToken, reason_category: reasonCategory, reason },
   });
 }
