@@ -185,7 +185,9 @@ function buildPaymentSettingDetails(schedule: FeeSchedule | undefined): Record<P
       absorbLabel: "Absorb tax",
     },
     fee_pass_through: {
-      label: platformRate ? `Mefie service fee (${platformRate})` : "Mefie service fee",
+      label: platformRate
+        ? `Mefie service fee (${platformRate}${schedule?.platform_fee_source === "AGREEMENT" ? ", your agreed rate" : ""})`
+        : "Mefie service fee",
       rateLabel: platformRate ?? "",
       onDescription: "The Mefie service fee will be added to attendee checkout totals.",
       offDescription: "Your organization will absorb the Mefie service fee from its payout.",
@@ -260,6 +262,17 @@ function PaymentSettingsCard({
             Choose who pays each cost on a paid ticket: pass it on to the buyer, or absorb it from your payout.
           </Text>
         </Stack>
+
+        {feeSchedule.data?.fee_schedule.platform_fee_source === "AGREEMENT" && (
+          <Text size="xs" c="dimmed">
+            You have a Mefie service fee rate agreed with us. It&apos;s locked into each event when its first ticket is
+            sold
+            {feeSchedule.data.fee_schedule.platform_fee_agreement_ends_at
+              ? `, for events whose first sale happens before ${new Date(feeSchedule.data.fee_schedule.platform_fee_agreement_ends_at).toLocaleDateString()}`
+              : ""}
+            . Events that have already sold keep the rate they started with.
+          </Text>
+        )}
 
         {!canEdit && <Text size="xs" c="dimmed">Only organization admins can change payment settings.</Text>}
 

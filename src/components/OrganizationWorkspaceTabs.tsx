@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Group, Loader, Modal, Pagination, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -12,8 +12,9 @@ import { AdminReplacePaymentAccountModal } from '@/components/AdminReplacePaymen
 import { AdminReasonModal } from '@/components/AdminReasonModal';
 import { AdminForceEarlyReleaseModal, HeldBackNotice, blockedPreviewCopy } from '@/components/AdminForceEarlyReleaseModal';
 import { AdminEarlyPayoutModal } from '@/components/AdminEarlyPayoutModal';
+import { OrganizationCommercialTerms } from '@/components/OrganizationCommercialTerms';
 import { advanceOutcomeCopy, type AdvanceSummary } from '@/lib/earlyPayout';
-import { formatMinorAmount } from '@/lib/money';
+import { formatBasisPointsAsPercent, formatMinorAmount } from '@/lib/money';
 import {
   fetchOrganizationWorkspace, getReleasePreview, releaseOrganizationPayout, reconnectOrganizationPaymentAccount,
   type AdvanceResult, type MoneySummary, type ReleasePreview, type ReleaseResult,
@@ -23,7 +24,7 @@ type Overview = { period: { from: string; to: string }; lifetime: MoneySummary[]
 type AlertRow = { rule: string; severity: string; title: string; evidence: string; tab: string; detected_at: string };
 type ActivityRow = { id: string; category: string; action: string; summary: string; occurred_at: string; source: string };
 type Page<T> = { meta: { current_page: number; last_page: number; total: number }; events?: T[]; orders?: T[]; customers?: T[]; members?: T[]; activity?: T[] };
-type EventRow = { id: number; title: string; status: string; start_date: string | null; orders_count: number; tickets_issued: number; checked_in: number; gross_sales: string; currency_code: string };
+type EventRow = { id: number; title: string; status: string; start_date: string | null; orders_count: number; tickets_issued: number; checked_in: number; gross_sales: string; currency_code: string; platform_fee_basis_points: number | null; platform_fee_source: 'STANDARD' | 'AGREEMENT' | null };
 
 const money = (value: string, currency: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(Number(value));
 const date = (value?: string | null) => value ? new Date(value).toLocaleString() : '—';
@@ -32,9 +33,20 @@ function Loading({ error }: { error?: Error | null }) { return error ? <Alert co
 function Empty({ label }: { label: string }) { return <Text c="dimmed" ta="center" py="xl">{label}</Text>; }
 function Pager({ page, pages, onChange }: { page: number; pages: number; onChange: (page: number) => void }) { return pages > 1 ? <Pagination value={page} total={pages} onChange={onChange} /> : null; }
 
+const TAB_VALUES = ['overview', 'events', 'sales', 'customers', 'team', 'payments', 'commercial-terms', 'notes', 'activity'];
+
 export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPanel }: { organizationId: string; permissions: string[]; notesPanel: React.ReactNode }) {
   const has = (permission: string) => permissions.includes(permission);
-  const [tab, setTab] = useState('overview');
+  // The tab lives in the URL (?tab=) so a step-up re-authentication, which
+  // sends the admin away and back to this exact address, lands on the same tab.
+  const requestedTab = useSearchParams().get('tab');
+  const [tab, setTabState] = useState(requestedTab && TAB_VALUES.includes(requestedTab) ? requestedTab : 'overview');
+  const setTab = (value: string) => {
+    setTabState(value);
+    const url = new URL(window.location.href);
+    if (value === 'overview') url.searchParams.delete('tab'); else url.searchParams.set('tab', value);
+    window.history.replaceState(null, '', url);
+  };
 
   return <Tabs value={tab} onChange={(value) => setTab(value ?? 'overview')} keepMounted={false}>
     <Tabs.List>
@@ -44,6 +56,7 @@ export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPa
       {has('organization.customers.view') && <Tabs.Tab value="customers">Customers</Tabs.Tab>}
       {has('organization.team.view') && <Tabs.Tab value="team">Team</Tabs.Tab>}
       {has('organization.payments.view') && <Tabs.Tab value="payments">Payments</Tabs.Tab>}
+      {has('organizations.commercial_terms.view') && <Tabs.Tab value="commercial-terms">Commercial terms</Tabs.Tab>}
       {has('organizations.notes.view') && <Tabs.Tab value="notes">Notes</Tabs.Tab>}
       {has('organization.activity.view') && <Tabs.Tab value="activity">Activity</Tabs.Tab>}
     </Tabs.List>
@@ -53,6 +66,7 @@ export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPa
     <Tabs.Panel value="customers" pt="lg"><CustomersPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="team" pt="lg"><TeamPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="payments" pt="lg"><PaymentsPanel organizationId={organizationId} canReplaceAccount={has('payouts.replace_account')} canReleasePayout={has('payouts.release')} canReleasePartial={has('payouts.release_partial')} canReconnectAccount={has('payouts.reconnect_account')} /></Tabs.Panel>
+    <Tabs.Panel value="commercial-terms" pt="lg"><OrganizationCommercialTerms organizationId={organizationId} canManage={has('organizations.commercial_terms.manage')} /></Tabs.Panel>
     <Tabs.Panel value="notes" pt="lg">{notesPanel}</Tabs.Panel>
     <Tabs.Panel value="activity" pt="lg"><ActivityPanel organizationId={organizationId} /></Tabs.Panel>
   </Tabs>;
@@ -79,7 +93,7 @@ function EventsPanel({ organizationId }: { organizationId: string }) {
   const [page,setPage]=useState(1), [q,setQ]=useState(''), [status,setStatus]=useState('');
   const query=useQuery({queryKey:['org-events',organizationId,page,q,status],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string, unknown>>>(organizationId,'events',{page,q,status})});
   const rows=(query.data?.events ?? []) as EventRow[];
-  return <Stack><Group><TextInput placeholder="Search events" value={q} onChange={(e)=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={(v)=>setStatus(v??'')} data={['DRAFT','LIVE','ARCHIVED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Dates</Table.Th><Table.Th>Orders</Table.Th><Table.Th>Tickets / check-ins</Table.Th><Table.Th>Gross</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td><Text fw={600}>{r.title}</Text></Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{date(r.start_date)}</Table.Td><Table.Td>{r.orders_count}</Table.Td><Table.Td>{r.tickets_issued} / {r.checked_in}</Table.Td><Table.Td>{money(r.gross_sales,r.currency_code)}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No events match these filters."/>}</Stack>;
+  return <Stack><Group><TextInput placeholder="Search events" value={q} onChange={(e)=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={(v)=>setStatus(v??'')} data={['DRAFT','LIVE','ARCHIVED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Dates</Table.Th><Table.Th>Orders</Table.Th><Table.Th>Tickets / check-ins</Table.Th><Table.Th>Gross</Table.Th><Table.Th>Platform fee</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td><Text fw={600}>{r.title}</Text></Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{date(r.start_date)}</Table.Td><Table.Td>{r.orders_count}</Table.Td><Table.Td>{r.tickets_issued} / {r.checked_in}</Table.Td><Table.Td>{money(r.gross_sales,r.currency_code)}</Table.Td><Table.Td style={{whiteSpace:'nowrap'}}>{r.platform_fee_basis_points===null?<Text size="sm" c="dimmed">Not locked yet</Text>:<Group gap="xs" wrap="nowrap"><Text size="sm">{formatBasisPointsAsPercent(r.platform_fee_basis_points)}</Text>{r.platform_fee_source==='AGREEMENT'&&<Badge color="violet" variant="light" styles={{root:{overflow:'visible'},label:{overflow:'visible',textOverflow:'clip'}}}>Negotiated</Badge>}</Group>}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No events match these filters."/>}</Stack>;
 }
 function OrdersPanel({ organizationId }: { organizationId:string }) { const [page,setPage]=useState(1),[q,setQ]=useState(''),[status,setStatus]=useState(''); const query=useQuery({queryKey:['org-orders',organizationId,page,q,status],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'orders',{page,q,status})}); const rows=(query.data?.orders??[]) as Record<string,any>[]; return <Stack><Group><TextInput placeholder="Order or event" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={v=>setStatus(v??'')} data={['RESERVED','COMPLETED','CANCELLED','AWAITING_OFFLINE_PAYMENT','ABANDONED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped><Table.Thead><Table.Tr><Table.Th>Order</Table.Th><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Source</Table.Th><Table.Th>Total</Table.Th><Table.Th>Created</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.short_id}</Table.Td><Table.Td>{r.event_title}</Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{r.source}</Table.Td><Table.Td>{money(r.total_amount,r.currency)}</Table.Td><Table.Td>{date(r.created_at)}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No orders match these filters."/>}</Stack>; }
 function CustomersPanel({organizationId}:{organizationId:string}) { const [page,setPage]=useState(1),[q,setQ]=useState(''); const query=useQuery({queryKey:['org-customers',organizationId,page,q],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'customers',{page,q})}); const rows=(query.data?.customers??[]) as Record<string,any>[]; return <Stack><TextInput placeholder="Search customers" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/>{!query.data?<Loading error={query.error}/>:rows.length?<><Table><Table.Thead><Table.Tr><Table.Th>Customer</Table.Th><Table.Th>Contact (masked)</Table.Th><Table.Th>Events</Table.Th><Table.Th>Tickets</Table.Th><Table.Th>Checked in</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.first_name} {r.last_name}</Table.Td><Table.Td>{r.email}<br/>{r.phone}</Table.Td><Table.Td>{r.events_count}</Table.Td><Table.Td>{r.tickets_count}</Table.Td><Table.Td>{r.checked_in_count}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No customers yet."/>}</Stack>; }
