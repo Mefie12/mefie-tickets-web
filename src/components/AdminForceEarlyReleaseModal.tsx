@@ -159,7 +159,7 @@ export function HeldBackNotice({ heldBack }: { heldBack?: ReleaseHeldBack[] }) {
       <Stack gap={2}>
         {heldBack.map((item) => (
           <Text key={item.event_id} size="sm">
-            {item.event_title || `Event ${item.event_id}`}: {formatMinorAmount(item.amount_minor, item.currency)} waits for transfer #{item.transfer_id} ({item.status.toLowerCase().replace("_", " ")}).
+            {item.event_title || `Event ${item.event_id}`}: {formatMinorAmount(item.amount_minor, item.currency)} waits for transfer #{item.transfer_id} ({item.status.toLowerCase().replace("_", " ")}{item.requested_at ? `, requested ${new Date(item.requested_at).toLocaleString()}` : ""}).
           </Text>
         ))}
         <Text size="xs" c="dimmed">
