@@ -56,6 +56,10 @@ export type FeeSchedule = {
   currency: string;
   tax_basis_points: number;
   platform_fee_basis_points: number;
+  /** AGREEMENT when a rate negotiated with Mefie applies to this organization's new events. */
+  platform_fee_source: "STANDARD" | "AGREEMENT";
+  /** When the negotiated rate stops being locked into new events; null = no end date. */
+  platform_fee_agreement_ends_at: string | null;
   processing_fee_basis_points: number;
   processing_fee_flat_minor: number;
 };
