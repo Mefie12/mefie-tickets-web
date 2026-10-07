@@ -175,7 +175,7 @@ export type ReleaseAccountSummary = { id: number; provider: string; environment:
 export type ReleaseBalance = { currency: string; amount_minor: number; gross_minor?: number; advances_deducted_minor?: number };
 
 /** An event the release is skipping because its early payout hasn't reached a final answer from the provider. */
-export type ReleaseHeldBack = { event_id: number; event_title: string; transfer_id: number; status: string; amount_minor: number; currency: string };
+export type ReleaseHeldBack = { event_id: number; event_title: string; transfer_id: number; status: string; requested_at?: string; amount_minor: number; currency: string };
 
 export type ReleasePreview = {
   outcome: ReleasePreviewOutcome;
