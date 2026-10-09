@@ -88,7 +88,7 @@ export function VenueAccessManager({ eventId, initialDoorsMinutes, startAt, arch
 
   const list = grants.data?.grants ?? [];
   const live = list.filter((g) => g.status !== "REVOKED").length;
-  const max = grants.data?.limits.max_live ?? 10;
+  const max = grants.data?.limits.max_live ?? 50;
 
   return (
     <Stack gap="lg">
