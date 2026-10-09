@@ -12,6 +12,7 @@ import {
   IconLogout2,
   IconSettings,
   IconTicket,
+  IconEye,
 } from "@tabler/icons-react";
 
 export type NavUser = {
@@ -19,6 +20,8 @@ export type NavUser = {
   lastName: string;
   hasOrganization: boolean;
   organization: { name: string; slug: string; logoUrl: string | null } | null;
+  /** Non-organizer portals this person can open (distributor, venue agent). */
+  portalAccess?: { distributor: boolean; venue: boolean };
 } | null;
 
 export type NavConsumer = { first_name: string | null; email: string } | null;
@@ -112,15 +115,21 @@ export function buildAccountSections(
           icon: <IconExternalLink size={16} />,
         },
         { key: "settings", label: "Organizer account settings", href: "/settings", icon: <IconSettings size={16} /> },
+        ...(user.portalAccess?.venue ? [{ key: "venue", label: "Venue events", href: "/venue", icon: <IconEye size={16} /> }] : []),
         { key: "logout", label: "Log out", onSelect: () => signOut("organizer"), icon: <IconLogout size={16} /> },
       ],
     });
   } else if (user) {
+    // No organization: this is a distributor and/or a venue agent. Someone with neither keeps the
+    // distributor entry, which is what they have always seen.
+    const venue = user.portalAccess?.venue === true;
+    const distributor = user.portalAccess?.distributor === true || !venue;
     sections.push({
-      key: "distributor",
-      label: "Distributor",
+      key: "portals",
+      label: venue && distributor ? "Portals" : venue ? "Venue agent" : "Distributor",
       actions: [
-        { key: "portal", label: "Distributor portal", href: "/distributor", icon: <IconBuildingStore size={16} /> },
+        ...(distributor ? [{ key: "portal", label: "Distributor portal", href: "/distributor", icon: <IconBuildingStore size={16} /> }] : []),
+        ...(venue ? [{ key: "venue", label: "Venue events", href: "/venue", icon: <IconEye size={16} /> }] : []),
         { key: "logout", label: "Log out", onSelect: () => signOut("organizer"), icon: <IconLogout size={16} /> },
       ],
     });

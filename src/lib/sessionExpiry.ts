@@ -30,6 +30,9 @@ const AUTH_PATHS = [
   "/verify-email",
   "/tickets/verify",
   "/invitations/accept",
+  // Invitation landing pages probe /users/me to see who is signed in; a 401 there just means "nobody", not an expired session.
+  "/distributor/invitations",
+  "/venue/invitations",
   "/t", // raw locator entry (/t/{token})
 ];
 

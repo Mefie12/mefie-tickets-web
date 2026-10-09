@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Alert,
+  Box,
   Anchor,
   Badge,
   Button,
@@ -22,6 +23,8 @@ import {
   Textarea,
   Title,
 } from "@mantine/core";
+import { DoorsOpenField } from "@/components/DoorsOpenField";
+import { doorsChoiceFromMinutes, doorsMinutesFromChoice, doorsMinutesInvalid } from "@/lib/doorsOpen";
 import { useForm } from "@mantine/form";
 import { IconDotsVertical } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
@@ -359,10 +362,12 @@ function RecurrenceForm({ series, onUpdated, disabled, onSaved }: { series: Even
   const router = useRouter();
   const [startsOn, setStartsOn] = useState(series.starts_on);
   const [values, setValues] = useState<RecurrenceFormValues>(seriesToRecurrenceValues(series));
+  const [doors, setDoors] = useState(doorsChoiceFromMinutes(series.doors_open_minutes_before_start ?? null));
   const [error, setError] = useState<string | null>(null);
+  const doorsMinutes = doorsMinutesFromChoice(doors);
 
   const mutation = useMutation({
-    mutationFn: () => updateEventSeries(series.id, { starts_on: startsOn, recurrence: toRecurrenceRuleInput(values) }),
+    mutationFn: () => updateEventSeries(series.id, { starts_on: startsOn, recurrence: toRecurrenceRuleInput(values), doors_open_minutes_before_start: doorsMinutes }),
     onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Schedule updated." }); onSaved?.(); },
     onError: (err: Error) => {
       if (redirectOnAuthError(err, router)) return;
@@ -374,8 +379,11 @@ function RecurrenceForm({ series, onUpdated, disabled, onSaved }: { series: Even
     <Card withBorder radius="lg" p="xl">
       {error && <Alert color="red" mb="md">{error}</Alert>}
       <RecurrenceRuleEditor values={values} onChange={setValues} startsOn={startsOn} onStartsOnChange={setStartsOn} disabled={disabled} />
+      <Box mt="md" maw={360}>
+        <DoorsOpenField value={doors} onChange={setDoors} startAt={startsOn && values.start_time ? `${startsOn}T${values.start_time}` : ""} disabled={disabled} />
+      </Box>
       {!disabled ? (
-        <Button mt="md" loading={mutation.isPending} onClick={() => mutation.mutate()}>
+        <Button mt="md" loading={mutation.isPending} disabled={doorsMinutesInvalid(doorsMinutes)} onClick={() => mutation.mutate()}>
           Save schedule
         </Button>
       ) : (

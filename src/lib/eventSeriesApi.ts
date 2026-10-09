@@ -52,6 +52,8 @@ export type EventSeries = {
   timezone: string;
   currency_code: string;
   location_details: EventLocation | null;
+  /** Minutes before each occurrence's start that doors open; copied onto every occurrence. null = not set. */
+  doors_open_minutes_before_start?: number | null;
   frequency: RecurrenceFrequency;
   interval: number;
   by_weekday: number[] | null;
@@ -138,6 +140,7 @@ export function updateEventSeries(
     event_category_id: number | null;
     event_subcategory_id: number | null;
     location: EventLocationInput;
+    doors_open_minutes_before_start: number | null;
   }>,
 ) {
   return request<{ event_series: EventSeries }>(`/api/event-series/${id}`, { method: "PATCH", body: input });

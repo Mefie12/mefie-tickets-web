@@ -167,8 +167,11 @@ export function previewInvitation(token: string) {
   return request<InvitationPreview>(`/api/auth/invitation/${encodeURIComponent(token)}`);
 }
 
+/** Which non-organizer portals this person can open (a distributor or venue agent has no organization to route on). */
+export type PortalAccess = { distributor: boolean; venue: boolean };
+
 export function fetchCurrentUser() {
-  return request<{ user: CurrentUser }>("/api/users/me");
+  return request<{ user: CurrentUser; portal_access?: PortalAccess }>("/api/users/me");
 }
 
 export function updateCurrentUser(input: { first_name?: string; last_name?: string; phone?: string | null }) {

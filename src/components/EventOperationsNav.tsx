@@ -11,6 +11,7 @@ import {
   IconScan,
   IconSettings,
   IconDeviceMobile,
+  IconEye,
   IconUsers,
   IconForms,
   type Icon,
@@ -36,6 +37,7 @@ const sections: NavSection[] = [
       { label: "Responses", suffix: "/responses", icon: IconForms },
       { label: "Offers", suffix: "/offers", icon: IconGift },
       { label: "Complimentary", suffix: "/complimentary", icon: IconDiscount2 },
+      { label: "Venue access", suffix: "/venue-access", icon: IconEye },
     ],
   },
   {
