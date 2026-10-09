@@ -17,6 +17,7 @@ export type GateOperationsDashboard = {
     gate_id: number;
     lane_id: number;
     status: "ACTIVE" | "PAUSED" | "RETIRED";
+    checked_in: number;
     readiness: string | null;
     last_sync_at: string | null;
     snapshot_id: string | null;
@@ -27,6 +28,25 @@ export type GateOperationsDashboard = {
     offline_schema_version: number | null;
   }>;
   conflicts: Array<{ id: number; operation_id: number; canonical_admission_id: number | null; status: string; created_at: string }>;
+};
+
+export type GateAdmissionListItem = {
+  id: number;
+  attendee: { id: number; first_name: string; last_name: string; email: string };
+  ticket: { id: number; reference: string; name: string };
+  order: { id: number; reference: string };
+  gate: { id: number | null; name: string | null };
+  lane: { id: number | null; name: string | null };
+  device: { id: string | null; label: string | null };
+  admitted_at: string;
+  status: "ADMITTED" | "REVERSED";
+  reversal_reason: string | null;
+  reversed_by_device_label: string | null;
+};
+
+export type GateAdmissionListResponse = {
+  admissions: GateAdmissionListItem[];
+  meta: { current_page: number; last_page: number; per_page: number; total: number };
 };
 
 async function request<T>(path: string, method: "GET" | "POST" | "PATCH" = "GET", body?: unknown): Promise<T> {
@@ -47,3 +67,7 @@ export const reviewGateConflict = (eventId: number, conflictId: number) =>
   request<{ status: string }>(`/api/events/${eventId}/gate-operations/conflicts/${conflictId}/review`, "POST");
 export const closeGateOperations = (eventId: number) =>
   request<{ status: string; closed_at: string }>(`/api/events/${eventId}/gate-operations/close`, "POST");
+export const listGateAdmissions = (eventId: number, params: URLSearchParams) =>
+  request<GateAdmissionListResponse>(`/api/events/${eventId}/gate-operations/admissions?${params}`);
+export const exportGateAdmissionsUrl = (eventId: number, params: URLSearchParams) =>
+  `/api/events/${eventId}/gate-operations/admissions/export?${params}`;

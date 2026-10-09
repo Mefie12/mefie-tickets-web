@@ -16,6 +16,7 @@ export async function PublicSiteHeader() {
               firstName: user.first_name,
               lastName: user.last_name,
               hasOrganization: user.current_organization_id !== null,
+              portalAccess: user.portal_access,
               organization: organization
                 ? { name: organization.name, slug: organization.slug, logoUrl: organization.logo_url }
                 : null,

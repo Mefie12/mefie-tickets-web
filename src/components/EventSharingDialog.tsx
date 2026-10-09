@@ -7,6 +7,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import type { EventVisibility } from "@/lib/eventApi";
+import { parseEmailList } from "@/lib/emailAddress";
+import { useEmailFieldError } from "@/lib/useEmailFieldError";
 
 function visibilityLabel(visibility: EventVisibility): string {
   return visibility === "PUBLIC" ? "Public" : visibility === "UNLISTED" ? "Anyone with the link" : "Invite only";
@@ -77,6 +79,10 @@ export function EventSharingDialog({
 }) {
   const [opened, setOpened] = useState(false);
   const [emails, setEmails] = useState("");
+  const parsedEmails = parseEmailList(emails);
+  // One mistyped address would make the server refuse the whole batch, so the bad ones are named up front.
+  const emailsOk = parsedEmails.valid.length > 0 && parsedEmails.invalid.length === 0;
+  const emailsError = useEmailFieldError(emails, parsedEmails.invalid.length === 0, `These don't look like email addresses: ${parsedEmails.invalid.join(", ")}`);
   const queryClient = useQueryClient();
   const base = `/api/${target}/${id}`;
   const itemLabel = target === "event-series" ? "series" : "event";
@@ -154,7 +160,8 @@ export function EventSharingDialog({
   }
   const addMutation = useMutation({
     mutationFn: async () => {
-      const normalized = [...new Set(emails.split(/[\s,;]+/).map((value) => value.trim()).filter(Boolean))];
+      const { valid: normalized, invalid } = parseEmailList(emails);
+      if (invalid.length > 0 || normalized.length === 0) throw new Error("Fix the highlighted addresses first.");
       const response = await fetch(`${base}/invitations`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ emails: normalized }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.message ?? "Could not add invitees.");
@@ -162,7 +169,7 @@ export function EventSharingDialog({
     },
     // Adding never sends anything, no exceptions — sending is a fully
     // separate, explicit action (mutateInvitation "send" / sendOutstandingMutation below).
-    onSuccess: () => { setEmails(""); refresh(); notifications.show({ color: "teal", message: "Invitees added." }); },
+    onSuccess: () => { setEmails(""); emailsError.reset(); refresh(); notifications.show({ color: "teal", message: "Invitees added." }); },
     onError: (error) => notifications.show({ color: "red", message: error.message }),
   });
   async function mutateInvitation(invitation: Invitation, action: "remove" | "send") {
@@ -259,13 +266,13 @@ export function EventSharingDialog({
         <Stack gap="xs">
           <Text fw={600}>Invite people{target === "event-series" ? " to this series" : ""}</Text>
           {target === "event-series" && <Text size="sm" c="dimmed">An invitation applies to every current and future date in this series.</Text>}
-          <Textarea label="Email addresses" description="Separate addresses with commas, spaces, or new lines." placeholder="name@example.com" value={emails} onChange={(event) => setEmails(event.currentTarget.value)} disabled={archived} autosize minRows={2} />
+          <Textarea label="Email addresses" description="Separate addresses with commas, spaces, or new lines." placeholder="name@example.com" value={emails} onChange={(event) => setEmails(event.currentTarget.value)} onBlur={emailsError.onBlur} error={emailsError.error} disabled={archived} autosize minRows={2} />
           <Text size="xs" c="dimmed">
             Adding someone here only gives them access — it never emails them. Send invitations separately, below,
             once you&apos;re ready.
           </Text>
           <Group justify="flex-end">
-            <Button onClick={() => addMutation.mutate()} loading={addMutation.isPending} disabled={archived || !emails.trim()}>
+            <Button onClick={() => addMutation.mutate()} loading={addMutation.isPending} disabled={archived || !emailsOk}>
               Add invitees
             </Button>
           </Group>

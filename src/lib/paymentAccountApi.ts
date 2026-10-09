@@ -24,6 +24,10 @@ export type PendingEarnings = {
   held_minor: number;
   release_eligible_minor: number;
   transferred_minor: number;
+  /** held / release_eligible less early payouts already made (ledger totals above are gross). Absent on older APIs. */
+  held_net_minor?: number;
+  release_eligible_net_minor?: number;
+  advanced_outstanding_minor?: number;
   currency: string | null;
 };
 
@@ -32,6 +36,7 @@ export type OrganizerTransfer = {
   amount_minor: number;
   currency: string;
   status: "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED";
+  kind?: "SETTLEMENT" | "ADVANCE";
   requested_at: string;
   completed_at: string | null;
 };

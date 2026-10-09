@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Alert, Badge, Button, Card, Checkbox, Divider, Group, Pagination, Radio, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
+import { EmailTypoHint } from "@/components/EmailTypoHint";
 import { ApiError } from "@/lib/authApi";
 import { createOrder, type AnswerValue, type Order } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
@@ -203,7 +204,7 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
         <TextInput label="First name" withAsterisk autoComplete="given-name" value={draft.firstName} onChange={(e) => changeDraft({ firstName: e.currentTarget.value })} />
         <TextInput label="Last name" withAsterisk autoComplete="family-name" value={draft.lastName} onChange={(e) => changeDraft({ lastName: e.currentTarget.value })} />
       </SimpleGrid>
-      <TextInput label="Email" withAsterisk type="email" inputMode="email" autoComplete="email" value={draft.email} onChange={(e) => changeDraft({ email: e.currentTarget.value })} />
+      <Stack gap={4}><TextInput label="Email" withAsterisk type="email" inputMode="email" autoComplete="email" value={draft.email} onChange={(e) => changeDraft({ email: e.currentTarget.value })} /><EmailTypoHint email={draft.email} onUse={(email) => changeDraft({ email })} /></Stack>
       <PhoneInput label="Phone" required value={draft.phone} onChange={(phone) => changeDraft({ phone })} />
     </Stack>
 
@@ -241,7 +242,7 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
               {slot.assignment === "later" && <Text size="sm" c="dimmed">You&apos;ll add attendee details for this ticket from your account later.</Text>}
               {slot.assignment === "other" && <>
                 <SimpleGrid type="container" cols={{ base: 1, "380px": 2 }} spacing="sm"><TextInput label="First name" withAsterisk size="sm" autoComplete="off" value={slot.guestFirstName} onChange={(e) => updateSlot(slot.clientId, { guestFirstName: e.currentTarget.value }, "guest")} /><TextInput label="Last name" withAsterisk size="sm" autoComplete="off" value={slot.guestLastName} onChange={(e) => updateSlot(slot.clientId, { guestLastName: e.currentTarget.value }, "guest")} /></SimpleGrid>
-                <TextInput label="Email (optional)" description="We'll send them their ticket if provided" size="sm" type="email" inputMode="email" autoComplete="off" value={slot.guestEmail} onChange={(e) => updateSlot(slot.clientId, { guestEmail: e.currentTarget.value }, "guest")} />
+                <Stack gap={4}><TextInput label="Email (optional)" description="We'll send them their ticket if provided" size="sm" type="email" inputMode="email" autoComplete="off" value={slot.guestEmail} onChange={(e) => updateSlot(slot.clientId, { guestEmail: e.currentTarget.value }, "guest")} /><EmailTypoHint email={slot.guestEmail} onUse={(guestEmail) => updateSlot(slot.clientId, { guestEmail }, "guest")} /></Stack>
                 <PhoneInput label="Phone (optional)" size="sm" value={slot.guestPhone} onChange={(guestPhone) => updateSlot(slot.clientId, { guestPhone }, "guest")} />
               </>}
               {(slot.assignment === "me" || slot.assignment === "other") && attendeeQuestions.map((q) => <EditableQuestionField key={q.id} question={q} value={answers[q.id]} onChange={(answer: AnswerValue) => updateSlot(slot.clientId, slot.assignment === "me" ? { buyerAnswers: { ...slot.buyerAnswers, [q.id]: answer } } : { guestAnswers: { ...slot.guestAnswers, [q.id]: answer } }, slot.assignment === "me" ? "buyerAnswers" : "guestAnswers")} />)}

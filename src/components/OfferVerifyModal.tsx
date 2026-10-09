@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Alert, Button, Modal, PinInput, Stack, Text, TextInput } from "@mantine/core";
+import { isValidEmail } from "@/lib/emailAddress";
+import { useEmailFieldError } from "@/lib/useEmailFieldError";
 
 type Step = "email" | "code" | "needs-account";
 
@@ -24,12 +26,15 @@ export function OfferVerifyModal({ opened, onClose, onVerified, returnPath, defa
 }) {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState(defaultEmail ?? "");
+  const emailOk = isValidEmail(email);
+  const emailError = useEmailFieldError(email, emailOk);
   const [code, setCode] = useState("");
   const [masked, setMasked] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   async function call(action: "request" | "verify") {
+    if (action === "request" && !emailOk) return;
     setBusy(true);
     setError("");
     try {
@@ -69,8 +74,8 @@ export function OfferVerifyModal({ opened, onClose, onVerified, returnPath, defa
           <form onSubmit={(e) => { e.preventDefault(); void call("request"); }}>
             <Stack gap="md">
               <Text size="sm" c="dimmed">This offer is limited per customer, so we need to confirm who you are. We’ll email you a one-time code — no password needed.</Text>
-              <TextInput label="Email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} data-autofocus />
-              <Button type="submit" loading={busy} disabled={!email.includes("@")}>Send code</Button>
+              <TextInput label="Email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} onBlur={emailError.onBlur} error={emailError.error} data-autofocus />
+              <Button type="submit" loading={busy} disabled={!emailOk}>Send code</Button>
             </Stack>
           </form>
         )}

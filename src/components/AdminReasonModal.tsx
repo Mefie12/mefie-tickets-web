@@ -18,6 +18,7 @@ export function AdminReasonModal({
   confirmColor = "red",
   loading,
   onConfirm,
+  initialReason,
 }: {
   opened: boolean;
   onClose: () => void;
@@ -27,8 +28,10 @@ export function AdminReasonModal({
   confirmColor?: string;
   loading: boolean;
   onConfirm: (reason: string) => void;
+  /** Pre-fills the reason, e.g. one restored after a step-up re-authentication. */
+  initialReason?: string;
 }) {
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(initialReason ?? "");
 
   return (
     <Modal

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert, Badge, Button, Card, Group, Loader, Modal, Pagination, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
@@ -10,18 +10,21 @@ import { IconAlertTriangle, IconBuildingStore, IconTicket, IconUsers } from '@ta
 import { redirectOnAdminAuthError } from '@/lib/adminAuthErrorRedirect';
 import { AdminReplacePaymentAccountModal } from '@/components/AdminReplacePaymentAccountModal';
 import { AdminReasonModal } from '@/components/AdminReasonModal';
-import { AdminForceEarlyReleaseModal, blockedPreviewCopy } from '@/components/AdminForceEarlyReleaseModal';
-import { formatMinorAmount } from '@/lib/money';
+import { AdminForceEarlyReleaseModal, HeldBackNotice, blockedPreviewCopy } from '@/components/AdminForceEarlyReleaseModal';
+import { AdminEarlyPayoutModal } from '@/components/AdminEarlyPayoutModal';
+import { OrganizationCommercialTerms } from '@/components/OrganizationCommercialTerms';
+import { advanceOutcomeCopy, type AdvanceSummary } from '@/lib/earlyPayout';
+import { formatBasisPointsAsPercent, formatMinorAmount } from '@/lib/money';
 import {
   fetchOrganizationWorkspace, getReleasePreview, releaseOrganizationPayout, reconnectOrganizationPaymentAccount,
-  type MoneySummary, type ReleasePreview, type ReleaseResult,
+  type AdvanceResult, type MoneySummary, type ReleasePreview, type ReleaseResult,
 } from '@/lib/platformOrganizationApi';
 
 type Overview = { period: { from: string; to: string }; lifetime: MoneySummary[]; period_financials: MoneySummary[]; events: { total: number; by_status: Record<string, number> }; tickets: { issued: number; checked_in: number }; health_alerts: AlertRow[]; recent_activity: ActivityRow[]; last_updated_at: string };
 type AlertRow = { rule: string; severity: string; title: string; evidence: string; tab: string; detected_at: string };
 type ActivityRow = { id: string; category: string; action: string; summary: string; occurred_at: string; source: string };
 type Page<T> = { meta: { current_page: number; last_page: number; total: number }; events?: T[]; orders?: T[]; customers?: T[]; members?: T[]; activity?: T[] };
-type EventRow = { id: number; title: string; status: string; start_date: string | null; orders_count: number; tickets_issued: number; checked_in: number; gross_sales: string; currency_code: string };
+type EventRow = { id: number; title: string; status: string; start_date: string | null; orders_count: number; tickets_issued: number; checked_in: number; gross_sales: string; currency_code: string; platform_fee_basis_points: number | null; platform_fee_source: 'STANDARD' | 'AGREEMENT' | null };
 
 const money = (value: string, currency: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(Number(value));
 const date = (value?: string | null) => value ? new Date(value).toLocaleString() : '—';
@@ -30,9 +33,20 @@ function Loading({ error }: { error?: Error | null }) { return error ? <Alert co
 function Empty({ label }: { label: string }) { return <Text c="dimmed" ta="center" py="xl">{label}</Text>; }
 function Pager({ page, pages, onChange }: { page: number; pages: number; onChange: (page: number) => void }) { return pages > 1 ? <Pagination value={page} total={pages} onChange={onChange} /> : null; }
 
+const TAB_VALUES = ['overview', 'events', 'sales', 'customers', 'team', 'payments', 'commercial-terms', 'notes', 'activity'];
+
 export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPanel }: { organizationId: string; permissions: string[]; notesPanel: React.ReactNode }) {
   const has = (permission: string) => permissions.includes(permission);
-  const [tab, setTab] = useState('overview');
+  // The tab lives in the URL (?tab=) so a step-up re-authentication, which
+  // sends the admin away and back to this exact address, lands on the same tab.
+  const requestedTab = useSearchParams().get('tab');
+  const [tab, setTabState] = useState(requestedTab && TAB_VALUES.includes(requestedTab) ? requestedTab : 'overview');
+  const setTab = (value: string) => {
+    setTabState(value);
+    const url = new URL(window.location.href);
+    if (value === 'overview') url.searchParams.delete('tab'); else url.searchParams.set('tab', value);
+    window.history.replaceState(null, '', url);
+  };
 
   return <Tabs value={tab} onChange={(value) => setTab(value ?? 'overview')} keepMounted={false}>
     <Tabs.List>
@@ -42,6 +56,7 @@ export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPa
       {has('organization.customers.view') && <Tabs.Tab value="customers">Customers</Tabs.Tab>}
       {has('organization.team.view') && <Tabs.Tab value="team">Team</Tabs.Tab>}
       {has('organization.payments.view') && <Tabs.Tab value="payments">Payments</Tabs.Tab>}
+      {has('organizations.commercial_terms.view') && <Tabs.Tab value="commercial-terms">Commercial terms</Tabs.Tab>}
       {has('organizations.notes.view') && <Tabs.Tab value="notes">Notes</Tabs.Tab>}
       {has('organization.activity.view') && <Tabs.Tab value="activity">Activity</Tabs.Tab>}
     </Tabs.List>
@@ -50,7 +65,8 @@ export function OrganizationWorkspaceTabs({ organizationId, permissions, notesPa
     <Tabs.Panel value="sales" pt="lg"><OrdersPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="customers" pt="lg"><CustomersPanel organizationId={organizationId} /></Tabs.Panel>
     <Tabs.Panel value="team" pt="lg"><TeamPanel organizationId={organizationId} /></Tabs.Panel>
-    <Tabs.Panel value="payments" pt="lg"><PaymentsPanel organizationId={organizationId} canReplaceAccount={has('payouts.replace_account')} canReleasePayout={has('payouts.release')} canReconnectAccount={has('payouts.reconnect_account')} /></Tabs.Panel>
+    <Tabs.Panel value="payments" pt="lg"><PaymentsPanel organizationId={organizationId} canReplaceAccount={has('payouts.replace_account')} canReleasePayout={has('payouts.release')} canReleasePartial={has('payouts.release_partial')} canReconnectAccount={has('payouts.reconnect_account')} /></Tabs.Panel>
+    <Tabs.Panel value="commercial-terms" pt="lg"><OrganizationCommercialTerms organizationId={organizationId} canManage={has('organizations.commercial_terms.manage')} /></Tabs.Panel>
     <Tabs.Panel value="notes" pt="lg">{notesPanel}</Tabs.Panel>
     <Tabs.Panel value="activity" pt="lg"><ActivityPanel organizationId={organizationId} /></Tabs.Panel>
   </Tabs>;
@@ -77,27 +93,29 @@ function EventsPanel({ organizationId }: { organizationId: string }) {
   const [page,setPage]=useState(1), [q,setQ]=useState(''), [status,setStatus]=useState('');
   const query=useQuery({queryKey:['org-events',organizationId,page,q,status],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string, unknown>>>(organizationId,'events',{page,q,status})});
   const rows=(query.data?.events ?? []) as EventRow[];
-  return <Stack><Group><TextInput placeholder="Search events" value={q} onChange={(e)=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={(v)=>setStatus(v??'')} data={['DRAFT','LIVE','ARCHIVED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Dates</Table.Th><Table.Th>Orders</Table.Th><Table.Th>Tickets / check-ins</Table.Th><Table.Th>Gross</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td><Text fw={600}>{r.title}</Text></Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{date(r.start_date)}</Table.Td><Table.Td>{r.orders_count}</Table.Td><Table.Td>{r.tickets_issued} / {r.checked_in}</Table.Td><Table.Td>{money(r.gross_sales,r.currency_code)}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No events match these filters."/>}</Stack>;
+  return <Stack><Group><TextInput placeholder="Search events" value={q} onChange={(e)=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={(v)=>setStatus(v??'')} data={['DRAFT','LIVE','ARCHIVED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped highlightOnHover><Table.Thead><Table.Tr><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Dates</Table.Th><Table.Th>Orders</Table.Th><Table.Th>Tickets / check-ins</Table.Th><Table.Th>Gross</Table.Th><Table.Th>Platform fee</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td><Text fw={600}>{r.title}</Text></Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{date(r.start_date)}</Table.Td><Table.Td>{r.orders_count}</Table.Td><Table.Td>{r.tickets_issued} / {r.checked_in}</Table.Td><Table.Td>{money(r.gross_sales,r.currency_code)}</Table.Td><Table.Td style={{whiteSpace:'nowrap'}}>{r.platform_fee_basis_points===null?<Text size="sm" c="dimmed">Not locked yet</Text>:<Group gap="xs" wrap="nowrap"><Text size="sm">{formatBasisPointsAsPercent(r.platform_fee_basis_points)}</Text>{r.platform_fee_source==='AGREEMENT'&&<Badge color="violet" variant="light" styles={{root:{overflow:'visible'},label:{overflow:'visible',textOverflow:'clip'}}}>Negotiated</Badge>}</Group>}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No events match these filters."/>}</Stack>;
 }
 function OrdersPanel({ organizationId }: { organizationId:string }) { const [page,setPage]=useState(1),[q,setQ]=useState(''),[status,setStatus]=useState(''); const query=useQuery({queryKey:['org-orders',organizationId,page,q,status],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'orders',{page,q,status})}); const rows=(query.data?.orders??[]) as Record<string,any>[]; return <Stack><Group><TextInput placeholder="Order or event" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/><Select clearable placeholder="Status" value={status} onChange={v=>setStatus(v??'')} data={['RESERVED','COMPLETED','CANCELLED','AWAITING_OFFLINE_PAYMENT','ABANDONED']}/></Group>{!query.data?<Loading error={query.error}/>:rows.length?<><Table striped><Table.Thead><Table.Tr><Table.Th>Order</Table.Th><Table.Th>Event</Table.Th><Table.Th>Status</Table.Th><Table.Th>Source</Table.Th><Table.Th>Total</Table.Th><Table.Th>Created</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.short_id}</Table.Td><Table.Td>{r.event_title}</Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{r.source}</Table.Td><Table.Td>{money(r.total_amount,r.currency)}</Table.Td><Table.Td>{date(r.created_at)}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No orders match these filters."/>}</Stack>; }
 function CustomersPanel({organizationId}:{organizationId:string}) { const [page,setPage]=useState(1),[q,setQ]=useState(''); const query=useQuery({queryKey:['org-customers',organizationId,page,q],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'customers',{page,q})}); const rows=(query.data?.customers??[]) as Record<string,any>[]; return <Stack><TextInput placeholder="Search customers" value={q} onChange={e=>{setQ(e.currentTarget.value);setPage(1)}}/>{!query.data?<Loading error={query.error}/>:rows.length?<><Table><Table.Thead><Table.Tr><Table.Th>Customer</Table.Th><Table.Th>Contact (masked)</Table.Th><Table.Th>Events</Table.Th><Table.Th>Tickets</Table.Th><Table.Th>Checked in</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.first_name} {r.last_name}</Table.Td><Table.Td>{r.email}<br/>{r.phone}</Table.Td><Table.Td>{r.events_count}</Table.Td><Table.Td>{r.tickets_count}</Table.Td><Table.Td>{r.checked_in_count}</Table.Td></Table.Tr>)}</Table.Tbody></Table><Pager page={page} pages={query.data!.meta.last_page} onChange={setPage}/></>:<Empty label="No customers yet."/>}</Stack>; }
 function TeamPanel({organizationId}:{organizationId:string}) { const query=useQuery({queryKey:['org-team',organizationId],queryFn:()=>fetchOrganizationWorkspace<Page<Record<string,unknown>>>(organizationId,'team')}); const rows=(query.data?.members??[]) as Record<string,any>[]; return !query.data?<Loading error={query.error}/>:rows.length?<Table><Table.Thead><Table.Tr><Table.Th>Member</Table.Th><Table.Th>Role</Table.Th><Table.Th>Status</Table.Th><Table.Th>Joined</Table.Th></Table.Tr></Table.Thead><Table.Tbody>{rows.map(r=><Table.Tr key={r.id}><Table.Td>{r.first_name} {r.last_name}</Table.Td><Table.Td>{r.role}</Table.Td><Table.Td><Badge>{r.status}</Badge></Table.Td><Table.Td>{date(r.joined_at)}</Table.Td></Table.Tr>)}</Table.Tbody></Table>:<Empty label="No team members."/>; }
-type AccountBalance = { currency: string; release_eligible_minor: number; held_available_for_early_minor: number; held_excluded_by_hold_minor: number; reconciliation_required_minor: number; transfer_pending_minor: number };
+type AdvanceRow = AdvanceSummary & { event_title: string; event_end_date: string | null };
+type AccountBalance = { currency: string; release_eligible_minor: number; release_eligible_net_minor?: number; releasable_now_minor?: number; held_back_minor?: number; advanced_outstanding_minor?: number; held_available_for_early_minor: number; held_excluded_by_hold_minor: number; reconciliation_required_minor: number; transfer_pending_minor: number };
 
 const PAYOUT_STATUS_LABEL: Record<string, string> = {
   OUTCOME_UNKNOWN: 'Outcome unknown — verification required',
   RECONCILING: 'Reconciling — verification in progress',
 };
 
-function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, canReconnectAccount}:{organizationId:string; canReplaceAccount: boolean; canReleasePayout: boolean; canReconnectAccount: boolean}) {
+function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, canReleasePartial, canReconnectAccount}:{organizationId:string; canReplaceAccount: boolean; canReleasePayout: boolean; canReleasePartial: boolean; canReconnectAccount: boolean}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [replaceModalOpen, setReplaceModalOpen] = useState(false);
   const [routineConfirmOpen, setRoutineConfirmOpen] = useState(false);
   const [earlyModalOpen, setEarlyModalOpen] = useState(false);
   const [reconnectAccountId, setReconnectAccountId] = useState<number | null>(null);
+  const [advanceTarget, setAdvanceTarget] = useState<AdvanceRow | null>(null);
 
-  const query=useQuery({queryKey:['org-payments',organizationId],queryFn:()=>fetchOrganizationWorkspace<{payments:{financials:MoneySummary[];accounts:(Record<string,any> & {balances: AccountBalance[]})[];payouts:Record<string,any>[];last_updated_at:string}}>(organizationId,'payments'),refetchInterval:30000});
+  const query=useQuery({queryKey:['org-payments',organizationId],queryFn:()=>fetchOrganizationWorkspace<{payments:{financials:MoneySummary[];advances_enabled?:boolean;advances?:AdvanceRow[];accounts:(Record<string,any> & {balances: AccountBalance[]})[];payouts:Record<string,any>[];last_updated_at:string}}>(organizationId,'payments'),refetchInterval:30000});
 
   function onReleaseError(error: unknown) {
     const err = error instanceof Error ? error : new Error('Something went wrong.');
@@ -137,6 +155,24 @@ function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, can
       notifications.show({ color: 'orange', message: 'The release scope changed since you last checked — review the refreshed amounts and confirm again.' });
     } else {
       notifications.show({ color: result.outcome === 'NO_ELIGIBLE_FUNDS' ? 'gray' : 'red', message: blockedPreviewCopy(result.outcome, result.account?.account_status) });
+    }
+  }
+
+  async function onAdvanceDone(result: AdvanceResult) {
+    const refreshed = await query.refetch();
+    queryClient.invalidateQueries({ queryKey: ['org-workspace-overview', organizationId] });
+    queryClient.invalidateQueries({ queryKey: ['org-activity', organizationId] });
+    if (result.outcome === 'ADVANCE_REQUESTED' && result.organizer_transfer) {
+      setAdvanceTarget(null);
+      notifications.show({ color: 'teal', title: 'Early payout requested', message: `Transfer queued: ${formatMinorAmount(result.organizer_transfer.amount_minor, result.organizer_transfer.currency)}.` });
+    } else if (result.outcome === 'PREVIEW_STALE') {
+      // Keep the dialog open, but on the refreshed figures — the old maximum is no longer true.
+      notifications.show({ color: 'orange', message: advanceOutcomeCopy(result.outcome) });
+      const eventId = advanceTarget?.event_id;
+      setAdvanceTarget(refreshed.data?.payments.advances?.find((a) => a.event_id === eventId) ?? null);
+    } else {
+      notifications.show({ color: 'red', message: advanceOutcomeCopy(result.outcome) });
+      setAdvanceTarget(null);
     }
   }
 
@@ -206,11 +242,25 @@ function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, can
       </Group>
       <Text size="sm" c="dimmed">Routing {a.routing_status} · Payments {a.payments_enabled?'enabled':'disabled'} · Transfers {a.transfers_enabled?'enabled':'disabled'}</Text>
       {(a.balances ?? []).map((b) => <Group key={b.currency} grow mt="xs" wrap="nowrap">
-        <Stack gap={0}><Text size="xs" c="dimmed">Ready to release</Text><Text fw={600} c="teal">{formatMinorAmount(b.release_eligible_minor, b.currency)}</Text></Stack>
+        <Stack gap={0}><Text size="xs" c="dimmed">Ready to release</Text><Text fw={600} c="teal">{formatMinorAmount(b.releasable_now_minor ?? b.release_eligible_net_minor ?? b.release_eligible_minor, b.currency)}</Text>{(b.advanced_outstanding_minor ?? 0) > 0 && (b.releasable_now_minor ?? b.release_eligible_net_minor) !== b.release_eligible_minor && <Text size="xs" c="dimmed">of {formatMinorAmount(b.release_eligible_minor, b.currency)} — {(b.held_back_minor ?? 0) > 0 ? 'rest paid early or held back' : 'rest already paid early'}</Text>}{(b.held_back_minor ?? 0) > 0 && <Text size="xs" c="orange">{formatMinorAmount(b.held_back_minor!, b.currency)} held back — early payout still processing</Text>}</Stack>
         <Stack gap={0}><Text size="xs" c="dimmed">Held ({b.currency})</Text><Text fw={600}>{formatMinorAmount(b.held_available_for_early_minor + b.held_excluded_by_hold_minor, b.currency)}</Text></Stack>
+        {(b.advanced_outstanding_minor ?? 0) > 0 && <Stack gap={0}><Text size="xs" c="dimmed">Paid early (netted at release)</Text><Text fw={600}>{formatMinorAmount(b.advanced_outstanding_minor!, b.currency)}</Text></Stack>}
         {b.reconciliation_required_minor > 0 && <Stack gap={0}><Text size="xs" c="dimmed">Outcome unknown</Text><Text fw={600} c="orange">{formatMinorAmount(b.reconciliation_required_minor, b.currency)}</Text></Stack>}
       </Group>)}
     </Card>)}
+
+    {p.advances_enabled && (p.advances ?? []).length > 0 && <Stack gap="xs">
+      <Title order={4}>Early payouts</Title>
+      <Text size="xs" c="dimmed">Part of an event&apos;s earnings can be paid before its normal release date; the reserve stays held until then and anything paid early is deducted from the final release.</Text>
+      {p.advances!.map((a) => <Card withBorder key={a.event_id}><Group justify="space-between" align="flex-start" wrap="nowrap">
+        <Stack gap={2}><Text fw={600}>{a.event_title}</Text><Text size="xs" c="dimmed">Earned (held) {formatMinorAmount(a.base_minor, a.currency)} · Reserve {formatMinorAmount(a.floor_minor, a.currency)} · Paid early {formatMinorAmount(a.outstanding_minor, a.currency)}</Text></Stack>
+        <Stack gap={2} align="flex-end">
+          <Text fw={700} c={a.max_advance_minor > 0 ? 'teal' : 'dimmed'}>{formatMinorAmount(a.max_advance_minor, a.currency)} available</Text>
+          {canReleasePartial && a.state === 'AVAILABLE' && <Button size="xs" color="teal" variant="light" onClick={() => setAdvanceTarget(a)}>Release early payout…</Button>}
+          {a.state !== 'AVAILABLE' && <Text size="xs" c="dimmed" ta="right" maw={260}>{advanceOutcomeCopy(a.state)}</Text>}
+        </Stack>
+      </Group></Card>)}
+    </Stack>}
 
     <Group justify="space-between" align="center">
       <Title order={4}>Payout history</Title>
@@ -220,7 +270,7 @@ function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, can
       </Group>}
     </Group>
     {routineBlockedReason && <Text size="xs" c="dimmed">{routineBlockedReason}</Text>}
-    {p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Text>{x.note||PAYOUT_STATUS_LABEL[x.status]||'Payout release'}</Text><Text fw={700}>{money(String(Number(x.amount_minor)/100),x.currency)}</Text></Group><Text size="xs" c="dimmed">{PAYOUT_STATUS_LABEL[x.status]||x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}
+    {p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Group gap="xs">{x.kind==='ADVANCE'&&<Badge size="xs" variant="light" color="teal">Early payout</Badge>}<Text>{x.note||PAYOUT_STATUS_LABEL[x.status]||'Payout release'}</Text></Group><Text fw={700}>{money(String(Number(x.amount_minor)/100),x.currency)}</Text></Group><Text size="xs" c="dimmed">{PAYOUT_STATUS_LABEL[x.status]||x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}
 
     {canReplaceAccount && (
       <AdminReplacePaymentAccountModal
@@ -242,7 +292,8 @@ function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, can
           <Group justify="center" py="xl"><Loader size="sm" /></Group>
         ) : routinePreview?.outcome !== 'PREVIEW_OK' ? (
           <Stack>
-            <Alert color={routinePreview?.outcome === 'NO_ELIGIBLE_FUNDS' ? 'gray' : 'red'}>{blockedPreviewCopy(routinePreview?.outcome ?? 'NO_ELIGIBLE_FUNDS', routinePreview?.account?.account_status)}</Alert>
+            <Alert color={routinePreview?.outcome === 'NO_ELIGIBLE_FUNDS' ? 'gray' : routinePreview?.outcome === 'ADVANCE_IN_FLIGHT' ? 'orange' : 'red'}>{blockedPreviewCopy(routinePreview?.outcome ?? 'NO_ELIGIBLE_FUNDS', routinePreview?.account?.account_status)}</Alert>
+            <HeldBackNotice heldBack={routinePreview?.held_back} />
             <Group justify="flex-end"><Button onClick={() => setRoutineConfirmOpen(false)}>Close</Button></Group>
           </Stack>
         ) : (
@@ -250,7 +301,11 @@ function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, can
             <Text size="sm" c="dimmed">
               Target account: {routinePreview.account?.provider} · {routinePreview.account?.environment} (routing {routinePreview.account?.routing_status})
             </Text>
-            {routinePreview.balances?.map((b) => <Text key={b.currency} fw={600}>{formatMinorAmount(b.amount_minor, b.currency)}</Text>)}
+            <HeldBackNotice heldBack={routinePreview.held_back} />
+            {routinePreview.balances?.map((b) => <Stack key={b.currency} gap={0}>
+              <Text fw={600}>{formatMinorAmount(b.amount_minor, b.currency)}</Text>
+              {(b.advances_deducted_minor ?? 0) > 0 && <Text size="xs" c="dimmed">{formatMinorAmount(b.gross_minor ?? b.amount_minor, b.currency)} earned − {formatMinorAmount(b.advances_deducted_minor!, b.currency)} already paid early</Text>}
+            </Stack>)}
             <Text size="sm" c="dimmed">This moves the release-eligible balance above to the organizer&apos;s connected account. This cannot be undone.</Text>
             <Group justify="flex-end">
               <Button variant="subtle" onClick={() => setRoutineConfirmOpen(false)} disabled={routineRelease.isPending}>Cancel</Button>
@@ -269,6 +324,18 @@ function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, can
         previewLoading={earlyPreviewQuery.isFetching}
         loading={earlyRelease.isPending}
         onConfirm={(data) => earlyRelease.mutate(data)}
+      />
+    )}
+
+    {canReleasePartial && advanceTarget && (
+      <AdminEarlyPayoutModal
+        organizationId={organizationId}
+        eventTitle={advanceTarget.event_title}
+        summary={advanceTarget}
+        opened
+        onClose={() => setAdvanceTarget(null)}
+        onDone={onAdvanceDone}
+        onError={(error) => { const redirected = redirectOnAdminAuthError(error, router); if (!redirected) notifications.show({ color: 'red', message: error.message }); }}
       />
     )}
 

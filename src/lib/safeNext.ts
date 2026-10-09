@@ -8,8 +8,8 @@ export function safeNext(value: string | null, context: "consumer" | "organizer"
     const allowed = context === "consumer"
       ? (/^\/tickets(?:\/|$)/.test(path) && !path.startsWith("/tickets/verify"))
         || (/^\/[^/]+\/[^/]+(?:\/[^/]+)?\/?$/.test(path)
-          && !new Set(["api", "accept", "admin", "claim", "dashboard", "distributor", "event-series", "events", "forgot-password", "invitations", "login", "organizers", "organization", "register", "reset-password", "settings", "t", "tickets", "verify-email"]).has(path.split("/")[1]))
-      : ["/dashboard", "/events", "/event-series", "/organization", "/settings", "/onboarding", "/distributor", "/invitations/accept", "/admin/invitations/accept"].some(base => path === base || path.startsWith(base + "/"));
+          && !new Set(["api", "accept", "admin", "claim", "dashboard", "distributor", "event-series", "events", "forgot-password", "invitations", "login", "organizers", "organization", "register", "reset-password", "settings", "t", "tickets", "venue", "verify-email"]).has(path.split("/")[1]))
+      : ["/dashboard", "/events", "/event-series", "/organization", "/settings", "/onboarding", "/distributor", "/venue", "/invitations/accept", "/admin/invitations/accept"].some(base => path === base || path.startsWith(base + "/"));
     return allowed ? url.pathname + url.search : fallback;
   } catch { return fallback; }
 }

@@ -21,5 +21,11 @@ export default async function DistributorLayout({ children }: { children: React.
     redirect("/verify-email");
   }
 
+  // The shared login redirect sends every account without an organization here. If this one isn't a
+  // distributor (a venue agent, including one whose access was just removed), send them to their own portal.
+  if (!user.portal_access.distributor && user.current_organization_id === null) {
+    redirect("/venue");
+  }
+
   return <DistributorShell user={user}>{children}</DistributorShell>;
 }
