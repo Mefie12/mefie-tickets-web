@@ -84,6 +84,8 @@ export type Event = {
   acceptance_policy: string | null;
   /** After this instant, buyers can no longer assign tickets from the portal. null = no cutoff. */
   admission_closes_at: string | null;
+  /** How long before the start the doors open (minutes). An offset, so it moves with the event. null = not set. */
+  doors_open_minutes_before_start: number | null;
 };
 
 export type AcceptancePolicy = "PURCHASER_GROUP" | "GUARDIAN_MINOR" | "ATTENDEE_PERSONAL";
@@ -161,6 +163,7 @@ export function updateEvent(
     attribute_ids?: number[];
     currency_code?: string;
     location?: EventLocationInput;
+    doors_open_minutes_before_start?: number | null;
   },
 ) {
   return request<{ event: Event; scanner_notice?: ScannerNotice }>(`/api/events/${id}`, { method: "PATCH", body: input });

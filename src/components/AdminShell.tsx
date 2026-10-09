@@ -7,6 +7,7 @@ import { Avatar, Menu } from "@mantine/core";
 import {
   IconBuildingStore,
   IconCalendarEvent,
+  IconEye,
   IconLayoutDashboard,
   IconLogout,
   IconShieldLock,
@@ -100,6 +101,11 @@ export function AdminShell({
       <Menu.Item component={Link} href="/settings" leftSection={<IconUserCircle size={16} />}>
         Account settings
       </Menu.Item>
+      {user.portal_access.venue && (
+        <Menu.Item component={Link} href="/venue" leftSection={<IconEye size={16} />}>
+          Venue events
+        </Menu.Item>
+      )}
       <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
         Privacy choices
       </Menu.Item>

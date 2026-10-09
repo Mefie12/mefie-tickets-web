@@ -36,6 +36,8 @@ import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { joinLocalDateTime, splitLocalDateTime, utcIsoToZonedParts } from "@/lib/eventDateTime";
 import { browserTimezone } from "@/lib/timezones";
+import { DoorsOpenField } from "@/components/DoorsOpenField";
+import { doorsChoiceFromMinutes, doorsMinutesFromChoice, doorsMinutesInvalid } from "@/lib/doorsOpen";
 import type { MapboxSuggestion } from "@/lib/mapbox";
 import {
   getEventTaxonomies,
@@ -537,8 +539,11 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
       // React logs it as a hydration error, and worse, a different admin
       // opening the same draft would silently get a different default.
       timezone: event.start_date ? event.timezone : "",
+      // Doors open, as a gap before the start (docs/25). Same field the Venue access tab edits.
+      doors: doorsChoiceFromMinutes(event.doors_open_minutes_before_start ?? null),
     },
     validate: {
+      doors: (v) => (doorsMinutesInvalid(doorsMinutesFromChoice(v)) ? "Enter 1 to 1440 minutes" : null),
       start_at: (v) => (!v ? "Start date and time is required" : null),
       timezone: (v) => (!v ? "Timezone is required" : null),
       // Both ends are wall-clock in the one timezone and share the
@@ -574,6 +579,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
         end_date: endParts.date,
         end_time: endParts.time,
         timezone: values.timezone,
+        doors_open_minutes_before_start: doorsMinutesFromChoice(values.doors),
         ...(reschedule ? { reschedule } : {}),
       });
     },
@@ -671,6 +677,12 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
                 {...form.getInputProps("end_at")}
               />
             </SimpleGrid>
+            <DoorsOpenField
+              value={form.values.doors}
+              onChange={(next) => form.setFieldValue("doors", next)}
+              startAt={form.values.start_at}
+              disabled={disabled}
+            />
             <TimezoneSelector
               label="Event timezone"
               description="All times above are in this timezone, and that's how buyers will see them."

@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { backendRequest } from "@/lib/backend";
-import type { CurrentUser, Role } from "@/lib/authApi";
+import type { CurrentUser, PortalAccess, Role } from "@/lib/authApi";
 import type { Event } from "@/lib/eventApi";
 import type { Organization } from "@/lib/organizationApi";
 import type { TeamRow } from "@/lib/teamApi";
@@ -15,7 +15,7 @@ import type { TeamRow } from "@/lib/teamApi";
  * that endpoint sits behind the `verified` middleware, so an unverified
  * session would just 403 on it.
  */
-export type SessionUser = CurrentUser & { role: Role | null };
+export type SessionUser = CurrentUser & { role: Role | null; portal_access: PortalAccess };
 
 /**
  * Wrapped in React's cache() so the (organization) layout's auth guard and any
@@ -23,16 +23,17 @@ export type SessionUser = CurrentUser & { role: Role | null };
  * per request, instead of each Server Component fetching it separately.
  */
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
-  const result = await backendRequest<{ user: CurrentUser }>("/api/users/me");
+  const result = await backendRequest<{ user: CurrentUser; portal_access?: PortalAccess }>("/api/users/me");
   if (result.status !== 200) return null;
 
   const user = result.data.user;
+  const portal_access = result.data.portal_access ?? { distributor: false, venue: false };
 
   if (!user.email_verified_at) {
     // Unverified sessions can't call the members endpoint (verified-only)
     // and don't need a role yet — the (organization) layout redirects these to
     // /verify-email before anything role-gated is ever rendered.
-    return { ...user, role: null };
+    return { ...user, role: null, portal_access };
   }
 
   const membersResult = await backendRequest<{ members: TeamRow[] }>("/api/organization/members");
@@ -41,7 +42,7 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
       ? (membersResult.data.members.find((row) => row.type === "member" && row.email === user.email)?.role ?? null)
       : null;
 
-  return { ...user, role };
+  return { ...user, role, portal_access };
 });
 
 /**

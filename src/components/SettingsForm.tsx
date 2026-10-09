@@ -42,7 +42,7 @@ export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
   const updateMutation = useMutation({
     mutationFn: (values: typeof form.values) => updateCurrentUser({ ...values, phone: values.phone || null }),
     onSuccess: (data: { user: CurrentUser }) => {
-      setUser((prev) => ({ ...data.user, role: prev.role }));
+      setUser((prev) => ({ ...data.user, role: prev.role, portal_access: prev.portal_access }));
       notifications.show({ color: "teal", message: "Profile updated." });
     },
     onError: (error: Error) => {
@@ -129,7 +129,7 @@ function ChangeEmailField({
   const changeMutation = useMutation({
     mutationFn: changeEmail,
     onSuccess: (data: { user: CurrentUser }) => {
-      onChanged((prev) => ({ ...data.user, role: prev.role }));
+      onChanged((prev) => ({ ...data.user, role: prev.role, portal_access: prev.portal_access }));
       setOpened(false);
       form.reset();
       notifications.show({ color: "teal", message: "Email updated. A new verification code has been sent." });

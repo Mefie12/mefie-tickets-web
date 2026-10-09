@@ -11,4 +11,5 @@ export const TOKEN_ROUTE_SOURCES = [
   "/invitations/accept",
   "/admin/invitations/accept",
   "/distributor/invitations/:path*",
+  "/venue/invitations/:path*",
 ] as const;

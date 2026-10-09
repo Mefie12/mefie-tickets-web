@@ -4,4 +4,4 @@ export function proxy(request: NextRequest) {
   headers.set("x-mefie-return-path", request.nextUrl.pathname + request.nextUrl.search);
   return NextResponse.next({ request: { headers } });
 }
-export const config = { matcher: ["/tickets/:path*", "/dashboard/:path*", "/events/:path*", "/event-series/:path*", "/organization/:path*", "/settings/:path*", "/onboarding/:path*", "/distributor/:path*"] };
+export const config = { matcher: ["/tickets/:path*", "/dashboard/:path*", "/events/:path*", "/event-series/:path*", "/organization/:path*", "/settings/:path*", "/onboarding/:path*", "/distributor/:path*", "/venue/:path*"] };
