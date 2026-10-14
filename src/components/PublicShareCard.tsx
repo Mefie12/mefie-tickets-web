@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { Badge, Box, Button, Card, Group, Paper, Stack, Text, ThemeIcon } from "@mantine/core";
+import { useState, useSyncExternalStore } from "react";
+import { Badge, Box, Button, Card, Group, Paper, Stack, Switch, Text, ThemeIcon } from "@mantine/core";
 import { IconCheck, IconCopy, IconExternalLink, IconLink, IconShare } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
+import type { EventVisibility } from "@/lib/eventApi";
+import type { ShortLinkTarget } from "@/lib/shortLink";
+import { useShortLink } from "@/lib/useShortLink";
 
 export type PublicShareCardProps = {
   url: string;
@@ -13,10 +16,69 @@ export type PublicShareCardProps = {
   disabledExplanation?: string;
   heading?: string;
   variant?: "feature" | "compact";
+  /** Offers a "Shorten link" switch (docs/26) for this event / series. Omit for links that can't be shortened (e.g. the organization URL). */
+  shortLink?: { target: ShortLinkTarget; id: number; visibility: EventVisibility };
 };
 
-export function PublicShareCard({ url, title, text, enabled, disabledExplanation, heading = "Your organization URL", variant = "feature" }: PublicShareCardProps) {
+// Which URL this organizer prefers to copy is a per-browser convenience only; the link itself lives on the server.
+const preferenceKey = (target: ShortLinkTarget, id: number) => `mefie:short-link-pref:${target}:${id}`;
+// Remembers the choice for this visit even when localStorage is blocked (private window).
+const memoryPreference = new Map<string, boolean>();
+const preferenceListeners = new Set<() => void>();
+
+function readPreference(target: ShortLinkTarget, id: number): boolean {
+  const key = preferenceKey(target, id);
+  const remembered = memoryPreference.get(key);
+  if (remembered !== undefined) return remembered;
+  try {
+    return window.localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writePreference(target: ShortLinkTarget, id: number, value: boolean): void {
+  const key = preferenceKey(target, id);
+  memoryPreference.set(key, value);
+  try {
+    window.localStorage.setItem(key, value ? "1" : "0");
+  } catch {
+    // Blocked storage: the in-memory value above still applies to this visit.
+  }
+  preferenceListeners.forEach((listener) => listener());
+}
+
+function subscribeToPreference(listener: () => void): () => void {
+  preferenceListeners.add(listener);
+  window.addEventListener("storage", listener);
+  return () => {
+    preferenceListeners.delete(listener);
+    window.removeEventListener("storage", listener);
+  };
+}
+
+export function PublicShareCard({ url: longUrl, title, text, enabled, disabledExplanation, heading = "Your organization URL", variant = "feature", shortLink }: PublicShareCardProps) {
   const [copied, setCopied] = useState(false);
+  const shortable = shortLink !== undefined && enabled && shortLink.visibility !== "INVITED";
+  const short = useShortLink(shortLink?.target ?? "events", shortLink?.id ?? 0, shortable);
+  // localStorage doesn't exist during server render, hence the external-store read with a `false` server snapshot.
+  const preferShort = useSyncExternalStore(subscribeToPreference, () => (shortLink ? readPreference(shortLink.target, shortLink.id) : false), () => false);
+  const shortActive = shortable && preferShort && short.link?.enabled === true;
+  const url = shortActive && short.link ? short.link.short_url : longUrl;
+
+  async function toggleShort(next: boolean): Promise<void> {
+    if (!shortLink) return;
+    writePreference(shortLink.target, shortLink.id, next);
+    if (!next || short.link?.enabled) return;
+    try {
+      if (short.link?.disabled_by_admin) throw new Error("This short link has been disabled by the platform.");
+      if (!short.link) await short.create.mutateAsync();
+      else await short.update.mutateAsync({ enabled: true });
+    } catch (error) {
+      writePreference(shortLink.target, shortLink.id, false);
+      notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not create the short link." });
+    }
+  }
 
   async function copy(): Promise<void> {
     try {
@@ -46,7 +108,7 @@ export function PublicShareCard({ url, title, text, enabled, disabledExplanation
         {copied ? "Copied" : "Copy link"}
       </Button>
       {enabled ? (
-        <Button component="a" href={url} target="_blank" rel="noopener noreferrer" variant={variant === "compact" ? "subtle" : "light"} leftSection={<IconExternalLink size={16} />} mih={44}>View page</Button>
+        <Button component="a" href={longUrl} target="_blank" rel="noopener noreferrer" variant={variant === "compact" ? "subtle" : "light"} leftSection={<IconExternalLink size={16} />} mih={44}>View page</Button>
       ) : (
         <Button disabled variant="subtle" leftSection={<IconExternalLink size={16} />} mih={44}>View page</Button>
       )}
@@ -63,6 +125,12 @@ export function PublicShareCard({ url, title, text, enabled, disabledExplanation
             <Stack gap={1} miw={0}>
               <Group gap={6}><Text size="sm" fw={600}>{heading}</Text><Badge size="xs" variant="light" color={enabled ? "teal" : "gray"}>{enabled ? "Public" : "Not public"}</Badge></Group>
               <Text size="xs" c="dimmed" truncate title={enabled ? url : disabledExplanation}>{enabled ? url : disabledExplanation}</Text>
+              {shortable && (
+                <Group gap="xs" mt={2}>
+                  <Switch size="xs" label="Shorten link" checked={shortActive || (preferShort && (short.create.isPending || short.update.isPending))} disabled={short.query.isLoading || short.create.isPending || short.update.isPending} onChange={(event) => void toggleShort(event.currentTarget.checked)} />
+                  {shortActive && short.link && <Text size="xs" c="dimmed">{short.link.click_count.toLocaleString()} click{short.link.click_count === 1 ? "" : "s"}</Text>}
+                </Group>
+              )}
             </Stack>
           </Group>
           {actions}

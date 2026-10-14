@@ -114,7 +114,7 @@ async function prepareAuthenticatedRequest(
  */
 export async function backendRequest<T = unknown>(
   path: string,
-  options: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown } = {},
+  options: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown; headers?: Record<string, string>; timeoutMs?: number } = {},
 ): Promise<BackendResult<T>> {
   const method = options.method ?? "GET";
   const { cookieHeader, xsrfToken, setCookieHeaders } = await prepareAuthenticatedRequest(method !== "GET");
@@ -129,9 +129,11 @@ export async function backendRequest<T = unknown>(
       Referer: `${APP_URL}/`,
       ...(await proxyHeaders()),
       ...(xsrfToken ? { "X-XSRF-TOKEN": xsrfToken } : {}),
+      ...options.headers,
     },
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     cache: "no-store",
+    signal: options.timeoutMs ? AbortSignal.timeout(options.timeoutMs) : undefined,
   });
 
   setCookieHeaders.push(...res.headers.getSetCookie());
