@@ -11,6 +11,7 @@ import { theme } from "@/theme";
 import { PrivacyConsentBanner } from "@/components/privacy/PrivacyConsentBanner";
 import { PrivacyConsentProvider } from "@/components/privacy/PrivacyConsentProvider";
 import { ProductImprovementController } from "@/components/privacy/ProductImprovementController";
+import { ThirdPartyAnalyticsController } from "@/components/privacy/ThirdPartyAnalyticsController";
 
 /**
  * Client-side providers for the whole app.
@@ -50,6 +51,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             {children}
             <PrivacyConsentBanner />
             <ProductImprovementController />
+            <ThirdPartyAnalyticsController />
           </PrivacyConsentProvider>
         </ModalsProvider>
       </MantineProvider>

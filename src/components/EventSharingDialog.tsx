@@ -9,6 +9,7 @@ import { notifications } from "@mantine/notifications";
 import type { EventVisibility } from "@/lib/eventApi";
 import { parseEmailList } from "@/lib/emailAddress";
 import { useEmailFieldError } from "@/lib/useEmailFieldError";
+import { ShortLinkPanel } from "@/components/ShortLinkPanel";
 
 function visibilityLabel(visibility: EventVisibility): string {
   return visibility === "PUBLIC" ? "Public" : visibility === "UNLISTED" ? "Anyone with the link" : "Invite only";
@@ -263,6 +264,10 @@ export function EventSharingDialog({
             }}
           >Copy link</Button>
         </Group>
+        <Stack gap="xs">
+          <Text fw={600}>Short link</Text>
+          <ShortLinkPanel target={target} id={id} title={title} visibility={visibility} archived={archived} active={opened} />
+        </Stack>
         <Stack gap="xs">
           <Text fw={600}>Invite people{target === "event-series" ? " to this series" : ""}</Text>
           {target === "event-series" && <Text size="sm" c="dimmed">An invitation applies to every current and future date in this series.</Text>}

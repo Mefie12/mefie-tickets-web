@@ -53,7 +53,8 @@ export default async function CheckoutRoutePage({
   return (
     <Box>
       <PublicSiteHeader />
-      <Container size="xl" py="xl">
+      {/* Session recorders (Clarity) must never capture what is typed or shown during checkout. */}
+      <Container size="xl" py="xl" data-clarity-mask="true">
         {event.has_ended ? (
           <Stack gap="lg">
             <Text component="a" href={backUrl} size="sm" fw={500} style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content" }}>
