@@ -1,6 +1,6 @@
 import { analyticsLocation } from "@/lib/analytics/paths";
 import { expireCookiesMatching, loadScript, whenIdle } from "@/lib/analytics/loader";
-import type { AnalyticsAdapter } from "@/lib/analytics/types";
+import type { AnalyticsAdapter, CommerceEvent } from "@/lib/analytics/types";
 
 type GtagWindow = Window & { dataLayer?: unknown[]; gtag?: (...args: unknown[]) => void } & Record<string, unknown>;
 
@@ -56,6 +56,22 @@ export function createGa4Adapter(measurementId: string | undefined): AnalyticsAd
       if (typeof gtag !== "function") return;
       const location = analyticsLocation(href);
       gtag("event", "page_view", { page_location: location, page_path: new URL(location).pathname, page_title: document.title });
+    },
+    // Shopping events (docs/26, Phase 2b-2): GA4's own e-commerce events, so its
+    // reports show tickets sold and revenue per acquisition channel.
+    track(event: CommerceEvent) {
+      if (!measurementId || typeof window === "undefined" || !resident || w()[disableKey] === true) return false;
+      const gtag = w().gtag;
+      if (typeof gtag !== "function") return false;
+      const items = event.items.map((item) => ({ item_name: item.name, ...(item.price !== undefined ? { price: item.price } : {}), ...(item.quantity !== undefined ? { quantity: item.quantity } : {}) }));
+      if (event.type === "view_item") {
+        gtag("event", "view_item", { currency: event.currency, items });
+      } else if (event.type === "begin_checkout") {
+        gtag("event", "begin_checkout", { currency: event.currency, value: event.value, items });
+      } else {
+        gtag("event", "purchase", { transaction_id: event.transactionId, currency: event.currency, value: event.value, ...(event.tax !== undefined ? { tax: event.tax } : {}), items });
+      }
+      return true;
     },
   };
 }

@@ -3,7 +3,9 @@ import { isTrackablePath } from "@/lib/analytics/paths";
 import { groupAllowed, type AnalyticsAdapter } from "@/lib/analytics/types";
 import { createClarityAdapter } from "@/lib/analytics/adapters/clarity";
 import { createGa4Adapter } from "@/lib/analytics/adapters/ga4";
-import { CLARITY_PROJECT_ID, GA_MEASUREMENT_ID } from "@/lib/analytics/config";
+import { createMetaPixelAdapter } from "@/lib/analytics/adapters/meta";
+import { createTikTokPixelAdapter } from "@/lib/analytics/adapters/tiktok";
+import { CLARITY_PROJECT_ID, GA_MEASUREMENT_ID, META_PIXEL_ID, TIKTOK_PIXEL_ID } from "@/lib/analytics/config";
 
 export type AdapterState = { id: string; group: AnalyticsAdapter["group"]; configured: boolean; resident: boolean; active: boolean };
 
@@ -42,7 +44,12 @@ export function planAnalytics(input: { pathname: string; choices: ConsentChoices
   };
 }
 
-/** The tools built into this release. Meta and TikTok pixels are added with the shopping events. */
+/** Every tool the app knows. A tool with no id is never started, so the advertising pixels stay dormant until their ids are set. */
 export function createAdapters(): AnalyticsAdapter[] {
-  return [createGa4Adapter(GA_MEASUREMENT_ID), createClarityAdapter(CLARITY_PROJECT_ID)];
+  return [
+    createGa4Adapter(GA_MEASUREMENT_ID),
+    createClarityAdapter(CLARITY_PROJECT_ID),
+    createMetaPixelAdapter(META_PIXEL_ID),
+    createTikTokPixelAdapter(TIKTOK_PIXEL_ID),
+  ];
 }
