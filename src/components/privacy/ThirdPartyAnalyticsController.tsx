@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { createAdapters, planAnalytics } from "@/lib/analytics/manager";
+import { applySensitivity, notifyAnalyticsActive, registerActiveAdapters } from "@/lib/analytics/runtime";
 
 /**
  * Bridges consent + the current route to the third-party analytics tools
@@ -15,6 +16,7 @@ import { createAdapters, planAnalytics } from "@/lib/analytics/manager";
  *  - does a full page load when a tool's script is still resident on a page it
  *    must not run on (logged-in areas, login, token pages) or after consent
  *    was withdrawn, because a vendor script cannot be unloaded any other way.
+ * Also exposes the started tools to the shopping-event helpers (runtime.ts).
  * PostHog is handled separately by ProductImprovementController.
  */
 export function ThirdPartyAnalyticsController() {
@@ -23,6 +25,12 @@ export function ThirdPartyAnalyticsController() {
   const adapters = useMemo(() => createAdapters(), []);
   const active = useRef(new Set<string>());
   const lastPath = useRef<string | null>(null);
+
+  // Let checkout and event pages send shopping events to whichever tools are started.
+  useEffect(() => {
+    registerActiveAdapters(() => adapters.filter((a) => active.current.has(a.id)));
+    return () => registerActiveAdapters(() => []);
+  }, [adapters]);
 
   useEffect(() => {
     if (!ready) return;
@@ -51,8 +59,10 @@ export function ThirdPartyAnalyticsController() {
       if (!adapter) continue;
       adapter.start();
       active.current.add(id);
+      applySensitivity(adapter); // e.g. consent granted while on the card-entry step
       adapter.pageView(window.location.href);
     }
+    if (plan.start.length > 0) notifyAnalyticsActive();
     if (pathChanged) {
       for (const id of active.current) {
         if (!plan.start.includes(id)) byId(id)?.pageView(window.location.href);

@@ -7,6 +7,7 @@ import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { PublicEventSeriesView } from "@/components/PublicEventSeriesView";
 import { RestrictedEventAccess } from "@/components/RestrictedEventAccess";
+import { EventViewTracker } from "@/components/analytics/EventViewTracker";
 
 /**
  * §7.2 — a specific series occurrence, independently bookmarkable and
@@ -54,6 +55,7 @@ export default async function PublicEventSeriesOccurrencePage({
   return (
     <Box>
       <PublicSiteHeader />
+      <EventViewTracker title={result.data.event_series.title} currency={result.data.event_series.currency_code} />
       <PublicEventSeriesView series={result.data.event_series} publicOccurrenceId={publicOccurrenceId} canBuy={result.data.can_buy} />
       <PublicSiteFooter />
     </Box>

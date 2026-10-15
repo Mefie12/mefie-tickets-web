@@ -1,5 +1,5 @@
 import { loadScript, whenIdle } from "@/lib/analytics/loader";
-import type { AnalyticsAdapter } from "@/lib/analytics/types";
+import type { AnalyticsAdapter, CommerceEvent } from "@/lib/analytics/types";
 
 type ClarityFn = ((...args: unknown[]) => void) & { q?: unknown[] };
 type ClarityWindow = Window & { clarity?: ClarityFn };
@@ -52,6 +52,13 @@ export function createClarityAdapter(projectId: string | undefined): AnalyticsAd
     },
     pageView() {
       // Clarity follows client-side navigation on its own.
+    },
+    // Funnel markers only (no values, ids or names): they let recordings and
+    // filters be sliced by "began checkout" / "purchased".
+    track(event: CommerceEvent) {
+      if (!projectId || typeof window === "undefined" || !resident || typeof w().clarity !== "function") return false;
+      w().clarity?.("event", event.type);
+      return true;
     },
   };
 }
