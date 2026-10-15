@@ -1,8 +1,8 @@
 /**
  * The single gated integration point for the "Product improvement" consent
  * category (spec §4, §12). Nothing in here runs until the visitor has
- * chosen "Accept all" — `ProductImprovementController` calls
- * `enableProductImprovement()` only when consent state is ALL_ACCEPTED and
+ * accepted Product improvement — `ProductImprovementController` calls
+ * `enableProductImprovement()` only when that choice is accepted and
  * `disableProductImprovement()` otherwise.
  *
  * V1 wires PostHog (product analytics + sampled, masked session replay).

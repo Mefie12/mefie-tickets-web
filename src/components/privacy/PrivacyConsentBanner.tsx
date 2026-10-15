@@ -2,6 +2,7 @@
 
 import { Box, Button, Container, Group, Stack, Text } from "@mantine/core";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
+import { joinNames, marketingPlatformNames } from "@/lib/analytics/config";
 
 /**
  * First-visit privacy banner (spec §5, §6). Non-modal fixed bar so it
@@ -10,7 +11,7 @@ import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
  * alike (spec §21.20).
  */
 export function PrivacyConsentBanner() {
-  const { showBanner, acceptAll, acceptNecessaryOnly, openPreferences } = usePrivacyConsent();
+  const { showBanner, marketingOffered, acceptAll, acceptNecessaryOnly, openPreferences } = usePrivacyConsent();
 
   if (!showBanner) return null;
 
@@ -39,9 +40,12 @@ export function PrivacyConsentBanner() {
           <Stack gap={4} style={{ flex: "1 1 320px", minWidth: 0 }}>
             <Text fw={700}>Your privacy choices</Text>
             <Text size="sm" c="dimmed">
-              We use essential cookies to keep Mefie working. With your permission, we&rsquo;d also
-              like to improve Mefie by understanding how it&rsquo;s used. We don&rsquo;t use
-              advertising cookies or track you across other sites.
+              We use essential cookies to keep Mefie working. With your permission, we&rsquo;d also like
+              to understand how Mefie is used, using analytics and a small sample of session
+              recordings, so we can fix problems and improve it.{" "}
+              {marketingOffered
+                ? `With your separate permission, we'd also like to measure and improve our advertising on other platforms, such as ${joinNames(marketingPlatformNames())}.`
+                : "We don\u2019t use advertising cookies."}
             </Text>
           </Stack>
           <Group gap="sm" wrap="wrap">

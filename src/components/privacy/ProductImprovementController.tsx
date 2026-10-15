@@ -5,22 +5,24 @@ import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { disableProductImprovement, enableProductImprovement } from "@/lib/productImprovement";
 
 /**
- * Bridges consent state to the Product improvement technologies (spec §12).
- * ALL_ACCEPTED starts PostHog; any other state stops future collection.
+ * Bridges consent state to PostHog, one of the Product improvement technologies
+ * (spec §12). GA4 and Clarity are handled by ThirdPartyAnalyticsController.
+ * An accepted Product improvement choice starts PostHog; anything else stops future collection.
  * Runs on mount too, so a returning visitor who already accepted resumes
  * without re-consenting.
  */
 export function ProductImprovementController() {
-  const { state, ready } = usePrivacyConsent();
+  const { choices, ready } = usePrivacyConsent();
+  const allowed = choices.productImprovement;
 
   useEffect(() => {
     if (!ready) return;
-    if (state === "ALL_ACCEPTED") {
+    if (allowed) {
       void enableProductImprovement();
     } else {
       disableProductImprovement();
     }
-  }, [state, ready]);
+  }, [allowed, ready]);
 
   return null;
 }
