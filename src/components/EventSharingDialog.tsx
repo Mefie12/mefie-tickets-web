@@ -266,7 +266,7 @@ export function EventSharingDialog({
         </Group>
         <Stack gap="xs">
           <Text fw={600}>Short link</Text>
-          <ShortLinkPanel target={target} id={id} visibility={visibility} archived={archived} active={opened} />
+          <ShortLinkPanel target={target} id={id} title={title} visibility={visibility} archived={archived} active={opened} />
         </Stack>
         <Stack gap="xs">
           <Text fw={600}>Invite people{target === "event-series" ? " to this series" : ""}</Text>

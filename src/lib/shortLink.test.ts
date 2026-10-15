@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalEventUrl, fallbackPath, isPlausibleShortCode, normalizeAlias, validateAlias } from "./shortLink";
+import { buildShortLinkDestination, canonicalEventUrl, fallbackPath, isPlausibleShortCode, normalizeAlias, shareIntentUrl, taggedShortUrl, validateAlias } from "./shortLink";
 
 describe("canonicalEventUrl", () => {
   const app = "https://mefie-tickets.com";
@@ -72,5 +72,76 @@ describe("isPlausibleShortCode", () => {
   it("accepts auto codes and aliases only", () => {
     for (const ok of ["tcr88f", "summer-fest", "abc"]) expect(isPlausibleShortCode(ok)).toBe(true);
     for (const bad of ["ab", "a--b", "-abc", "has space", "A", 5, undefined]) expect(isPlausibleShortCode(bad)).toBe(false);
+  });
+});
+
+describe("buildShortLinkDestination", () => {
+  const canonical = "https://mefie-tickets.com/acme/summer-fest";
+  const api = { utm_source: "whatsapp", utm_medium: "social", utm_campaign: "summer-fest" };
+  const build = (query: string, utm: unknown = api) => new URL(buildShortLinkDestination(canonical, new URLSearchParams(query), utm));
+
+  it("adds the channel UTMs when the sharer added nothing", () => {
+    const url = build("c=wa");
+    expect(url.origin + url.pathname).toBe(canonical);
+    expect(Object.fromEntries(url.searchParams)).toEqual(api);
+  });
+
+  it("keeps the sharer's own utm values and only fills the gaps", () => {
+    const url = build("utm_source=newsletter&utm_term=spring");
+    expect(url.searchParams.get("utm_source")).toBe("newsletter");
+    expect(url.searchParams.get("utm_medium")).toBe("social");
+    expect(url.searchParams.get("utm_campaign")).toBe("summer-fest");
+    expect(url.searchParams.get("utm_term")).toBe("spring");
+  });
+
+  it("passes ad click ids through but drops everything else, including the c tag", () => {
+    const url = build("c=fb&fbclid=abc123&gclid=g1&ttclid=t1&msclkid=m1&evil=1&redirect=https://evil.com&next=/x");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ ...api, fbclid: "abc123", gclid: "g1", ttclid: "t1", msclkid: "m1" });
+  });
+
+  it("cleans untrusted values: control characters stripped, length capped, empty ignored", () => {
+    const long = "x".repeat(500);
+    const url = build(`utm_source=a%0D%0Ab%00c&utm_medium=${long}&utm_campaign=%20%20`);
+    expect(url.searchParams.get("utm_source")).toBe("abc");
+    expect(url.searchParams.get("utm_medium")).toHaveLength(200);
+    expect(url.searchParams.get("utm_campaign")).toBe("summer-fest");
+  });
+
+  it("takes the first value when a param is repeated and never changes origin or path", () => {
+    const url = build("utm_source=first&utm_source=second&utm_campaign=//evil.com");
+    expect(url.searchParams.get("utm_source")).toBe("first");
+    expect(url.origin).toBe("https://mefie-tickets.com");
+    expect(url.pathname).toBe("/acme/summer-fest");
+  });
+
+  it("tolerates a missing or malformed API utm object", () => {
+    for (const bad of [null, "x", 5, [], { utm_source: 5 }]) {
+      expect(() => build("", bad)).not.toThrow();
+    }
+    expect(build("", null).search).toBe("");
+  });
+});
+
+describe("share channels", () => {
+  const tagged = taggedShortUrl("https://mefie-tickets.com/s/abc123", "wa");
+
+  it("tags the short url with the channel", () => {
+    expect(tagged).toBe("https://mefie-tickets.com/s/abc123?c=wa");
+    expect(taggedShortUrl("https://x.test/s/a?z=1", "fb")).toBe("https://x.test/s/a?z=1&c=fb");
+  });
+
+  it("builds an encoded web share link per channel", () => {
+    const title = "Summer Fest & Friends";
+    expect(shareIntentUrl("wa", tagged, title)).toBe(`https://wa.me/?text=${encodeURIComponent(`${title} ${tagged}`)}`);
+    expect(shareIntentUrl("fb", tagged, title)).toBe(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(tagged)}`);
+    expect(shareIntentUrl("x", tagged, title)).toBe(`https://twitter.com/intent/tweet?url=${encodeURIComponent(tagged)}&text=${encodeURIComponent(title)}`);
+    expect(shareIntentUrl("tg", tagged, title)).toContain("https://t.me/share/url?url=");
+    expect(shareIntentUrl("li", tagged, title)).toContain("https://www.linkedin.com/sharing/share-offsite/?url=");
+    expect(shareIntentUrl("em", tagged, title, "Get tickets")).toBe(`mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(`Get tickets\n\n${tagged}`)}`);
+  });
+
+  it("has no web share link for copy-only channels", () => {
+    expect(shareIntentUrl("ig", tagged, "t")).toBeNull();
+    expect(shareIntentUrl("tt", tagged, "t")).toBeNull();
   });
 });

@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Alert, Button, Group, Loader, Paper, Stack, Switch, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Group, Loader, Paper, Stack, Switch, Table, Text, TextInput } from "@mantine/core";
 import { IconCopy, IconLink } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import type { EventVisibility } from "@/lib/eventApi";
-import { validateAlias, normalizeAlias, type ShortLinkTarget } from "@/lib/shortLink";
+import { ShareChannelButtons } from "@/components/ShareChannelButtons";
+import { validateAlias, normalizeAlias, type ShortLinkChannelStat, type ShortLinkTarget } from "@/lib/shortLink";
 import { useShortLink } from "@/lib/useShortLink";
 
 /**
@@ -14,7 +15,7 @@ import { useShortLink } from "@/lib/useShortLink";
  * dialog. The permanent code never changes; the optional custom link can be
  * edited, and a replaced custom link stops working for good.
  */
-export function ShortLinkPanel({ target, id, visibility, archived, active }: { target: ShortLinkTarget; id: number; visibility: EventVisibility; archived: boolean; active: boolean }) {
+export function ShortLinkPanel({ target, id, title, visibility, archived, active }: { target: ShortLinkTarget; id: number; title: string; visibility: EventVisibility; archived: boolean; active: boolean }) {
   const unsupported = archived || visibility === "INVITED";
   const { link, query, create, update } = useShortLink(target, id, active && !unsupported);
   const [draft, setDraft] = useState<string | null>(null);
@@ -98,6 +99,12 @@ export function ShortLinkPanel({ target, id, visibility, archived, active }: { t
         <Switch label="Short link active" checked={link.enabled} disabled={link.disabled_by_admin || update.isPending} onChange={(event) => toggleActive(event.currentTarget.checked)} />
         <Text size="xs" c="dimmed">{link.click_count.toLocaleString()} click{link.click_count === 1 ? "" : "s"} · excludes link-preview bots</Text>
       </Group>
+      <Stack gap={6}>
+        <Text size="sm" fw={500}>Share to</Text>
+        <ShareChannelButtons shortUrl={link.short_url} title={title} text={`Get tickets for ${title}`} disabled={!link.enabled} />
+        <Text size="xs" c="dimmed">{link.enabled ? "Each button adds a small tag to the link so clicks are counted per channel." : "Switch the short link on to share it."}</Text>
+      </Stack>
+      <ChannelBreakdown channels={link.channels} />
       <TextInput
         label="Custom link (optional)"
         description={link.alias_locked ? "Custom links have been disabled for this event by the platform. The short link above still works." : "Easier to remember, e.g. summer-fest. Set it before you share the link."}
@@ -113,6 +120,42 @@ export function ShortLinkPanel({ target, id, visibility, archived, active }: { t
       <Group justify="flex-end">
         <Button size="sm" variant="default" disabled={!dirty || clientError !== null || link.disabled_by_admin || link.alias_locked} loading={update.isPending} onClick={save}>Save custom link</Button>
       </Group>
+    </Stack>
+  );
+}
+
+/** Where clicks came from: all-time, last 30 and last 7 days per share channel. */
+function ChannelBreakdown({ channels }: { channels: ShortLinkChannelStat[] }) {
+  return (
+    <Stack gap={6}>
+      <Text size="sm" fw={500}>Where clicks come from</Text>
+      {channels.length === 0 ? (
+        <Text size="sm" c="dimmed">No clicks yet. Share the link with one of the buttons above to start seeing where visitors come from.</Text>
+      ) : (
+        <Table.ScrollContainer minWidth={280}>
+          <Table verticalSpacing={6} fz="sm" aria-label="Clicks by channel">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Channel</Table.Th>
+                <Table.Th ta="right">All time</Table.Th>
+                <Table.Th ta="right">30 days</Table.Th>
+                <Table.Th ta="right">7 days</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {channels.map((row) => (
+                <Table.Tr key={row.channel}>
+                  <Table.Td>{row.label}</Table.Td>
+                  <Table.Td ta="right">{row.all_time.toLocaleString()}</Table.Td>
+                  <Table.Td ta="right">{row.last_30.toLocaleString()}</Table.Td>
+                  <Table.Td ta="right">{row.last_7.toLocaleString()}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+      <Text size="xs" c="dimmed">Counts opens, not people, and excludes link-preview bots. Days are UTC. Anyone can change the tag in a link, so use these as a guide rather than an exact figure.</Text>
     </Stack>
   );
 }

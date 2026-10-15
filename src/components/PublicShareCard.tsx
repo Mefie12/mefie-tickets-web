@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { Badge, Box, Button, Card, Group, Paper, Stack, Switch, Text, ThemeIcon } from "@mantine/core";
-import { IconCheck, IconCopy, IconExternalLink, IconLink, IconShare } from "@tabler/icons-react";
+import { Badge, Box, Button, Card, Group, Menu, Paper, Stack, Switch, Text, ThemeIcon } from "@mantine/core";
+import { IconCheck, IconChevronDown, IconCopy, IconExternalLink, IconLink, IconShare } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import type { EventVisibility } from "@/lib/eventApi";
-import type { ShortLinkTarget } from "@/lib/shortLink";
+import { SHARE_CHANNELS, shareIntentUrl, taggedShortUrl, type ShareChannelCode, type ShortLinkTarget } from "@/lib/shortLink";
 import { useShortLink } from "@/lib/useShortLink";
 
 export type PublicShareCardProps = {
@@ -102,6 +102,41 @@ export function PublicShareCard({ url: longUrl, title, text, enabled, disabledEx
     }
   }
 
+  /**
+   * "Share to" menu (docs/26, Phase 2). The tagged short link counts the click
+   * under the chosen channel. When the short link doesn't exist yet (or was
+   * switched off) it is created/enabled first and the organizer picks the
+   * channel again: opening a window after an await would be blocked as a popup.
+   */
+  async function shareTo(code: ShareChannelCode): Promise<void> {
+    if (!shortLink) return;
+    const channel = SHARE_CHANNELS.find((c) => c.code === code);
+    if (!channel) return;
+    if (!short.link?.enabled) {
+      try {
+        if (short.link?.disabled_by_admin) throw new Error("This short link has been disabled by the platform.");
+        if (!short.link) await short.create.mutateAsync();
+        else await short.update.mutateAsync({ enabled: true });
+        notifications.show({ color: "teal", message: "Short link ready. Choose a channel again to share it." });
+      } catch (error) {
+        notifications.show({ color: "red", message: error instanceof Error ? error.message : "Could not create the short link." });
+      }
+      return;
+    }
+    const tagged = taggedShortUrl(short.link.short_url, code);
+    const href = shareIntentUrl(code, tagged, title, text);
+    if (href) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(tagged);
+      notifications.show({ color: "teal", message: `Link for ${channel.label} copied. Paste it into your bio or story.` });
+    } catch {
+      notifications.show({ color: "red", message: "We could not copy the URL. Select it and copy it manually." });
+    }
+  }
+
   const actions = (
     <Group gap="xs" wrap="wrap">
       <Button disabled={!enabled} variant={variant === "compact" ? "subtle" : "light"} leftSection={copied ? <IconCheck size={16} /> : <IconCopy size={16} />} onClick={copy} mih={44}>
@@ -113,6 +148,21 @@ export function PublicShareCard({ url: longUrl, title, text, enabled, disabledEx
         <Button disabled variant="subtle" leftSection={<IconExternalLink size={16} />} mih={44}>View page</Button>
       )}
       <Button disabled={!enabled} variant={variant === "compact" ? "subtle" : "light"} leftSection={<IconShare size={16} />} onClick={share} mih={44}>Share</Button>
+      {shortable && (
+        <Menu withinPortal position="bottom-end" shadow="md">
+          <Menu.Target>
+            <Button variant={variant === "compact" ? "subtle" : "light"} rightSection={<IconChevronDown size={14} />} mih={44}>Share to</Button>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Label>Counted per channel</Menu.Label>
+            {SHARE_CHANNELS.map((channel) => (
+              <Menu.Item key={channel.code} onClick={() => void shareTo(channel.code)}>
+                {channel.kind === "intent" ? channel.label : `${channel.label} (copy link)`}
+              </Menu.Item>
+            ))}
+          </Menu.Dropdown>
+        </Menu>
+      )}
     </Group>
   );
 
