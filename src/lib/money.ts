@@ -22,7 +22,7 @@ export function formatMoney(amount: string | number | null, currencyCode: string
   try {
     return new Intl.NumberFormat(LOCALE, { style: "currency", currency: currencyCode }).format(value);
   } catch {
-    return `${currencyCode} ${value.toFixed(2)}`;
+    return `${currencyCode} ${value.toFixed(currencyExponent(currencyCode))}`;
   }
 }
 
@@ -35,19 +35,49 @@ export function formatAmount(amount: string | number, currencyCode: string): str
   try {
     return new Intl.NumberFormat(LOCALE, { style: "currency", currency: currencyCode }).format(Number(amount));
   } catch {
-    return `${currencyCode} ${Number(amount).toFixed(2)}`;
+    return `${currencyCode} ${Number(amount).toFixed(currencyExponent(currencyCode))}`;
   }
 }
 
 /**
- * For `_minor` integer fields (the payments domain's unit — see the
- * API's Money value object). Assumes a 2-decimal currency, matching
- * every currency this platform currently routes through; doesn't yet
- * special-case zero-decimal currencies (JPY etc.) the way the backend's
- * CurrencyMetadata does.
+ * ISO 4217 currencies with no minor unit: 5000 XOF is 5000 minor units, not 500000. This list is EXACTLY the API's
+ * CurrencyMetadata::ZERO_DECIMAL (and StripePaymentService's), which decides how every `_minor` amount is stored and
+ * charged. It is not taken from Intl, whose CLDR data differs for a few codes (e.g. ISK, IQD). Change both together;
+ * money.test.ts pins this copy so a change here is always deliberate.
  */
+export const ZERO_DECIMAL_CURRENCIES: readonly string[] = [
+  "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+];
+
+/** Decimal places of a currency's minor unit, as the API stores it: 0 for zero-decimal currencies, otherwise 2. */
+export function currencyExponent(currencyCode: string | null | undefined): number {
+  // Tolerates a missing code (older or partial payloads): formatting then falls back like it always did,
+  // instead of a money helper throwing and taking the whole page down.
+  return ZERO_DECIMAL_CURRENCIES.includes(String(currencyCode ?? "").toUpperCase()) ? 0 : 2;
+}
+
+/**
+ * A major amount (e.g. "19.99" or a typed price) as integer minor units of that currency, rounded half-up like the
+ * API: 19.99 GBP -> 1999, 5000 XOF -> 5000. The one place the web turns major into minor; never multiply by 100.
+ */
+export function toMinorUnits(amount: string | number | null | undefined, currencyCode: string): number {
+  return Math.round(Number(amount ?? 0) * 10 ** currencyExponent(currencyCode));
+}
+
+/** Integer minor units as a major amount: 1999 GBP -> 19.99, 5000 XOF -> 5000. Never divide by 100. */
+export function toMajorUnits(amountMinor: number, currencyCode: string): number {
+  return amountMinor / 10 ** currencyExponent(currencyCode);
+}
+
+/** Props for a money NumberInput: whole numbers only for zero-decimal currencies, two decimals otherwise. */
+export function moneyInputProps(currencyCode: string): { decimalScale: number; fixedDecimalScale: boolean; min: number } {
+  const exponent = currencyExponent(currencyCode);
+  return { decimalScale: exponent, fixedDecimalScale: exponent > 0, min: 1 / 10 ** exponent };
+}
+
+/** For `_minor` integer fields (the payments domain's unit — see the API's Money value object), in any currency. */
 export function formatMinorAmount(amountMinor: number, currencyCode: string): string {
-  return formatAmount(amountMinor / 100, currencyCode);
+  return formatAmount(toMajorUnits(amountMinor, currencyCode), currencyCode);
 }
 
 /** Basis points as a percent string, trimmed to at most 2 decimals with no trailing zeros — e.g. 300 -> "3%", 875 -> "8.75%". */

@@ -187,7 +187,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     }, 0);
   }, [cartItems, event.products]);
 
-  const summaryLines = useMemo(() => summaryLinesFromCart(cartItems, event.products), [cartItems, event.products]);
+  const summaryLines = useMemo(() => summaryLinesFromCart(cartItems, event.products, event.currency_code), [cartItems, event.products, event.currency_code]);
 
   // Advisory server quote for the cart + the offer carried from the event page.
   // Order creation recalculates under lock; this only drives what is displayed

@@ -22,7 +22,7 @@ export default async function OffersPage({ params }: { params: Promise<{ eventId
       eventId={event.id}
       timezone={event.timezone}
       initialOffers={offers.data.offers}
-      inventory={offerInventory(products.data.products)}
+      inventory={offerInventory(products.data.products, event.currency_code)}
       publicEventPath={`/${organization.slug}/${event.slug}`}
     />
   );

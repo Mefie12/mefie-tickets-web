@@ -32,6 +32,7 @@ import {
   type SlotAssignment,
 } from "@/lib/checkoutDraft";
 import classes from "./checkoutDetailsForm.module.css";
+import { toMinorUnits } from "@/lib/money";
 
 const TERMS_TRIGGERING_TYPES = new Set(["PAID", "TIERED", "REGISTRATION", "DONATION"]);
 
@@ -61,7 +62,7 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [announcement, setAnnouncement] = useState("");
   const checkoutIdempotencyKey = useRef(crypto.randomUUID());
-  const costs = useMemo(() => computeBuyerCosts(Math.round(totalDue * 100), event.pricing), [totalDue, event.pricing]);
+  const costs = useMemo(() => computeBuyerCosts(toMinorUnits(totalDue, event.currency_code), event.pricing), [totalDue, event.pricing, event.currency_code]);
   const [stale, setStale] = useState<{ code: string; previousTotalMinor: number | null } | null>(null);
   const [offerError, setOfferError] = useState<string | null>(null);
   const [verifyOpen, setVerifyOpen] = useState(false);
@@ -73,7 +74,7 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
   const rejected = quote?.status === "REJECTED";
   const needsVerification = quote?.status === "VERIFICATION_REQUIRED" && (offer?.promo_code || offer?.offer_token);
   const amounts = quote ? amountsFromQuote(quote) : { currency: event.currency_code, ...costs };
-  const payableMinor = quote ? quote.total_minor : Math.round(totalDue * 100);
+  const payableMinor = quote ? quote.total_minor : toMinorUnits(totalDue, event.currency_code);
   const orderQuestions = event.questions.filter((q) => q.scope === "ORDER").sort((a, b) => a.sort_order - b.sort_order);
   const attendeeQuestions = event.questions.filter((q) => q.scope === "ATTENDEE").sort((a, b) => a.sort_order - b.sort_order);
   const productTypeById = new Map(event.products.map((p) => [p.id, p.type]));

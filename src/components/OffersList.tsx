@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge, Card, Group, Progress, SegmentedControl, SimpleGrid, Stack, Table, Text, Title, UnstyledButton } from "@mantine/core";
-import { IconBolt, IconDiscount2, IconPercentage, IconTicket } from "@tabler/icons-react";
+import { IconBolt, IconDiscount2, IconPercentage, IconTicket, IconUsersGroup } from "@tabler/icons-react";
 import { listOffers, type Offer } from "@/lib/offersApi";
 import { discountLabel, OFFER_TABS, offersByTab, PHASE_COLOR, PHASE_LABEL, type OfferTab } from "@/lib/offerFormat";
 import { formatEventDate } from "@/lib/eventDateTime";
@@ -44,9 +44,10 @@ export function OffersList({ eventId, timezone, initialOffers, inventory, public
               <Text c="dimmed" size="sm">Offer a discount with a promo code, a shareable link, or automatically for a limited time. You choose which tickets it covers and how many can be discounted.</Text>
             </Stack>
             {canManage && (
-              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm" w="100%">
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" w="100%">
                 <Template href={`/events/${eventId}/offers/new?template=percent`} icon={<IconPercentage size={20} />} title="Percentage code" text="e.g. SUMMER20 for 20% off" />
                 <Template href={`/events/${eventId}/offers/new?template=fixed`} icon={<IconTicket size={20} />} title="Fixed-amount code" text="e.g. 10 off each ticket" />
+                <Template href={`/events/${eventId}/offers/new?template=group`} icon={<IconUsersGroup size={20} />} title="Couple or group price" text="e.g. 2 tickets for 350 instead of 400" />
                 <Template href={`/events/${eventId}/offers/new?template=automatic`} icon={<IconBolt size={20} />} title="Automatic sale" text="Applies without a code" />
               </SimpleGrid>
             )}

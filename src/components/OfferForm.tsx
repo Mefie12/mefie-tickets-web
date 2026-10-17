@@ -4,21 +4,21 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Alert, Badge, Box, Button, Card, Checkbox, Grid, GridCol, Group, NumberInput, SegmentedControl, Stack, Text, TextInput, Textarea, Title } from "@mantine/core";
+import { Alert, Badge, Box, Button, Card, Checkbox, Grid, GridCol, Group, NumberInput, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Textarea, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconAlertTriangle, IconInfoCircle, IconRefresh } from "@tabler/icons-react";
 import { ApiError } from "@/lib/authApi";
 import { createOffer, updateOffer, type Offer, type OfferActivation, type OfferDiscountType, type OfferInput, type OfferScopeRow } from "@/lib/offersApi";
 import { offerErrorMessage } from "@/lib/offerErrors";
-import { discountLabel, previewDiscountedUnit } from "@/lib/offerFormat";
+import { discountLabel, previewBundle, previewDiscountedUnit } from "@/lib/offerFormat";
 import { localInputToUtcIso, utcIsoToLocalInput } from "@/lib/offerDates";
 import { samplePriceMinor, scopeLabels, type OfferTicketType } from "@/lib/offerInventory";
-import { currencySymbol, formatMinorAmount } from "@/lib/money";
+import { currencySymbol, formatMinorAmount, currencyExponent, moneyInputProps, toMajorUnits, toMinorUnits } from "@/lib/money";
 import { offerTimezoneLabel } from "@/lib/offerTimezone";
 import { normalizePromoCode, promoCodeFormatError } from "@/lib/offerCodeFormat";
 import { endError, startError } from "@/lib/offerSchedule";
 
-type Template = "percent" | "fixed" | "automatic";
+export type Template = "percent" | "fixed" | "automatic" | "group";
 
 type FormState = {
   name: string;
@@ -28,6 +28,12 @@ type FormState = {
   discountType: OfferDiscountType;
   percent: number | string;
   fixed: number | string;
+  /** "" = no minimum. Only for percentage / fixed offers: every ticket of a type is discounted once the cart holds this many. */
+  minQuantity: number | string;
+  /** GROUP_BUNDLE: tickets per group, the price of one whole group, and an optional cap on groups per order. */
+  groupSize: number | string;
+  groupPrice: number | string;
+  maxGroups: number | string;
   starts: string;
   ends: string;
   globalLimit: number | string;
@@ -97,8 +103,12 @@ function initialState(args: { initial?: Offer; prefill?: Offer; template?: Templ
       activation: initial.activation,
       code: initial.code ?? "",
       discountType: initial.discount_type,
-      percent: initial.discount_type === "PERCENTAGE" ? initial.discount_value / 100 : 10,
-      fixed: initial.discount_type === "FIXED_PER_TICKET" ? initial.discount_value / 100 : "",
+      percent: initial.discount_type === "PERCENTAGE" ? (initial.discount_value ?? 0) / 100 : 10,
+      fixed: initial.discount_type === "FIXED_PER_TICKET" ? toMajorUnits(initial.discount_value ?? 0, initial.currency_code) : "",
+      minQuantity: initial.min_ticket_quantity ?? "",
+      groupSize: initial.group_size ?? 2,
+      groupPrice: initial.group_price_minor !== null ? toMajorUnits(initial.group_price_minor, initial.currency_code) : "",
+      maxGroups: initial.max_groups_per_order ?? "",
       starts: utcIsoToLocalInput(initial.starts_at, timezone),
       ends: utcIsoToLocalInput(initial.ends_at, timezone),
       globalLimit: initial.global_ticket_limit ?? "",
@@ -109,13 +119,17 @@ function initialState(args: { initial?: Offer; prefill?: Offer; template?: Templ
   }
   const window = defaultWindow(timezone, eventStart);
   return {
-    name: template === "automatic" ? "Limited-time sale" : "",
+    name: template === "automatic" ? "Limited-time sale" : template === "group" ? "Couple price" : "",
     description: "",
-    activation: template === "automatic" ? "AUTOMATIC" : "CODE",
+    activation: template === "automatic" || template === "group" ? "AUTOMATIC" : "CODE",
     code: "",
-    discountType: template === "fixed" ? "FIXED_PER_TICKET" : "PERCENTAGE",
+    discountType: template === "fixed" ? "FIXED_PER_TICKET" : template === "group" ? "GROUP_BUNDLE" : "PERCENTAGE",
     percent: template === "automatic" ? 15 : 20,
     fixed: "",
+    minQuantity: "",
+    groupSize: 2,
+    groupPrice: "",
+    maxGroups: "",
     ...window,
     globalLimit: "",
     perCustomer: "",
@@ -162,19 +176,46 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
   const patch = (changes: Partial<FormState>) => setForm((f) => ({ ...f, ...changes }));
 
   const scopeRows = useMemo(() => scopeStateToRows(form.scope, inventory), [form.scope, inventory]);
-  const discountValue = form.discountType === "PERCENTAGE"
-    ? Math.round(Number(form.percent || 0) * 100)
-    : Math.round(Number(form.fixed || 0) * 100);
+  const isBundle = form.discountType === "GROUP_BUNDLE";
+  const discountValue = isBundle
+    ? 0
+    : form.discountType === "PERCENTAGE"
+      ? Math.round(Number(form.percent || 0) * 100)
+      : toMinorUnits(form.fixed || 0, currency);
+  const groupSize = Number(form.groupSize || 0);
+  // For hints only: the real size once valid, else a placeholder word that still reads correctly.
+  const groupSizeForCopy = groupSize >= 2 ? groupSize : 2;
+  const groupPriceMinor = toMinorUnits(form.groupPrice || 0, currency);
+  const minQuantity = !isBundle && form.minQuantity !== "" ? Number(form.minQuantity) : null;
 
   const samplePrice = samplePriceMinor(scopeRows, inventory);
   const examplePrice = samplePrice ?? 10_000;
   const exampleFinal = previewDiscountedUnit(examplePrice, { discount_type: form.discountType, discount_value: discountValue });
+  // Tickets the preview prices: a whole group, or the minimum needed for a volume discount.
+  const exampleQuantity = isBundle ? Math.max(groupSize, 1) : (minQuantity ?? 1);
+  const exampleBundle = isBundle ? previewBundle(examplePrice, { group_size: groupSize, group_price_minor: groupPriceMinor }) : null;
+  // The condition a purchase must meet, to compare against the limits below.
+  const condition = isBundle ? groupSize : (minQuantity ?? 1);
+  const limitTooSmall = (value: number | string) => value !== "" && condition > 1 && Number(value) < condition;
+  // Advice shown while typing; the server enforces the hard rules again when the offer is activated.
+  const bundleNotCheaper = isBundle && exampleBundle !== null && exampleBundle.savingMinor <= 0;
+  const bundleCliff = isBundle && exampleBundle !== null && exampleBundle.savingMinor > 0 && groupPriceMinor < (groupSize - 1) * examplePrice;
+  const volumeCliff = !isBundle && minQuantity !== null && discountValue > 0 && minQuantity * (examplePrice - exampleFinal) > examplePrice;
+  const conditionalFree = (isBundle && groupPriceMinor > 0 && Math.floor(groupPriceMinor / Math.max(groupSize, 1)) === 0) || (minQuantity !== null && discountValue > 0 && exampleFinal === 0);
 
   const overlapping = otherOffers.filter((o) => o.id !== initial?.id && (o.status === "ACTIVE" || o.status === "PAUSED") && (o.scope ?? []).some((row) =>
     scopeRows.some((mine) => mine.product_id === row.product_id && (mine.ticket_option_id === null || row.ticket_option_id === null || mine.ticket_option_id === row.ticket_option_id))));
   const automaticActive = form.activation === "AUTOMATIC"
     ? otherOffers.find((o) => o.id !== initial?.id && o.activation === "AUTOMATIC" && o.status === "ACTIVE")
     : undefined;
+
+  const hasDeal = isBundle ? groupSize >= 2 && groupPriceMinor > 0 : discountValue > 0;
+  const previewLabel = hasDeal
+    ? discountLabel({
+        discount_type: form.discountType, discount_value: isBundle ? null : discountValue, min_ticket_quantity: minQuantity,
+        group_size: isBundle ? groupSize : null, group_price_minor: isBundle ? groupPriceMinor : null, currency_code: currency,
+      })
+    : "—";
 
   const mutation = useMutation({
     mutationFn: () => {
@@ -185,7 +226,11 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
         starts_at: localInputToUtcIso(form.starts, timezone),
         ends_at: localInputToUtcIso(form.ends, timezone),
         discount_type: form.discountType,
-        discount_value: discountValue,
+        discount_value: isBundle ? null : discountValue,
+        min_ticket_quantity: minQuantity,
+        group_size: isBundle ? groupSize : null,
+        group_price_minor: isBundle ? groupPriceMinor : null,
+        max_groups_per_order: isBundle && form.maxGroups !== "" ? Number(form.maxGroups) : null,
         global_ticket_limit: form.globalLimit === "" ? null : Number(form.globalLimit),
         per_customer_ticket_limit: form.perCustomer === "" ? null : Number(form.perCustomer),
         per_order_ticket_limit: form.perOrder === "" ? null : Number(form.perOrder),
@@ -219,7 +264,7 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
     },
   });
 
-  const canSubmit = form.name.trim() !== "" && discountValue > 0 && form.starts !== "" && form.ends !== "";
+  const canSubmit = form.name.trim() !== "" && hasDeal && form.starts !== "" && form.ends !== "";
 
   return (
     <Grid gutter="xl" align="flex-start">
@@ -271,20 +316,70 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
 
             <Section title="2. Discount">
               <SegmentedControl fullWidth value={form.discountType} onChange={(v) => patch({ discountType: v as OfferDiscountType })}
-                data={[{ value: "PERCENTAGE", label: "Percentage off" }, { value: "FIXED_PER_TICKET", label: "Fixed amount off each ticket" }]} aria-label="Discount type" disabled={!!initial?.is_locked} />
-              {form.discountType === "PERCENTAGE" ? (
+                data={[
+                  { value: "PERCENTAGE", label: "% off" },
+                  { value: "FIXED_PER_TICKET", label: "Amount off" },
+                  { value: "GROUP_BUNDLE", label: "Group" },
+                ]} aria-label="Discount type" disabled={!!initial?.is_locked} />
+              {form.discountType === "PERCENTAGE" && (
                 <NumberInput label="Percentage" withAsterisk min={0.01} max={100} decimalScale={2} suffix="%" value={form.percent}
                   onChange={(v) => patch({ percent: v })} error={errors.discount_value} />
-              ) : (
-                <NumberInput label="Amount off each ticket" withAsterisk min={0.01} decimalScale={2} fixedDecimalScale prefix={`${currencySymbol(currency)} `} value={form.fixed}
+              )}
+              {form.discountType === "FIXED_PER_TICKET" && (
+                <NumberInput label="Amount off each ticket" withAsterisk {...moneyInputProps(currency)} prefix={`${currencySymbol(currency)} `} value={form.fixed}
                   onChange={(v) => patch({ fixed: v })} error={errors.discount_value} />
               )}
+              {isBundle && (
+                <>
+                  {/* Stacked until there is room: in the narrow form column side-by-side labels and hints wrap and misalign the inputs. */}
+                  <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+                    <NumberInput label="Tickets in a group" description="Use 2 for a couple" withAsterisk min={2} max={10} allowDecimal={false} value={form.groupSize}
+                      onChange={(v) => patch({ groupSize: v })} error={errors.group_size} />
+                    <NumberInput label="Price for the whole group" description="Paid for the whole group" placeholder={currencyExponent(currency) > 0 ? "0.00" : "0"} withAsterisk {...moneyInputProps(currency)} prefix={`${currencySymbol(currency)} `} value={form.groupPrice}
+                      onChange={(v) => patch({ groupPrice: v })} error={errors.group_price_minor} />
+                  </SimpleGrid>
+                  <Text size="xs" c="dimmed">
+                    Each group is made of tickets of the same ticket type and option; different ticket types never make a group together. Tickets left over after the last full group are charged the normal price. Every person still gets their own ticket and QR code.
+                  </Text>
+                </>
+              )}
+              {!isBundle && (
+                <Stack gap="xs">
+                  <Checkbox label="Only when buying a minimum number of the same ticket" checked={form.minQuantity !== ""} disabled={!!initial?.is_locked}
+                    onChange={(e) => patch({ minQuantity: e.currentTarget.checked ? 3 : "" })} />
+                  {form.minQuantity !== "" && (
+                    <NumberInput label="Minimum tickets of one type" description="Once a cart has this many of one ticket type, every ticket of that type gets the discount." min={2} max={10} allowDecimal={false}
+                      value={form.minQuantity} onChange={(v) => patch({ minQuantity: v })} error={errors.min_ticket_quantity} />
+                  )}
+                </Stack>
+              )}
               <Text size="sm" c="dimmed" aria-live="polite">
-                {discountValue > 0
-                  ? `A ${formatMinorAmount(examplePrice, currency)} ticket becomes ${exampleFinal === 0 ? "free" : formatMinorAmount(exampleFinal, currency)}.`
-                  : "Enter a discount to see an example."}
+                {isBundle
+                  ? exampleBundle && groupPriceMinor > 0
+                    ? `${groupSize} × ${formatMinorAmount(examplePrice, currency)} tickets cost ${formatMinorAmount(exampleBundle.groupMinor, currency)} together${exampleBundle.savingMinor > 0 ? ` — buyers save ${formatMinorAmount(exampleBundle.savingMinor, currency)} per group.` : "."}`
+                    : "Enter the group size and price to see an example."
+                  : discountValue > 0
+                    ? `A ${formatMinorAmount(examplePrice, currency)} ticket becomes ${exampleFinal === 0 ? "free" : formatMinorAmount(exampleFinal, currency)}${minQuantity ? ` when buying ${minQuantity} or more` : ""}.`
+                    : "Enter a discount to see an example."}
                 {form.discountType === "FIXED_PER_TICKET" ? " A ticket never goes below zero." : ""}
               </Text>
+              {bundleNotCheaper && (
+                <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />} title="Not a discount">
+                  The group price isn’t lower than buying {groupSize} tickets separately, so it can’t be activated. Lower the group price.
+                </Alert>
+              )}
+              {conditionalFree && (
+                <Alert color="red" variant="light" icon={<IconAlertTriangle size={18} />} title="Tickets would be free">
+                  Offers that need a minimum or a group can’t make a ticket free. {isBundle ? "Raise the group price." : "Reduce the discount."}
+                </Alert>
+              )}
+              {(bundleCliff || volumeCliff) && !conditionalFree && (
+                <Alert color="yellow" variant="light" icon={<IconInfoCircle size={18} />} title="Buying more costs less than buying fewer">
+                  {isBundle
+                    ? `${groupSize} tickets would cost less than ${groupSize - 1}. That’s allowed, but check it’s what you want.`
+                    : `${minQuantity} tickets would cost less than ${(minQuantity ?? 2) - 1}. That’s allowed, but check it’s what you want.`}
+                </Alert>
+              )}
             </Section>
 
             <Section title="3. Which tickets">
@@ -315,11 +410,15 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
                 })}
               </Stack>
               {errors.scope && <Text size="sm" c="var(--mantine-color-error)" role="alert">{errors.scope}</Text>}
-              <Text size="xs" c="dimmed">Pick specific options to leave others out — for example, keep your Early Bird price as it is.</Text>
+              <Text size="xs" c="dimmed">
+                {isBundle || minQuantity !== null
+                  ? "Pick the ticket type (or option) the deal is for. Tickets are only counted together when they are the same type and option."
+                  : "Pick specific options to leave others out — for example, keep your Early Bird price as it is."}
+              </Text>
             </Section>
 
             <Section title="4. When and how many">
-              <Group grow align="flex-start">
+              <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
                 <TextInput type="datetime-local" label="Starts" withAsterisk value={form.starts}
                   onChange={(e) => { patch({ starts: e.currentTarget.value }); setScheduleErrors((s) => ({ ...s, start: null })); }}
                   onBlur={() => setScheduleErrors({ start: startError(form.starts, timezone, { unchangedFrom: initialStart }), end: form.ends ? endError(form.starts, form.ends, timezone) : null })}
@@ -328,17 +427,25 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
                   onChange={(e) => { patch({ ends: e.currentTarget.value }); setScheduleErrors((s) => ({ ...s, end: null })); }}
                   onBlur={() => setScheduleErrors((s) => ({ ...s, end: endError(form.starts, form.ends, timezone) }))}
                   error={scheduleErrors.end ?? errors.ends_at} />
-              </Group>
+              </SimpleGrid>
               <Text size="xs" c="dimmed">Times are in the event’s timezone ({offerTimezoneLabel(timezone)}).</Text>
-              <NumberInput label="Total discounted tickets (optional)" description="The most tickets that can ever get this discount. Leave empty for no limit." min={1} allowDecimal={false}
-                value={form.globalLimit} onChange={(v) => patch({ globalLimit: v })} error={errors.global_ticket_limit} />
-              <Group grow align="flex-start">
+              <NumberInput label="Total discounted tickets (optional)" description={isBundle ? `The most tickets that can ever get the group price (e.g. 100 groups = ${100 * groupSizeForCopy} tickets). Leave empty for no limit.` : "The most tickets that can ever get this discount. Leave empty for no limit."} min={1} allowDecimal={false}
+                value={form.globalLimit} onChange={(v) => patch({ globalLimit: v })} error={errors.global_ticket_limit ?? (limitTooSmall(form.globalLimit) ? `Must be at least ${condition}.` : undefined)} />
+              {isBundle && (
+                <NumberInput label="Groups per order (optional)"
+                  description={`1 = only the first ${groupSizeForCopy} tickets in an order get the group price; any more are charged the normal price. Leave empty for no limit.`}
+                  min={1} max={1000} allowDecimal={false} value={form.maxGroups} onChange={(v) => patch({ maxGroups: v })} error={errors.max_groups_per_order} />
+              )}
+              <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
                 <NumberInput label="Per customer (optional)" description="Discounted tickets one customer can buy." min={1} allowDecimal={false}
-                  value={form.perCustomer} onChange={(v) => patch({ perCustomer: v })} error={errors.per_customer_ticket_limit} />
+                  value={form.perCustomer} onChange={(v) => patch({ perCustomer: v })} error={errors.per_customer_ticket_limit ?? (limitTooSmall(form.perCustomer) ? `Must be at least ${condition}.` : undefined)} />
                 <NumberInput label="Per order (optional)" description="Discounted tickets in a single order." min={1} allowDecimal={false}
-                  value={form.perOrder} onChange={(v) => patch({ perOrder: v })} error={errors.per_order_ticket_limit} />
-              </Group>
-              <Text size="xs" c="dimmed">Limits count discounted tickets, not orders. Anything above a limit is simply charged at the regular price.</Text>
+                  value={form.perOrder} onChange={(v) => patch({ perOrder: v })} error={errors.per_order_ticket_limit ?? (limitTooSmall(form.perOrder) ? `Must be at least ${condition}.` : undefined)} />
+              </SimpleGrid>
+              <Text size="xs" c="dimmed">Limits count discounted tickets, not orders{isBundle ? ", and only whole groups count" : ""}. Anything above a limit is simply charged at the regular price.</Text>
+              {(isBundle || minQuantity !== null) && form.globalLimit === "" && (
+                <Alert color="yellow" variant="light" icon={<IconInfoCircle size={18} />}>No total limit is set, so buyers can place any number of separate orders at this price. Consider a total limit.</Alert>
+              )}
               {form.perCustomer !== "" && (
                 <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />}>Buyers will verify their email with a one-time code before this offer applies.</Alert>
               )}
@@ -366,7 +473,7 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
       <GridCol span={{ base: 12, md: 5 }}>
         <Box pos={{ base: "static", md: "sticky" }} top={84}>
           <Preview form={form} currency={currency} timezone={timezone} labels={scopeLabels(scopeRows, inventory)} examplePrice={examplePrice} exampleFinal={exampleFinal}
-            discountValue={discountValue} publicEventPath={publicEventPath} />
+            exampleQuantity={exampleQuantity} exampleBundle={exampleBundle} hasDeal={hasDeal} label={previewLabel} publicEventPath={publicEventPath} />
         </Box>
       </GridCol>
     </Grid>
@@ -383,14 +490,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 /** How buyers will see the offer: the ticket row badge and the checkout lines. */
-function Preview({ form, currency, timezone, labels, examplePrice, exampleFinal, discountValue }: {
-  form: FormState; currency: string; timezone: string; labels: string[]; examplePrice: number; exampleFinal: number; discountValue: number; publicEventPath?: string;
+function Preview({ form, currency, timezone, labels, examplePrice, exampleFinal, exampleQuantity, exampleBundle, hasDeal, label }: {
+  form: FormState; currency: string; timezone: string; labels: string[]; examplePrice: number; exampleFinal: number; exampleQuantity: number;
+  exampleBundle: { normalMinor: number; groupMinor: number; savingMinor: number } | null; hasDeal: boolean; label: string; publicEventPath?: string;
 }) {
-  const label = discountValue > 0
-    ? discountLabel({ discount_type: form.discountType, discount_value: discountValue, currency_code: currency })
-    : "—";
   const endsText = form.ends ? new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(new Date(localInputToUtcIso(form.ends, timezone))) : "";
-  const savings = examplePrice - exampleFinal;
+  const gross = examplePrice * exampleQuantity;
+  const net = exampleBundle ? exampleBundle.groupMinor : exampleFinal * exampleQuantity;
+  const savings = hasDeal ? Math.max(0, gross - net) : 0;
 
   return (
     <Card withBorder radius="lg" p="lg">
@@ -412,14 +519,14 @@ function Preview({ form, currency, timezone, labels, examplePrice, exampleFinal,
 
         <Stack gap={6}>
           <Text size="xs" c="dimmed" tt="uppercase" fw={600}>At checkout</Text>
-          <Group justify="space-between"><Text size="sm" c="dimmed">1 × ticket</Text><Text size="sm">{formatMinorAmount(examplePrice, currency)}</Text></Group>
+          <Group justify="space-between"><Text size="sm" c="dimmed">{exampleQuantity} × ticket</Text><Text size="sm">{formatMinorAmount(gross, currency)}</Text></Group>
           {savings > 0 && (
             <Group justify="space-between">
               <Text size="sm" c="dimmed">Discount{form.name ? ` (${form.name})` : ""}</Text>
               <Text size="sm" fw={600} c="light-dark(#18794e, #5fd39a)">−{formatMinorAmount(savings, currency)}</Text>
             </Group>
           )}
-          <Group justify="space-between"><Text size="sm" fw={600}>Ticket price</Text><Text size="sm" fw={600}>{exampleFinal === 0 ? "Free" : formatMinorAmount(exampleFinal, currency)}</Text></Group>
+          <Group justify="space-between"><Text size="sm" fw={600}>{exampleQuantity > 1 ? "Tickets total" : "Ticket price"}</Text><Text size="sm" fw={600}>{hasDeal && net === 0 ? "Free" : formatMinorAmount(hasDeal ? net : gross, currency)}</Text></Group>
         </Stack>
 
         <Text size="xs" c="dimmed">

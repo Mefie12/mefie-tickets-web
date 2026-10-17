@@ -90,7 +90,7 @@ export default function AdminOffersPage() {
             <Stack gap={6}>
               <Row label="Discount" value={discountLabel(current.offer)} />
               <Row label="Window" value={`${new Date(current.offer.starts_at).toLocaleString()} – ${new Date(current.offer.ends_at).toLocaleString()}`} />
-              <Row label="Limits" value={[current.offer.global_ticket_limit && `${current.offer.global_ticket_limit} total`, current.offer.per_customer_ticket_limit && `${current.offer.per_customer_ticket_limit} per customer`, current.offer.per_order_ticket_limit && `${current.offer.per_order_ticket_limit} per order`].filter(Boolean).join(" · ") || "None"} />
+              <Row label="Limits" value={[current.offer.global_ticket_limit && `${current.offer.global_ticket_limit} total`, current.offer.per_customer_ticket_limit && `${current.offer.per_customer_ticket_limit} per customer`, current.offer.per_order_ticket_limit && `${current.offer.per_order_ticket_limit} per order`, current.offer.max_groups_per_order && `${current.offer.max_groups_per_order} group${current.offer.max_groups_per_order === 1 ? "" : "s"} per order`].filter(Boolean).join(" · ") || "None"} />
               <Row label="Orders" value={String(current.report.redemptions)} />
               <Row label="Discounted tickets" value={`${current.report.discounted_tickets} (${current.report.in_checkout_tickets} in checkout)`} />
               <Row label="Discount given" value={formatMinorAmount(current.report.discount_granted_minor, current.report.currency_code)} />

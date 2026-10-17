@@ -1,13 +1,13 @@
 import type { Product } from "@/lib/productApi";
 import type { OfferScopeRow } from "@/lib/offersApi";
+import { toMinorUnits } from "@/lib/money";
 
 export type OfferTicketOption = { id: number; name: string; priceMinor: number };
 export type OfferTicketType = { productId: number; title: string; tiered: boolean; priceMinor: number | null; options: OfferTicketOption[] };
 
-const toMinor = (price: string | null | undefined) => Math.round(Number(price ?? 0) * 100);
-
 /** The ticket types an offer can target, with their option prices (for previews). */
-export function offerInventory(products: Product[]): OfferTicketType[] {
+export function offerInventory(products: Product[], currencyCode: string): OfferTicketType[] {
+  const toMinor = (price: string | null | undefined) => toMinorUnits(price, currencyCode);
   return products
     .filter((p) => p.product_type === "TICKET" && !p.disabled_at)
     .map((p) => ({
