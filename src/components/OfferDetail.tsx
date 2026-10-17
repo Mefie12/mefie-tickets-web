@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Alert, Anchor, Badge, Breadcrumbs, Button, Card, Divider, Group, Progress, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { IconArrowLeft, IconCopy, IconInfoCircle, IconLock } from "@tabler/icons-react";
-import { getOffer, type Offer, type OfferReport } from "@/lib/offersApi";
+import { getOffer, type Offer, type OfferReport, type OfferWarning } from "@/lib/offersApi";
 import { useOfferActions } from "@/lib/useOfferActions";
 import { discountLabel, shareUrl, PHASE_COLOR, PHASE_LABEL } from "@/lib/offerFormat";
 import { scopeLabels, type OfferTicketType } from "@/lib/offerInventory";
@@ -23,7 +23,7 @@ import { TableScrollShadow } from "@/components/TableScrollShadow";
  * economics are read-only with a clear "locked" explanation, and only
  * pause / resume / end remain.
  */
-export function OfferDetail({ eventId, currency, timezone, eventStart, publicEventPath, eventStatus, inventory, otherOffers, initialOffer, initialReport, canManage = true }: {
+export function OfferDetail({ eventId, currency, timezone, eventStart, publicEventPath, eventStatus, inventory, otherOffers, initialOffer, initialReport, initialWarnings = [], canManage = true }: {
   eventId: number;
   currency: string;
   timezone: string;
@@ -35,15 +35,17 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
   otherOffers: Offer[];
   initialOffer: Offer;
   initialReport: OfferReport;
+  /** Advice the API returned with the offer (e.g. buying more costs less than buying fewer). */
+  initialWarnings?: OfferWarning[];
   canManage?: boolean;
 }) {
   const router = useRouter();
   const query = useQuery({
     queryKey: ["offer", eventId, initialOffer.id],
     queryFn: () => getOffer(eventId, initialOffer.id),
-    initialData: { offer: initialOffer, report: initialReport },
+    initialData: { offer: initialOffer, report: initialReport, warnings: initialWarnings },
   });
-  const { offer, report } = query.data;
+  const { offer, report, warnings } = query.data;
   const searchParams = useSearchParams();
   // ?edit=1 (from the list's row menu) opens a draft straight in edit mode.
   const [editing, setEditing] = useState(() => initialOffer.status === "DRAFT" && searchParams.get("edit") === "1");
@@ -82,7 +84,7 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
             {offer.status === "DRAFT" && <>
               <Button variant="default" onClick={() => setEditing((e) => !e)}>{editing ? "Cancel editing" : "Edit"}</Button>
               <Button color="red" variant="subtle" onClick={() => actions.remove(offer)} loading={actions.busy}>Delete</Button>
-              <Button onClick={() => actions.activate(offer)} loading={actions.busy} disabled={(offer.scope ?? []).length === 0}>Activate</Button>
+              <Button onClick={() => void actions.activate(offer, warnings)} loading={actions.busy} disabled={(offer.scope ?? []).length === 0}>Activate</Button>
             </>}
             {offer.status === "ACTIVE" && <><Button variant="default" onClick={() => actions.pause(offer)} loading={actions.busy}>Pause</Button><Button color="red" variant="light" onClick={() => actions.end(offer)}>End</Button></>}
             {offer.status === "PAUSED" && <><Button onClick={() => actions.resume(offer)} loading={actions.busy}>Resume</Button><Button color="red" variant="light" onClick={() => actions.end(offer)}>End</Button></>}
@@ -92,6 +94,10 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
 
       {offer.status === "DRAFT" && <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />}>This offer is a draft — buyers can’t use it yet.{(offer.scope ?? []).length === 0 ? " Choose at least one ticket to activate it." : ""}</Alert>}
       {notYetStarted && <Alert color="blue" variant="light" icon={<IconInfoCircle size={18} />}><span suppressHydrationWarning>Scheduled — it goes live {formatEventDateTime(offer.starts_at, timezone)}.</span></Alert>}
+      {/* Advice only while it can still be acted on: a draft can be edited; an active offer can't (duplicate instead). */}
+      {offer.status === "DRAFT" && warnings.map((w) => (
+        <Alert key={w.code} color="yellow" variant="light" icon={<IconInfoCircle size={18} />}>{w.message}</Alert>
+      ))}
       {pastEnd && <Alert color="gray" variant="light" icon={<IconInfoCircle size={18} />}>This offer’s end time has passed, so it no longer applies.</Alert>}
 
       {offer.status === "DRAFT" && editing ? (
@@ -168,6 +174,9 @@ export function OfferDetail({ eventId, currency, timezone, eventStart, publicEve
                 {offer.is_locked && <Badge variant="light" color="gray" leftSection={<IconLock size={12} />}>Locked after activation</Badge>}
               </Group>
               <Config label="Discount" value={discountLabel(offer)} />
+              {offer.discount_type === "GROUP_BUNDLE" && (
+                <Config label="Groups per order" value={offer.max_groups_per_order ? String(offer.max_groups_per_order) : "No limit"} />
+              )}
               <Config label="Tickets" value={scopeLabels(offer.scope ?? [], inventory).join(", ") || "—"} />
               <Config label="Total discounted tickets" value={offer.global_ticket_limit ? String(offer.global_ticket_limit) : "No limit"} />
               <Config label="Per customer" value={offer.per_customer_ticket_limit ? `${offer.per_customer_ticket_limit} (email verification required)` : "No limit"} />

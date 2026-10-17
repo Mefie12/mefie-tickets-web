@@ -44,7 +44,7 @@ import {
   type TicketOptionInput,
   updateProduct,
 } from "@/lib/productApi";
-import { currencySymbol, formatMoney } from "@/lib/money";
+import { currencySymbol, formatMoney, currencyExponent } from "@/lib/money";
 
 /** Mantine gives nested-list validators a path like "tiers.2.ends_at_time". */
 function tierIndexFromPath(path: string): number {
@@ -642,7 +642,7 @@ function ProductFormModal({
               withAsterisk
               prefix={currencySymbol(eventCurrency)}
               min={0}
-              decimalScale={2}
+              decimalScale={currencyExponent(eventCurrency)}
               {...form.getInputProps("price")}
             />
           )}
@@ -742,7 +742,7 @@ function ProductFormModal({
                       withAsterisk
                       prefix={currencySymbol(eventCurrency)}
                       min={0}
-                      decimalScale={2}
+                      decimalScale={currencyExponent(eventCurrency)}
                       {...form.getInputProps(`tiers.${index}.price`)}
                     />
                     <Text size="xs" c="dimmed">

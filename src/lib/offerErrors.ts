@@ -10,6 +10,7 @@ const MESSAGES: Record<string, string> = {
   OFFER_CUSTOMER_LIMIT_REACHED: "You’ve already used this offer the maximum number of times.",
   OFFER_CAPACITY_EXHAUSTED: "Sorry, this offer has run out.",
   OFFER_VERIFICATION_REQUIRED: "Verify your email to use this offer.",
+  // OFFER_BELOW_MINIMUM is deliberately absent: the server's message names the exact number of tickets needed.
   // 409 — the price changed between the quote and the order.
   OFFER_CAPACITY_CHANGED: "This offer just ran out.",
   OFFER_EXPIRED: "This offer has ended.",
@@ -21,6 +22,8 @@ const MESSAGES: Record<string, string> = {
   OFFER_LOCKED: "Discount, tickets, dates, limits and code can’t be changed after an offer is activated.",
   OFFER_INVALID_TRANSITION: "That change isn’t available for an offer in this state.",
   OFFER_NOT_DELETABLE: "Only draft offers with no activity can be deleted.",
+  OFFER_GROUP_PRICE_NOT_A_DISCOUNT: "The group price isn’t lower than buying those tickets separately. Lower the group price.",
+  OFFER_CONDITIONAL_FREE: "This deal would make a ticket free. Offers that need a minimum or a group must leave every ticket with a price.",
   OFFER_AUTOMATIC_ALREADY_ACTIVE: "Another automatic offer is already active for this event. Pause it first.",
 };
 

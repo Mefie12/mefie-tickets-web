@@ -44,8 +44,8 @@ export function AdminEarlyPayoutModal({
   const [preview, setPreview] = useState<AdvancePreview | null>(null);
 
   const max = summary.max_advance_minor;
-  const amountMinor = majorStringToMinor(amount);
-  const amountError = amount.trim() !== "" && amountMinor === null ? "Enter a valid amount, e.g. 80.00" : amountMinor !== null && amountMinor > max ? "More than the maximum available" : null;
+  const amountMinor = majorStringToMinor(amount, summary.currency);
+  const amountError = amount.trim() !== "" && amountMinor === null ? `Enter a valid amount, e.g. ${minorToMajorString(8000, summary.currency)}` : amountMinor !== null && amountMinor > max ? "More than the maximum available" : null;
 
   function reset() {
     setAmount("");
@@ -89,7 +89,7 @@ export function AdminEarlyPayoutModal({
           <>
             <TextInput
               label={`Amount (${summary.currency})`}
-              placeholder="0.00"
+              placeholder={minorToMajorString(0, summary.currency)}
               value={amount}
               onChange={(event) => setAmount(event.currentTarget.value)}
               error={amountError}
@@ -98,11 +98,11 @@ export function AdminEarlyPayoutModal({
             />
             <Group gap="xs">
               {[25, 50, 75].map((percent) => (
-                <Button key={percent} size="compact-xs" variant="light" onClick={() => setAmount(minorToMajorString(percentOfMax(max, percent)))}>
+                <Button key={percent} size="compact-xs" variant="light" onClick={() => setAmount(minorToMajorString(percentOfMax(max, percent), summary.currency))}>
                   {percent}%
                 </Button>
               ))}
-              <Button size="compact-xs" variant="light" onClick={() => setAmount(minorToMajorString(max))}>
+              <Button size="compact-xs" variant="light" onClick={() => setAmount(minorToMajorString(max, summary.currency))}>
                 Max
               </Button>
             </Group>

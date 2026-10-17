@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Alert, Stack, Text, Textarea } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
-import { IconLock } from "@tabler/icons-react";
+import { IconInfoCircle, IconLock } from "@tabler/icons-react";
 import { ApiError } from "@/lib/authApi";
-import { deleteOffer, offerAction, type Offer, type OfferAction } from "@/lib/offersApi";
+import { deleteOffer, getOffer, offerAction, type Offer, type OfferAction, type OfferWarning } from "@/lib/offersApi";
 import { offerErrorMessage } from "@/lib/offerErrors";
 import { discountLabel } from "@/lib/offerFormat";
 import { scopeLabels, type OfferTicketType } from "@/lib/offerInventory";
@@ -58,7 +58,13 @@ export function useOfferActions({ eventId, timezone, inventory, onDeleted }: {
     onError: (error: Error) => notifications.show({ color: "red", message: offerErrorMessage(error instanceof ApiError ? error.code : undefined, error.message) }),
   });
 
-  function activate(offer: Offer) {
+  /**
+   * Activation is the last moment the terms can change, so any advice for the offer (e.g. "buying more costs less
+   * than buying fewer") is repeated here. Callers that already have it pass it; otherwise it is fetched first, so
+   * the list's row menu and the offer page show the same dialog. A failed fetch never blocks activating.
+   */
+  async function activate(offer: Offer, knownWarnings?: OfferWarning[]) {
+    const warnings = knownWarnings ?? (await getOffer(eventId, offer.id).then((r) => r.warnings ?? []).catch(() => []));
     modals.openConfirmModal({
       title: "Make this offer live?",
       centered: true,
@@ -67,6 +73,16 @@ export function useOfferActions({ eventId, timezone, inventory, onDeleted }: {
         <Stack gap="sm">
           <Text size="sm">{offer.name} — {discountLabel(offer)} on {scopeLabels(offer.scope ?? [], inventory).join(", ") || "no tickets"}.</Text>
           <Text size="sm">Starts {formatEventDateTime(offer.starts_at, timezone)} and ends {formatEventDateTime(offer.ends_at, timezone)}.</Text>
+          {warnings.length > 0 && (
+            <Alert color="orange" variant="light" icon={<IconInfoCircle size={16} />} title="Check before going live">
+              {warnings.length === 1 ? warnings[0].message : (
+                // Plain wrapping lines: Mantine's List items don't wrap inside an Alert and clipped the text.
+                <Stack gap={6} component="ul" m={0} pl="md">
+                  {warnings.map((w) => <Text key={w.code} component="li" size="sm" style={{ overflowWrap: "anywhere" }}>{w.message}</Text>)}
+                </Stack>
+              )}
+            </Alert>
+          )}
           <Alert color="yellow" variant="light" icon={<IconLock size={16} />}>
             Once active, the discount, tickets, dates, limits and code can’t be changed. You can still pause or end the offer at any time.
           </Alert>

@@ -1,6 +1,6 @@
 import { Divider, Group, Stack, Text } from "@mantine/core";
 import type { Order } from "@/lib/checkoutApi";
-import { formatMinorAmount } from "@/lib/money";
+import { formatMinorAmount, toMinorUnits } from "@/lib/money";
 
 export type OrderSummaryLine = { label: string; quantity: number; totalMinor: number };
 
@@ -12,7 +12,7 @@ function linesFromOrder(order: Order): OrderSummaryLine[] {
     // discount as its own row below, so the lines reconcile to the total.
     totalMinor: item.discount_minor && item.original_price_minor != null
       ? item.original_price_minor * item.quantity
-      : Math.round(Number(item.item_total) * 100),
+      : toMinorUnits(item.item_total, order.currency),
   }));
 }
 

@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { quoteOffers, type Quote } from "@/lib/offersApi";
 import { classifyQuoteError, quoteRetryDelay, rateLimitWaitSeconds, shouldRetryQuote, type QuoteProblem } from "@/lib/quoteProblem";
-
-type CartLine = { product_id: number; ticket_option_id: number | null; quantity: number };
+import { parseQuoteSignature, quoteSignature, signatureHasItems, type QuoteLine } from "@/lib/quoteSignature";
 
 /**
  * Debounced, read-only price quote for the current cart + promo input.
@@ -23,7 +22,7 @@ type CartLine = { product_id: number; ticket_option_id: number | null; quantity:
  */
 export function useOfferQuote(args: {
   eventId: number;
-  items: CartLine[];
+  items: QuoteLine[];
   promoCode?: string | null;
   offerToken?: string | null;
   enabled: boolean;
@@ -31,7 +30,7 @@ export function useOfferQuote(args: {
   version?: number;
 }) {
   const { eventId, items, promoCode, offerToken, enabled, version = 0 } = args;
-  const signature = JSON.stringify({ items, promoCode: promoCode ?? null, offerToken: offerToken ?? null });
+  const signature = quoteSignature({ items, promoCode, offerToken });
   const [debounced, setDebounced] = useState(signature);
 
   useEffect(() => {
@@ -42,7 +41,7 @@ export function useOfferQuote(args: {
   const query = useQuery<Quote>({
     queryKey: ["offer-quote", eventId, debounced, version],
     queryFn: async () => {
-      const parsed = JSON.parse(debounced) as { items: CartLine[]; promoCode: string | null; offerToken: string | null };
+      const parsed = parseQuoteSignature(debounced);
       const { quote } = await quoteOffers(eventId, {
         items: parsed.items,
         promo_code: parsed.promoCode,
@@ -50,7 +49,9 @@ export function useOfferQuote(args: {
       });
       return quote;
     },
-    enabled: enabled && items.length > 0,
+    // Decided from the DEBOUNCED cart, the very one the request is built from. Using the live cart here asked for a
+    // quote of the still-empty debounced cart the moment the first ticket was picked (a 422, then a flashing notice).
+    enabled: enabled && signatureHasItems(debounced),
     placeholderData: keepPreviousData,
     // The same cart + code within a few seconds (remounts, tab switches) reuses the answer instead of re-asking.
     staleTime: 15_000,

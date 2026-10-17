@@ -36,10 +36,10 @@ export default async function NewOfferPage({ params, searchParams }: {
         currency={event.currency_code}
         timezone={event.timezone}
         eventStart={event.start_date}
-        inventory={offerInventory(products.data.products)}
+        inventory={offerInventory(products.data.products, event.currency_code)}
         otherOffers={offers.data.offers}
         prefill={source}
-        template={template === "fixed" || template === "automatic" || template === "percent" ? template : undefined}
+        template={template === "fixed" || template === "automatic" || template === "percent" || template === "group" ? template : undefined}
         publicEventPath={`/${organization.slug}/${event.slug}`}
       />
     </Stack>

@@ -1,3 +1,5 @@
+import { currencyExponent, toMajorUnits } from "@/lib/money";
+
 /** What changing an event's date touches, as counts from GET /api/events/{id}/reschedule-impact. */
 export type RescheduleImpact = {
   has_orders: boolean;
@@ -19,9 +21,9 @@ const plural = (count: number, one: string, many = `${one}s`) => `${count} ${cou
 
 export function formatMinorAmount(amountMinor: number, currency: string): string {
   try {
-    return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(amountMinor / 100);
+    return new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(toMajorUnits(amountMinor, currency));
   } catch {
-    return `${(amountMinor / 100).toFixed(2)} ${currency}`;
+    return `${toMajorUnits(amountMinor, currency).toFixed(currencyExponent(currency))} ${currency}`;
   }
 }
 
