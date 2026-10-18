@@ -5,22 +5,31 @@
  * what is allowed; these just turn what an admin types into integer minor
  * units and back, and phrase the server's outcomes.
  *
- * Assumes 2-decimal currencies, the same assumption as formatMinorAmount
- * in money.ts.
+ * Currency-aware: a zero-decimal currency (XOF, UGX, ...) takes whole
+ * numbers only, everything else up to two decimals (see currencyExponent).
  */
+import { currencyExponent } from "@/lib/money";
 
-/** "12.34" → 1234. Null for empty, malformed, negative or more-than-2-decimal input. */
-export function majorStringToMinor(input: string): number | null {
+/**
+ * "12.34" GBP → 1234; "5000" XOF → 5000. Exact (no floating point). Null for empty, malformed, negative input, or
+ * more decimals than the currency has (any decimals at all for a zero-decimal currency).
+ */
+export function majorStringToMinor(input: string, currencyCode: string): number | null {
   const trimmed = input.trim();
-  if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+  const exponent = currencyExponent(currencyCode);
+  const pattern = exponent === 0 ? /^\d+$/ : new RegExp(`^\\d+(\\.\\d{1,${exponent}})?$`);
+  if (!pattern.test(trimmed)) return null;
   const [whole, fraction = ""] = trimmed.split(".");
-  return Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return Number(whole) * 10 ** exponent + Number(fraction.padEnd(exponent, "0") || "0");
 }
 
-/** 1234 → "12.34" (plain, for an input's value — not a formatted currency string). */
-export function minorToMajorString(minor: number): string {
-  const whole = Math.floor(minor / 100);
-  const fraction = String(minor % 100).padStart(2, "0");
+/** 1234 GBP → "12.34"; 5000 XOF → "5000" (plain, for an input's value — not a formatted currency string). */
+export function minorToMajorString(minor: number, currencyCode: string): string {
+  const exponent = currencyExponent(currencyCode);
+  if (exponent === 0) return String(minor);
+  const scale = 10 ** exponent;
+  const whole = Math.floor(minor / scale);
+  const fraction = String(minor % scale).padStart(exponent, "0");
   return `${whole}.${fraction}`;
 }
 

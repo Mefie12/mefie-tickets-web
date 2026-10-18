@@ -47,6 +47,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
           title={event.title}
           text={`View ${event.title} and get tickets.`}
           enabled={event.status === "LIVE"}
+          shortLink={{ target: "events", id: event.id, visibility: event.visibility }}
           disabledExplanation={
             event.status === "DRAFT"
               ? "This is the future public URL. Sharing becomes available after publication."

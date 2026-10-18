@@ -10,7 +10,7 @@ import { computeBuyerCosts } from "@/lib/fees";
 import { TicketSelector, ticketLineKey } from "@/components/TicketSelector";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { clearCart, loadCart, saveCart, type StoredCartItem } from "@/lib/cartStorage";
-import { restoreQuantities } from "@/lib/ticketLimits";
+import { isLineAvailable, maxQuantityFor, restoreQuantities } from "@/lib/ticketLimits";
 import { clearOffer, loadOffer, offerAfterQuote, saveOffer } from "@/lib/offerSession";
 import { getShareOffer, type PublicOffer } from "@/lib/offersApi";
 import { useOfferQuote } from "@/lib/useOfferQuote";
@@ -20,6 +20,9 @@ import { discountLabel } from "@/lib/offerFormat";
 import { PromoCodeField } from "@/components/PromoCodeField";
 import { QuoteProblemNotice } from "@/components/QuoteProblemNotice";
 import { OfferVerifyModal } from "@/components/OfferVerifyModal";
+import { OfferNudge } from "@/components/OfferNudge";
+import { offerNudges, type NudgeLine } from "@/lib/offerNudge";
+import { toMinorUnits } from "@/lib/money";
 
 /**
  * Ticket selection only — the event page's sidebar card. Buyer
@@ -118,6 +121,25 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   }, [shareOffer.data, event.automatic_offer, event.products]);
   const badges = useMemo(() => lineDiscounts({ quote, advertised, timezone: event.timezone }), [quote, advertised, event.timezone]);
 
+  // "Add 1 more to get ..." hints for an advertised quantity offer (a minimum, or a group price).
+  const nudges = useMemo(() => {
+    const lines: NudgeLine[] = event.products.flatMap((product) => {
+      const options = product.type === "TIERED" ? (product.options ?? []) : [null];
+      return options.flatMap((option) => {
+        const key = ticketLineKey(product.id, option?.id ?? null);
+        const price = Number(option ? option.price : product.current_price);
+        if (!isLineAvailable(product, option) || !(price > 0)) return [];
+        return [{ key, title: option?.name ?? product.title, unitPriceMinor: toMinorUnits(price, event.currency_code), quantity: quantities[key] ?? 0, max: maxQuantityFor(product, option), tiered: option !== null }];
+      });
+    });
+    // Only trust the quote for "another group" when it is current and priced the advertised offer itself.
+    const advertisedSource = shareOffer.data ? "token" : "automatic";
+    const nextGroup = quote && !quoteStale && quote.status === "APPLIED" && quote.offer?.source === advertisedSource
+      ? quote.offer.next_group_available
+      : null;
+    return offerNudges(advertised, lines, event.currency_code, nextGroup);
+  }, [advertised, event.products, event.currency_code, quantities, quote, quoteStale, shareOffer.data]);
+
   // Persist the buyer's offer as soon as the server has answered for the
   // CURRENT input (not a placeholder from the previous one): keep a usable
   // code with the discount now shown, drop one the server rejected.
@@ -142,8 +164,8 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   // pay — matches the server order to the penny (frozen rates + identical
   // integer maths, see src/lib/fees.ts).
   const costs = useMemo(
-    () => computeBuyerCosts(Math.round(total * 100), event.pricing),
-    [total, event.pricing],
+    () => computeBuyerCosts(toMinorUnits(total, event.currency_code), event.pricing),
+    [total, event.pricing, event.currency_code],
   );
   // With an offer in play the quote is authoritative; without one (or while
   // the first quote loads) the exact local maths above is shown as before.
@@ -201,6 +223,8 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         onQuantityChange={(productId, optionId, qty) => setQuantities((prev) => ({ ...prev, [ticketLineKey(productId, optionId)]: qty }))}
         currencyCode={event.currency_code}
       />
+
+      <OfferNudge nudges={nudges} />
 
       {offersApply && <PromoCodeField
         appliedCode={promoCode}

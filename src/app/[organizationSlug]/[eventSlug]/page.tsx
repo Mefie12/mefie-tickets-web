@@ -12,6 +12,7 @@ import { PublicSiteHeader } from "@/components/PublicSiteHeader";
 import { PublicSiteFooter } from "@/components/PublicSiteFooter";
 import { EventHeroGallery } from "@/components/EventHeroGallery";
 import { EventTopActions } from "@/components/EventTopActions";
+import { EventViewTracker } from "@/components/analytics/EventViewTracker";
 import { EventVenueCard } from "@/components/EventVenueCard";
 import { ExpandableHtml } from "@/components/ExpandableHtml";
 import { PublicContentSections } from "@/components/PublicContentSections";
@@ -98,6 +99,7 @@ export default async function PublicEventPage({
     return (
       <Box>
         <PublicSiteHeader />
+        <EventViewTracker title={seriesResult.data.event_series.title} currency={seriesResult.data.event_series.currency_code} />
         <PublicEventSeriesView series={seriesResult.data.event_series} canBuy={seriesResult.data.can_buy} />
         <PublicSiteFooter />
       </Box>
@@ -136,6 +138,7 @@ export default async function PublicEventPage({
   return (
     <Box>
       <PublicSiteHeader />
+      <EventViewTracker title={event.title} currency={event.currency_code} />
 
       <Container size="xl" pt="md">
         <EventTopActions

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { backendRequest } from "@/lib/backend";
 import { getCurrentOrganization, getEventById } from "@/lib/session";
-import type { Offer, OfferReport } from "@/lib/offersApi";
+import type { Offer, OfferReport, OfferWarning } from "@/lib/offersApi";
 import type { Product } from "@/lib/productApi";
 import { offerInventory } from "@/lib/offerInventory";
 import { OfferDetail } from "@/components/OfferDetail";
@@ -11,7 +11,7 @@ export default async function OfferDetailPage({ params }: { params: Promise<{ ev
   const [event, organization, detail, offers, products] = await Promise.all([
     getEventById(eventId),
     getCurrentOrganization(),
-    backendRequest<{ offer: Offer; report: OfferReport }>(`/api/events/${eventId}/offers/${offerId}`),
+    backendRequest<{ offer: Offer; report: OfferReport; warnings?: OfferWarning[] }>(`/api/events/${eventId}/offers/${offerId}`),
     backendRequest<{ offers: Offer[] }>(`/api/events/${eventId}/offers`),
     backendRequest<{ products: Product[] }>(`/api/events/${eventId}/products`),
   ]);
@@ -26,10 +26,11 @@ export default async function OfferDetailPage({ params }: { params: Promise<{ ev
       eventStart={event.start_date}
       publicEventPath={`/${organization.slug}/${event.slug}`}
       eventStatus={event.status}
-      inventory={offerInventory(products.data.products)}
+      inventory={offerInventory(products.data.products, event.currency_code)}
       otherOffers={offers.data.offers}
       initialOffer={detail.data.offer}
       initialReport={detail.data.report}
+      initialWarnings={detail.data.warnings ?? []}
     />
   );
 }

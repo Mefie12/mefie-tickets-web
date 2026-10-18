@@ -11,12 +11,31 @@ export type OfferStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "ENDED";
 /** What an offer is doing right now: its stored status plus the schedule (see Offer::phase() on the API). */
 export type OfferPhase = "DRAFT" | "SCHEDULED" | "LIVE" | "PAUSED" | "EXPIRED" | "ENDED";
 export type OfferActivation = "CODE" | "AUTOMATIC";
-export type OfferDiscountType = "PERCENTAGE" | "FIXED_PER_TICKET";
+export type OfferDiscountType = "PERCENTAGE" | "FIXED_PER_TICKET" | "GROUP_BUNDLE";
+
+/**
+ * The deal itself, shared by the management and public views. PERCENTAGE / FIXED_PER_TICKET use discount_value
+ * (optionally only when a ticket line holds min_ticket_quantity or more); GROUP_BUNDLE uses group_size +
+ * group_price_minor (every full group of that many tickets of one type costs that price) and has no discount_value.
+ * Conditions are counted per ticket type / option and never pool across types.
+ */
+export type OfferDeal = {
+  discount_type: OfferDiscountType;
+  /** Basis points for PERCENTAGE (10000 = 100%); minor units per ticket for FIXED_PER_TICKET; null for GROUP_BUNDLE. */
+  discount_value: number | null;
+  min_ticket_quantity: number | null;
+  group_size: number | null;
+  group_price_minor: number | null;
+  max_groups_per_order: number | null;
+};
+
+/** Non-blocking advice returned when a draft is saved (e.g. buying more would cost less than buying fewer). */
+export type OfferWarning = { code: string; message: string };
 
 export type OfferScopeRow = { product_id: number; ticket_option_id: number | null };
 
 /** The management view (organizer + admin). Never used on public pages. */
-export type Offer = {
+export type Offer = OfferDeal & {
   id: number;
   event_id: number;
   name: string;
@@ -28,9 +47,6 @@ export type Offer = {
   starts_at: string;
   ends_at: string;
   currency_code: string;
-  discount_type: OfferDiscountType;
-  /** Basis points for PERCENTAGE (10000 = 100%); minor units per ticket for FIXED_PER_TICKET. */
-  discount_value: number;
   global_ticket_limit: number | null;
   per_customer_ticket_limit: number | null;
   per_order_ticket_limit: number | null;
@@ -73,11 +89,9 @@ export type OfferReport = {
 };
 
 /** What a buyer is allowed to see of an offer — never limits, codes or tokens. */
-export type PublicOffer = {
+export type PublicOffer = OfferDeal & {
   name: string;
   activation: OfferActivation;
-  discount_type: OfferDiscountType;
-  discount_value: number;
   currency_code: string;
   starts_at: string;
   ends_at: string;
@@ -120,9 +134,15 @@ export type Quote = {
     source: "code" | "token" | "automatic";
     activation: OfferActivation;
     discount_type: OfferDiscountType;
-    discount_value: number;
+    discount_value: number | null;
+    min_ticket_quantity: number | null;
+    group_size: number | null;
+    group_price_minor: number | null;
     discounted_units: number;
+    /** True only when a limit left qualifying tickets undiscounted (not bundle leftovers or unmet minimums). */
     partially_applied: boolean;
+    /** GROUP_BUNDLE only (null otherwise): adding tickets would still earn one more full group in this order. */
+    next_group_available: boolean | null;
   } | null;
 };
 
@@ -132,14 +152,13 @@ export type QuoteRequest = {
   offer_token?: string | null;
 };
 
-export type OfferInput = {
+export type OfferInput = Partial<Omit<OfferDeal, "discount_type">> & {
   name: string;
   internal_description?: string | null;
   activation: OfferActivation;
   starts_at: string;
   ends_at: string;
   discount_type: OfferDiscountType;
-  discount_value: number;
   global_ticket_limit?: number | null;
   per_customer_ticket_limit?: number | null;
   per_order_ticket_limit?: number | null;
@@ -182,15 +201,15 @@ export function listOffers(eventId: number) {
 }
 
 export function getOffer(eventId: number, offerId: number) {
-  return request<{ offer: Offer; report: OfferReport }>(`/api/events/${eventId}/offers/${offerId}`);
+  return request<{ offer: Offer; report: OfferReport; warnings: OfferWarning[] }>(`/api/events/${eventId}/offers/${offerId}`);
 }
 
 export function createOffer(eventId: number, input: OfferInput) {
-  return request<{ offer: Offer }>(`/api/events/${eventId}/offers`, { method: "POST", body: input });
+  return request<{ offer: Offer; warnings: OfferWarning[] }>(`/api/events/${eventId}/offers`, { method: "POST", body: input });
 }
 
 export function updateOffer(eventId: number, offerId: number, input: Partial<OfferInput>) {
-  return request<{ offer: Offer }>(`/api/events/${eventId}/offers/${offerId}`, { method: "PATCH", body: input });
+  return request<{ offer: Offer; warnings: OfferWarning[] }>(`/api/events/${eventId}/offers/${offerId}`, { method: "PATCH", body: input });
 }
 
 export function deleteOffer(eventId: number, offerId: number) {

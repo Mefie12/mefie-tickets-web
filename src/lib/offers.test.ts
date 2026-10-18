@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { localInputToUtcIso, utcIsoToLocalInput, zonedToUtcIso } from "@/lib/offerDates";
-import { discountLabel, offersByTab, PHASE_COLOR, PHASE_LABEL, previewDiscountedUnit, shareUrl } from "@/lib/offerFormat";
+import { discountLabel, offersByTab, PHASE_COLOR, PHASE_LABEL, previewBundle, previewDiscountedUnit, requiredQuantity, shareUrl } from "@/lib/offerFormat";
 import { isStaleOfferCode, offerErrorMessage } from "@/lib/offerErrors";
 import { amountsFromQuote } from "@/lib/quoteAmounts";
 import { expandScope, lineDiscounts } from "@/lib/offerLineBadges";
@@ -14,13 +14,15 @@ import { createRejectionNotifier, normalizePromoCode, promoCodeFormatError } fro
 import type { PublicOffer, Quote } from "@/lib/offersApi";
 import type { Product } from "@/lib/productApi";
 
+const NO_DEAL = { discount_value: null, min_ticket_quantity: null, group_size: null, group_price_minor: null, max_groups_per_order: null };
+
 const quote = (over: Partial<Quote> = {}): Quote => ({
   status: "APPLIED", code: null, message: null, needs_verification: false, currency: "USD",
   lines: [{ product_id: 1, ticket_option_id: null, quantity: 3, unit_price_minor: 10000, discounted_units: 2, discount_minor: 4000, final_total_minor: 26000 }],
   gross_subtotal_minor: 30000, discount_total_minor: 4000, subtotal_minor: 26000,
   tax_minor: 100, platform_fee_minor: 780, processing_fee_minor: 70,
   tax_bearer: "ATTENDEE", platform_fee_bearer: "ATTENDEE", processing_fee_bearer: "ORGANIZER", total_minor: 26880,
-  offer: { name: "Summer", source: "code", activation: "CODE", discount_type: "PERCENTAGE", discount_value: 2000, discounted_units: 2, partially_applied: true },
+  offer: { name: "Summer", source: "code", activation: "CODE", discount_type: "PERCENTAGE", discount_value: 2000, min_ticket_quantity: null, group_size: null, group_price_minor: null, discounted_units: 2, partially_applied: true, next_group_available: null },
   ...over,
 });
 
@@ -42,9 +44,27 @@ describe("offer schedule time zones", () => {
 
 describe("offer formatting", () => {
   it("labels percentage and fixed discounts", () => {
-    expect(discountLabel({ discount_type: "PERCENTAGE", discount_value: 2000, currency_code: "USD" })).toBe("20% off");
-    expect(discountLabel({ discount_type: "PERCENTAGE", discount_value: 1250, currency_code: "USD" })).toBe("12.5% off");
-    expect(discountLabel({ discount_type: "FIXED_PER_TICKET", discount_value: 1000, currency_code: "USD" })).toContain("10.00");
+    expect(discountLabel({ ...NO_DEAL, discount_type: "PERCENTAGE", discount_value: 2000, currency_code: "USD" })).toBe("20% off");
+    expect(discountLabel({ ...NO_DEAL, discount_type: "PERCENTAGE", discount_value: 1250, currency_code: "USD" })).toBe("12.5% off");
+    expect(discountLabel({ ...NO_DEAL, discount_type: "FIXED_PER_TICKET", discount_value: 1000, currency_code: "USD" })).toContain("10.00");
+  });
+
+  it("says when a discount needs a minimum, and labels a group price", () => {
+    expect(discountLabel({ ...NO_DEAL, discount_type: "PERCENTAGE", discount_value: 1500, min_ticket_quantity: 4, currency_code: "USD" })).toBe("15% off when you buy 4 or more");
+    const couple = { ...NO_DEAL, discount_type: "GROUP_BUNDLE" as const, group_size: 2, group_price_minor: 35000, currency_code: "USD" };
+    expect(discountLabel(couple)).toBe("2 for US$350.00");
+    expect(requiredQuantity(couple)).toBe(2);
+    expect(requiredQuantity({ ...NO_DEAL, discount_type: "PERCENTAGE", min_ticket_quantity: 3 })).toBe(3);
+    expect(requiredQuantity({ ...NO_DEAL, discount_type: "PERCENTAGE" })).toBeNull();
+  });
+
+  it("previews a group: the normal price, the group price and the saving", () => {
+    expect(previewBundle(20000, { group_size: 2, group_price_minor: 35000 })).toEqual({ normalMinor: 40000, groupMinor: 35000, savingMinor: 5000 });
+    // A group dearer than buying separately shows a non-positive saving (the server will not discount it).
+    expect(previewBundle(20000, { group_size: 2, group_price_minor: 41000 })?.savingMinor).toBeLessThan(0);
+    expect(previewBundle(20000, { group_size: null, group_price_minor: null })).toBeNull();
+    // A group price has no per-ticket preview.
+    expect(previewDiscountedUnit(20000, { discount_type: "GROUP_BUNDLE", discount_value: null })).toBe(20000);
   });
 
   it("previews a discounted unit like the server: half-up per unit, never below zero", () => {
@@ -93,7 +113,7 @@ describe("ticket row badges", () => {
   });
 
   it("advertises a sale on in-scope rows when nothing is selected yet", () => {
-    const offer: PublicOffer = { name: "Flash", activation: "AUTOMATIC", discount_type: "PERCENTAGE", discount_value: 1500, currency_code: "USD", starts_at: "2026-01-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z", requires_verification: false, scope: [{ product_id: 7, ticket_option_id: null }] };
+    const offer: PublicOffer = { ...NO_DEAL, name: "Flash", activation: "AUTOMATIC", discount_type: "PERCENTAGE", discount_value: 1500, currency_code: "USD", starts_at: "2026-01-01T00:00:00Z", ends_at: "2026-12-01T00:00:00Z", requires_verification: false, scope: [{ product_id: 7, ticket_option_id: null }] };
     const expanded = expandScope(offer, [{ id: 7, options: [{ id: 70 }, { id: 71 }] }]);
     const badges = lineDiscounts({ advertised: expanded, timezone: "Europe/London" });
     expect(Object.keys(badges).sort()).toEqual(["7:70", "7:71"]);
@@ -109,13 +129,13 @@ describe("offer inventory", () => {
   ] as unknown as Product[];
 
   it("lists enabled ticket types and options with prices, skipping disabled products", () => {
-    const inventory = offerInventory(products);
+    const inventory = offerInventory(products, "USD");
     expect(inventory.map((t) => t.title)).toEqual(["VIP", "GA"]);
     expect(inventory[1].options).toEqual([{ id: 21, name: "Early Bird", priceMinor: 4000 }]);
   });
 
   it("labels scopes and finds a sample price for previews", () => {
-    const inventory = offerInventory(products);
+    const inventory = offerInventory(products, "USD");
     expect(scopeLabels([{ product_id: 1, ticket_option_id: null }, { product_id: 2, ticket_option_id: 21 }], inventory)).toEqual(["VIP", "GA — Early Bird"]);
     expect(samplePriceMinor([{ product_id: 2, ticket_option_id: 21 }], inventory)).toBe(4000);
     expect(samplePriceMinor([], inventory)).toBeNull();

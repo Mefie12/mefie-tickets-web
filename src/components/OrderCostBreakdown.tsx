@@ -1,6 +1,6 @@
 import { Divider, Group, Stack, Text } from "@mantine/core";
 import type { Order } from "@/lib/checkoutApi";
-import { formatMinorAmount } from "@/lib/money";
+import { formatMinorAmount, toMinorUnits } from "@/lib/money";
 
 /**
  * Buyer-facing cost breakdown. The platform fee and the card-processing
@@ -29,23 +29,19 @@ type Amounts = {
 // Theme-aware savings colour (AA on both the light and dark card surfaces).
 const SAVINGS_COLOR = "light-dark(#18794e, #5fd39a)";
 
-function toMinor(amount: string | number): number {
-  return Math.round(Number(amount) * 100);
-}
-
 function fromOrder(order: Order): Amounts {
   const serviceFeeMinor =
-    (order.platform_fee_bearer === "ATTENDEE" ? toMinor(order.platform_fee) : 0) +
-    (order.processing_fee_bearer === "ATTENDEE" ? toMinor(order.processing_fee) : 0);
-  const taxMinor = order.tax_bearer === "ATTENDEE" ? toMinor(order.tax_amount) : 0;
+    (order.platform_fee_bearer === "ATTENDEE" ? toMinorUnits(order.platform_fee, order.currency) : 0) +
+    (order.processing_fee_bearer === "ATTENDEE" ? toMinorUnits(order.processing_fee, order.currency) : 0);
+  const taxMinor = order.tax_bearer === "ATTENDEE" ? toMinorUnits(order.tax_amount, order.currency) : 0;
   const discountMinor = order.discount_total_minor ?? 0;
   return {
     currency: order.currency,
     // order.subtotal is the post-discount subtotal; show the original above the discount row.
-    subtotalMinor: toMinor(order.subtotal) + discountMinor,
+    subtotalMinor: toMinorUnits(order.subtotal, order.currency) + discountMinor,
     serviceFeeMinor,
     taxMinor,
-    totalMinor: toMinor(order.total_amount),
+    totalMinor: toMinorUnits(order.total_amount, order.currency),
     discountMinor,
     discountLabel: order.offer_name ?? null,
   };

@@ -19,6 +19,8 @@ import { CheckoutPaymentStep } from "@/components/CheckoutPaymentStep";
 import { CheckoutOrderSummary } from "@/components/CheckoutOrderSummary";
 import { QuoteProblemNotice } from "@/components/QuoteProblemNotice";
 import { OrderConfirmation } from "@/components/OrderConfirmation";
+import { trackBeginCheckout, trackPurchase } from "@/lib/analytics/ecommerce";
+import { setSensitiveStep } from "@/lib/analytics/runtime";
 import { clearCheckoutDraft, loadCheckoutDraft, saveCheckoutDraft } from "@/lib/checkoutDraftStorage";
 import { createCheckoutDraft, reconcileCheckoutDraft, type CheckoutCartLine, type CheckoutDraft } from "@/lib/checkoutDraft";
 
@@ -185,7 +187,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     }, 0);
   }, [cartItems, event.products]);
 
-  const summaryLines = useMemo(() => summaryLinesFromCart(cartItems, event.products), [cartItems, event.products]);
+  const summaryLines = useMemo(() => summaryLinesFromCart(cartItems, event.products, event.currency_code), [cartItems, event.products, event.currency_code]);
 
   // Advisory server quote for the cart + the offer carried from the event page.
   // Order creation recalculates under lock; this only drives what is displayed
@@ -240,6 +242,8 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   }
 
   function handleOrderCreated(newOrder: Order) {
+    // Shopping event (docs/26, Phase 2b-2): sent before the card-entry step starts, which pauses the ad pixels.
+    trackBeginCheckout(newOrder);
     setOrder(newOrder);
     if (newOrder.status === "COMPLETED") {
       clearCart(event.id);
@@ -256,6 +260,23 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   // buyer has actually finished — matches the Figma payment-success
   // frames, which have no such header above the success content.
   const showBookingHeader = step !== "confirmation";
+
+  // Advertising pixels are paused while the buyer types card details (docs/26,
+  // Phase 2b-2). Declared before the purchase effect so leaving the payment
+  // step resumes them first.
+  useEffect(() => {
+    setSensitiveStep(step === "payment");
+    return () => setSensitiveStep(false);
+  }, [step]);
+
+  // One `purchase` per order: reached from a fresh payment, a free order, or a
+  // reload that re-polls a completed order; trackPurchase remembers the order id.
+  const confirmedOrderId = step === "confirmation" ? order?.short_id : undefined;
+  useEffect(() => {
+    if (confirmedOrderId && order) trackPurchase(order);
+    // `order` is intentionally read at the moment of confirmation only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirmedOrderId]);
 
   let content: React.ReactNode;
   if (cart === "loading" || (cart !== null && draft === null)) {

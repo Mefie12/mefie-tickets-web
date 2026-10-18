@@ -63,7 +63,7 @@ export function OfferRowMenu({ offer, eventId, timezone, inventory, publicEventP
 
         {canManage && offer.status !== "ENDED" && <Menu.Divider />}
         {canManage && offer.status === "DRAFT" && (
-          <Menu.Item leftSection={<IconRocket size={16} />} disabled={(offer.scope ?? []).length === 0} onClick={() => actions.activate(offer)}>Activate…</Menu.Item>
+          <Menu.Item leftSection={<IconRocket size={16} />} disabled={(offer.scope ?? []).length === 0} onClick={() => void actions.activate(offer)}>Activate…</Menu.Item>
         )}
         {canManage && offer.status === "ACTIVE" && (
           <Menu.Item leftSection={<IconPlayerPause size={16} />} onClick={() => actions.pause(offer)}>Pause…</Menu.Item>

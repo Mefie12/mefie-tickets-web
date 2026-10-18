@@ -15,6 +15,7 @@ import { AdminEarlyPayoutModal } from '@/components/AdminEarlyPayoutModal';
 import { OrganizationCommercialTerms } from '@/components/OrganizationCommercialTerms';
 import { advanceOutcomeCopy, type AdvanceSummary } from '@/lib/earlyPayout';
 import { formatBasisPointsAsPercent, formatMinorAmount } from '@/lib/money';
+import { toMajorUnits } from "@/lib/money";
 import {
   fetchOrganizationWorkspace, getReleasePreview, releaseOrganizationPayout, reconnectOrganizationPaymentAccount,
   type AdvanceResult, type MoneySummary, type ReleasePreview, type ReleaseResult,
@@ -270,7 +271,7 @@ function PaymentsPanel({organizationId, canReplaceAccount, canReleasePayout, can
       </Group>}
     </Group>
     {routineBlockedReason && <Text size="xs" c="dimmed">{routineBlockedReason}</Text>}
-    {p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Group gap="xs">{x.kind==='ADVANCE'&&<Badge size="xs" variant="light" color="teal">Early payout</Badge>}<Text>{x.note||PAYOUT_STATUS_LABEL[x.status]||'Payout release'}</Text></Group><Text fw={700}>{money(String(Number(x.amount_minor)/100),x.currency)}</Text></Group><Text size="xs" c="dimmed">{PAYOUT_STATUS_LABEL[x.status]||x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}
+    {p.payouts.length?p.payouts.map(x=><Card withBorder key={x.id}><Group justify="space-between"><Group gap="xs">{x.kind==='ADVANCE'&&<Badge size="xs" variant="light" color="teal">Early payout</Badge>}<Text>{x.note||PAYOUT_STATUS_LABEL[x.status]||'Payout release'}</Text></Group><Text fw={700}>{money(String(toMajorUnits(Number(x.amount_minor),x.currency)),x.currency)}</Text></Group><Text size="xs" c="dimmed">{PAYOUT_STATUS_LABEL[x.status]||x.status} · {date(x.created_at)}</Text></Card>):<Empty label="No payout releases recorded."/>}
 
     {canReplaceAccount && (
       <AdminReplacePaymentAccountModal
