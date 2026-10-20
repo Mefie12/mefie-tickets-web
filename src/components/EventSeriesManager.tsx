@@ -1031,7 +1031,7 @@ function PublishPanel({ series, onUpdated }: { series: EventSeries; onUpdated: (
                   </CopyButton>
                 </Table.Td>
                 <Table.Td>
-                  <Anchor component={Link} href={`/events/${occurrence.id}/settings`} size="sm">
+                  <Anchor component={Link} href={`/events/${occurrence.id}/settings`} prefetch={false} size="sm">
                     Manage
                   </Anchor>
                 </Table.Td>
