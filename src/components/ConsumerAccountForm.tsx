@@ -2,7 +2,7 @@
 import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Alert, Anchor, Button, PinInput, Stack, Text, TextInput } from "@mantine/core";
+import { Alert, Anchor, Button, Stack, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { useQuery } from "@tanstack/react-query";
 import { AuthLayout } from "@/components/AuthLayout";
@@ -12,6 +12,10 @@ import { getLegalDocumentsForPlacement } from "@/lib/legalDocumentsApi";
 import { safeNext } from "@/lib/safeNext";
 import { isValidEmail } from "@/lib/emailAddress";
 import { useEmailFieldError } from "@/lib/useEmailFieldError";
+import { buildApiError } from "@/lib/authApi";
+import { formatMMSS, resendLabel } from "@/lib/otpTiming";
+import { otpErrorMessage, useOtpTimers } from "@/lib/useOtpTimers";
+import { OtpBlockedNotice, OtpExpiry, OtpPinInput } from "@/components/OtpCodeStatus";
 
 export function ConsumerAccountForm({ signup = false }: { signup?: boolean }) {
   return <Suspense><AccountForm signup={signup}/></Suspense>;
@@ -24,6 +28,7 @@ function AccountForm({ signup }: { signup: boolean }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const [code, setCode] = useState(""); const [masked, setMasked] = useState("");
   const form = useForm({ initialValues: { email: "", first_name: "", last_name: "", phone: "" } });
+  const timers = useOtpTimers();
   const legal = useQuery({ queryKey: ["legal-documents", "placement", "account-registration"], queryFn: () => getLegalDocumentsForPlacement("account-registration") });
   // The email box exists only on the first step of a normal sign-in or sign-up (a ticket-proof link has none),
   // so later steps (code, "send another code", complete your account) are never blocked by it.
@@ -40,12 +45,15 @@ function AccountForm({ signup }: { signup: boolean }) {
       const body = action === "verify" ? { code } : { ...form.values, intent: signup ? "register" : "login", document_versions: documents, ...(proof && action === "request" ? { ticket_proof: proof } : {}) };
       const res = await fetch(`/api/public/consumer/account/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
-      if (!res.ok) { form.setErrors(Object.fromEntries(Object.entries(data.errors ?? {}).map(([key, value]) => [key, (value as string[])[0]]))); throw new Error(data.message ?? "Please try again."); }
+      if (!res.ok) { form.setErrors(Object.fromEntries(Object.entries(data.errors ?? {}).map(([key, value]) => [key, (value as string[])[0]]))); throw buildApiError(res, data); }
       if (data.status === "authenticated") { window.location.assign(safeNext(params.get("next"), "consumer", "/tickets")); return; }
       if (data.status === "completion_required") { setStep("complete"); return; }
-      setMasked(data.masked_email); setCode(""); setStep("code");
+      setMasked(data.masked_email); setCode(""); setStep("code"); timers.noteSent(data);
       if (proof) router.replace("/login");
-    } catch (e) { setError(e instanceof Error ? e.message : "Please try again."); }
+    } catch (e) {
+      // A rate-limit rejection shows as a live countdown (below), not as a one-off error message.
+      if (!(action === "request" && timers.noteRateLimited(e))) setError(otpErrorMessage(e));
+    }
     finally { setBusy(false); }
   }
   return <AuthLayout title={step === "code" ? "Check your email" : step === "complete" ? "Complete your account" : signup ? "Create your ticket account" : "Log in to My Tickets"} subtitle={step === "code" ? `Enter the six-digit code sent to ${masked}.` : "Buy, receive, and access your tickets with email. No password needed."}>
@@ -53,15 +61,16 @@ function AccountForm({ signup }: { signup: boolean }) {
       <Stack>
         {params.get("expired") === "1" && <Alert color="orange">Your session expired. Verify your email to continue.</Alert>}
         {error && <Alert color="red" role="alert">{error}</Alert>}
-        {step === "code" ? <><PinInput length={6} type="number" oneTimeCode value={code} onChange={setCode} aria-label="Email verification code"/><Button type="submit" loading={busy} disabled={code.length !== 6}>Verify email</Button><Button variant="subtle" disabled={busy} onClick={() => submit("request")}>Send another code</Button><Button variant="subtle" onClick={() => { setStep("details"); setCode(""); setProof(null); }}>Change email</Button></> : <>
-          {step === "details" && !proof && <TextInput label="Email" type="email" required autoComplete="email" {...emailProps} onBlur={() => { emailProps.onBlur(); emailError.onBlur(); }} error={emailProps.error ?? emailError.error}/>}
+        {timers.blocked && <OtpBlockedNotice message={timers.blockedMessage} seconds={timers.resendSeconds}/>}
+        {step === "code" ? <><OtpExpiry seconds={timers.expirySeconds} expired={timers.expired} known={timers.hasExpiry}/><OtpPinInput length={6} type="number" oneTimeCode value={code} onChange={setCode} disabled={timers.expired} aria-label="Email verification code"/><Button type="submit" loading={busy} disabled={code.length !== 6 || timers.expired}>Verify email</Button><Button variant={timers.expired ? "filled" : "subtle"} disabled={busy || timers.resendSeconds > 0} onClick={() => submit("request")}>{resendLabel(timers.resendSeconds, timers.expired ? "Send a new code" : "Resend code")}</Button><Button variant="subtle" onClick={() => { setStep("details"); setCode(""); setProof(null); timers.clear(); }}>Change email</Button></> : <>
+          {step === "details" && !proof && <TextInput label="Email" type="email" required autoComplete="email" {...emailProps} onChange={e => { emailProps.onChange(e); if (timers.blocked) timers.clear(); }} onBlur={() => { emailProps.onBlur(); emailError.onBlur(); }} error={emailProps.error ?? emailError.error}/>}
           {step === "details" && proof && <Text size="sm">We’ll email a code to this ticket’s designated recipient.</Text>}
           {needsDetails && <><TextInput label="First name" required autoComplete="given-name" {...form.getInputProps("first_name")}/><TextInput label="Last name" required autoComplete="family-name" {...form.getInputProps("last_name")}/><PhoneInput label="Phone" required {...form.getInputProps("phone")}/>
             <Text size="xs" c="dimmed">If you add a phone number to your account, we may text you about product updates and events — reply STOP at any time to opt out.</Text>
             <Text size="xs" c="dimmed">By creating an account you agree to our <LegalDocumentLinks placement="account-registration" fallback="Terms of Use and Privacy Policy"/>.</Text>
             {legal.isError && <Alert color="red">Unable to load account documents. Please reload to try again.</Alert>}
           </>}
-          <Button type="submit" loading={busy} disabled={!emailOk || (needsDetails && (legal.isPending || legal.isError))}>{step === "complete" ? "Create account" : "Continue with email"}</Button>
+          <Button type="submit" loading={busy} disabled={!emailOk || timers.blocked || (needsDetails && (legal.isPending || legal.isError))}>{timers.blocked && step === "details" ? `Try again in ${formatMMSS(timers.resendSeconds)}` : step === "complete" ? "Create account" : "Continue with email"}</Button>
         </>}
         <Text size="sm" ta="center">{signup ? "Already have tickets? " : "New to Mefie? "}<Anchor component={Link} href={signup ? "/login" : "/register"}>{signup ? "Log in" : "Sign up"}</Anchor></Text>
       </Stack>
