@@ -9,11 +9,9 @@ import type { TeamRow } from "@/lib/teamApi";
  * CurrentUser enriched with this user's role in their current
  * organization. The backend deliberately doesn't put role on the user
  * payload (see CurrentUser's docblock — role lives on
- * OrganizationMembership, not User), so resolving it here means a
- * second call to GET /api/organization/members, matching the row back
- * to this user by email. Only attempted once the session is verified —
- * that endpoint sits behind the `verified` middleware, so an unverified
- * session would just 403 on it.
+ * OrganizationMembership, not User), so GET /api/users/me returns it as a
+ * sibling field, `organization_role`. Only exposed once the session is
+ * verified.
  */
 export type SessionUser = CurrentUser & { role: Role | null; portal_access: PortalAccess };
 
@@ -23,17 +21,23 @@ export type SessionUser = CurrentUser & { role: Role | null; portal_access: Port
  * per request, instead of each Server Component fetching it separately.
  */
 export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
-  const result = await backendRequest<{ user: CurrentUser; portal_access?: PortalAccess }>("/api/users/me");
+  const result = await backendRequest<{ user: CurrentUser; portal_access?: PortalAccess; organization_role?: Role | null }>("/api/users/me");
   if (result.status !== 200) return null;
 
   const user = result.data.user;
   const portal_access = result.data.portal_access ?? { distributor: false, venue: false };
 
   if (!user.email_verified_at) {
-    // Unverified sessions can't call the members endpoint (verified-only)
-    // and don't need a role yet — the (organization) layout redirects these to
-    // /verify-email before anything role-gated is ever rendered.
+    // No role until verified — the (organization) layout redirects these to /verify-email before
+    // anything role-gated is ever rendered.
     return { ...user, role: null, portal_access };
+  }
+
+  // One call: the API returns the role with the user. Only an API that predates `organization_role`
+  // (a web deploy that lands first) falls back to finding our own row in the team list — delete that
+  // fallback once every environment's API serves `organization_role`.
+  if ("organization_role" in result.data) {
+    return { ...user, role: result.data.organization_role ?? null, portal_access };
   }
 
   const membersResult = await backendRequest<{ members: TeamRow[] }>("/api/organization/members");
