@@ -16,10 +16,15 @@ export function EditableQuestionField({
   question,
   value,
   onChange,
+  error,
+  addressErrors,
 }: {
   question: PublicQuestion;
   value: AnswerValue | undefined;
   onChange: (value: AnswerValue) => void;
+  error?: string;
+  /** ADDRESS only: per-part errors rendered under the matching input. */
+  addressErrors?: Partial<Record<keyof AddressAnswer, string>>;
 }) {
   const label = question.is_required ? `${question.title} *` : question.title;
   const description = question.description ?? undefined;
@@ -30,6 +35,7 @@ export function EditableQuestionField({
         <TextInput
           label={label}
           description={description}
+          error={error}
           value={(value as string) ?? ""}
           onChange={(e) => onChange(e.currentTarget.value)}
         />
@@ -40,6 +46,7 @@ export function EditableQuestionField({
         <Textarea
           label={label}
           description={description}
+          error={error}
           autosize
           minRows={2}
           value={(value as string) ?? ""}
@@ -52,6 +59,7 @@ export function EditableQuestionField({
         <Select
           label={label}
           description={description}
+          error={error}
           placeholder="Choose one"
           data={question.options ?? []}
           value={(value as string) ?? null}
@@ -64,6 +72,7 @@ export function EditableQuestionField({
         <Radio.Group
           label={label}
           description={description}
+          error={error}
           value={(value as string) ?? ""}
           onChange={(v) => onChange(v)}
         >
@@ -81,6 +90,7 @@ export function EditableQuestionField({
         <Checkbox.Group
           label={label}
           description={description}
+          error={error}
           value={selected}
           onChange={(v) => onChange(v)}
         >
@@ -108,28 +118,37 @@ export function EditableQuestionField({
               {description}
             </Text>
           )}
+          {error && !addressErrors && (
+            <Text size="xs" c="red">
+              {error}
+            </Text>
+          )}
           <Group grow>
             <TextInput
               placeholder="Address line"
+              error={addressErrors?.address_line1}
               value={address.address_line1}
               onChange={(e) => setField("address_line1", e.currentTarget.value)}
             />
-            <TextInput placeholder="City" value={address.city} onChange={(e) => setField("city", e.currentTarget.value)} />
+            <TextInput placeholder="City" error={addressErrors?.city} value={address.city} onChange={(e) => setField("city", e.currentTarget.value)} />
           </Group>
           <Group grow>
             <TextInput
               placeholder="State / region"
+              error={addressErrors?.state}
               value={address.state}
               onChange={(e) => setField("state", e.currentTarget.value)}
             />
             <TextInput
               placeholder="Postal code"
+              error={addressErrors?.postal_code}
               value={address.postal_code}
               onChange={(e) => setField("postal_code", e.currentTarget.value)}
             />
             <CountrySelector
               placeholder="Country"
               aria-label="Country"
+              error={addressErrors?.country}
               value={address.country || null}
               onChange={(v) => setField("country", v ?? "")}
             />
@@ -143,6 +162,7 @@ export function EditableQuestionField({
         <Checkbox
           label={label}
           description={description}
+          error={error}
           checked={(value as boolean) ?? false}
           onChange={(e) => onChange(e.currentTarget.checked)}
         />
@@ -153,17 +173,33 @@ export function EditableQuestionField({
   }
 }
 
-/** Whether a required question's current value counts as "answered" — mirrors OrderService::assertAnswered server-side. */
-export function isQuestionAnswered(question: PublicQuestion, value: AnswerValue | undefined): boolean {
-  if (!question.is_required) return true;
+/**
+ * Whether a question's current value counts as "answered" — mirrors OrderService::assertAnswered server-side.
+ * `strictAddress` (claim flow) additionally requires address_line1 + city + country for a required ADDRESS, and
+ * for an optional ADDRESS that is partly filled; default behaviour is unchanged.
+ */
+export function isQuestionAnswered(
+  question: PublicQuestion,
+  value: AnswerValue | undefined,
+  options: { strictAddress?: boolean } = {},
+): boolean {
+  const strictAddress = options.strictAddress ?? false;
+  if (!question.is_required && !(strictAddress && question.type === "ADDRESS")) return true;
 
   switch (question.type) {
     case "AGREEMENT":
       return value === true;
     case "MULTI_SELECT":
       return Array.isArray(value) && value.length > 0;
-    case "ADDRESS":
-      return typeof value === "object" && value !== null && !Array.isArray(value) && Object.values(value).some((v) => v.trim().length > 0);
+    case "ADDRESS": {
+      const isObject = typeof value === "object" && value !== null && !Array.isArray(value);
+      const parts = isObject ? (value as AddressAnswer) : null;
+      if (!strictAddress) return !!parts && Object.values(parts).some((v) => v.trim().length > 0);
+      const filled = (v: string | undefined) => (v ?? "").trim().length > 0;
+      const blank = !parts || Object.values(parts).every((v) => !filled(v));
+      if (!question.is_required && blank) return true;
+      return !!parts && filled(parts.address_line1) && filled(parts.city) && filled(parts.country);
+    }
     default:
       return typeof value === "string" && value.trim().length > 0;
   }

@@ -71,11 +71,16 @@ export function AttendeeRegistrationFields({
   onChange,
   questions,
   contactRequired = false,
+  errors,
+  emailHint = "Where their ticket is sent",
 }: {
   value: AttendeeFormValue;
   onChange: (next: AttendeeFormValue) => void;
   questions: RegistrationSchema["attendee_questions"];
   contactRequired?: boolean;
+  /** Per-field error text (e.g. from a 422). Fields also carry data-claim-field so callers can focus them. */
+  errors?: Partial<Record<"first_name" | "last_name" | "email" | "phone", string>>;
+  emailHint?: string;
 }) {
   const patch = (p: Partial<AttendeeFormValue>) => onChange({ ...value, ...p });
 
@@ -86,32 +91,41 @@ export function AttendeeRegistrationFields({
           label="First name"
           value={value.first_name}
           onChange={(e) => patch({ first_name: e.currentTarget.value })}
+          error={errors?.first_name}
+          data-claim-field="first_name"
           required
         />
         <TextInput
           label="Last name"
           value={value.last_name}
           onChange={(e) => patch({ last_name: e.currentTarget.value })}
+          error={errors?.last_name}
+          data-claim-field="last_name"
           required
         />
       </SimpleGrid>
       <Stack gap={4}>
         <TextInput
           label={contactRequired ? "Email" : "Email (optional)"}
-          description="Where their ticket is sent"
+          description={emailHint}
           type="email"
           inputMode="email"
           value={value.email}
           onChange={(e) => patch({ email: e.currentTarget.value })}
+          error={errors?.email}
+          data-claim-field="email"
           required={contactRequired}
         />
         <EmailTypoHint email={value.email} onUse={(email) => patch({ email })} />
       </Stack>
-      <PhoneInput
-        label="Phone (optional)"
-        value={value.phone}
-        onChange={(phone) => patch({ phone })}
-      />
+      <div data-claim-field="phone">
+        <PhoneInput
+          label="Phone (optional)"
+          value={value.phone}
+          onChange={(phone) => patch({ phone })}
+          error={errors?.phone}
+        />
+      </div>
       {questions.map((q) => (
         <EditableQuestionField
           key={q.id}

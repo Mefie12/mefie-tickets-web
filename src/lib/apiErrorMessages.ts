@@ -7,6 +7,13 @@ import { ApiError } from "@/lib/authApi";
  * docs/17 §14 and the *Actions classes.
  */
 const MESSAGES: Record<string, string> = {
+  // upstream / transport
+  UPSTREAM_UNAVAILABLE: "We couldn't reach our servers. Please try again in a moment.",
+  UPSTREAM_TIMEOUT: "This is taking longer than usual. Your request may have gone through — check your email, or try again.",
+  NETWORK_ERROR: "You appear to be offline. Check your connection and try again.",
+  QUESTIONS_CHANGED: "The questions for this event have changed. Please open your invitation link again to see the latest form.",
+  IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD: "This invitation was already claimed with different details.",
+
   // step-up / session
   STEP_UP_REQUIRED: "Please confirm it's you with a fresh code to continue.",
   CONSUMER_SESSION_EXPIRED: "Your session timed out. Open your ticket link again.",
@@ -60,4 +67,13 @@ export function resolveApiErrorMessage(error: unknown): string {
   }
   if (error instanceof Error && error.message) return error.message;
   return "Something went wrong. Please try again.";
+}
+
+/** Like resolveApiErrorMessage, plus a "Reference: <id>" line for server failures so support can find the request. */
+export function resolveApiErrorMessageWithReference(error: unknown): string {
+  const message = resolveApiErrorMessage(error);
+  if (error instanceof ApiError && error.status >= 500 && error.requestId) {
+    return `${message} Reference: ${error.requestId}`;
+  }
+  return message;
 }
