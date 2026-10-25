@@ -4,7 +4,7 @@
  * client only submits the claim, which the backend ties to the resolved
  * link via the `mefie_claim_flow` cookie.
  */
-import { ApiError } from "@/lib/authApi";
+import { errorFromFetchFailure, errorFromResponse } from "@/lib/apiResponseError";
 import type { AnswerInput } from "@/lib/checkoutApi";
 
 export type ClaimPreviewQuestion = {
@@ -41,14 +41,17 @@ export type ClaimBody = {
 };
 
 export const submitClaim = async (body: ClaimBody): Promise<{ status: "claimed" }> => {
-  const res = await fetch("/api/public/claim", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+  let res: Response;
+  try {
+    res = await fetch("/api/public/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    throw errorFromFetchFailure(error);
   }
-  return data as { status: "claimed" };
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw errorFromResponse(res, data);
+  return (data ?? { status: "claimed" }) as { status: "claimed" };
 };

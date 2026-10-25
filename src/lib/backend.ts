@@ -26,7 +26,12 @@ export type BackendResult<T> = {
   setCookieHeaders: string[];
   /** Retry-After from the API (seconds), present on rate-limit responses. */
   retryAfter?: string | null;
+  /** Correlation id sent to (and echoed by) the API; set by backendRequestResilient. */
+  requestId?: string;
 };
+
+/** Budget for public form submissions (main call and the CSRF handshake each). */
+export const PUBLIC_FORM_TIMEOUT_MS = 8000;
 
 /**
  * Tells the API which visitor this server-to-server call is for (so its per-IP rate limits are per visitor),
@@ -90,6 +95,7 @@ function extractXsrfToken(cookieHeader: string): string | undefined {
  */
 async function prepareAuthenticatedRequest(
   needsCsrf: boolean,
+  csrfTimeoutMs?: number,
 ): Promise<{ cookieHeader: string; xsrfToken?: string; setCookieHeaders: string[] }> {
   let cookieHeader = await currentCookieHeader();
   const setCookieHeaders: string[] = [];
@@ -97,6 +103,7 @@ async function prepareAuthenticatedRequest(
   if (needsCsrf) {
     const csrfRes = await fetch(`${API_URL}/sanctum/csrf-cookie`, {
       headers: { Cookie: cookieHeader, Origin: APP_URL, Referer: `${APP_URL}/`, ...(await proxyHeaders()) },
+      signal: csrfTimeoutMs ? AbortSignal.timeout(csrfTimeoutMs) : undefined,
     });
     const csrfSetCookies = csrfRes.headers.getSetCookie();
     setCookieHeaders.push(...csrfSetCookies);
@@ -170,4 +177,65 @@ export async function backendUpload<T = unknown>(path: string, formData: FormDat
   const data = (await res.json().catch(() => null)) as T;
 
   return { status: res.status, ok: res.ok, data, setCookieHeaders, retryAfter: res.headers.get("retry-after") };
+}
+
+/**
+ * Opt-in variant of backendRequest for public forms: never throws. Network failures and timeouts become
+ * a synthetic 503/504 result (code UPSTREAM_UNAVAILABLE / UPSTREAM_TIMEOUT) so callers can show a real
+ * message instead of an empty body, and every call carries an X-Request-Id for support correlation.
+ */
+export async function backendRequestResilient<T = unknown>(
+  path: string,
+  options: { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown; headers?: Record<string, string>; timeoutMs?: number } = {},
+): Promise<BackendResult<T>> {
+  const method = options.method ?? "GET";
+  const timeoutMs = options.timeoutMs ?? PUBLIC_FORM_TIMEOUT_MS;
+  const requestId = crypto.randomUUID();
+
+  try {
+    const { cookieHeader, xsrfToken, setCookieHeaders } = await prepareAuthenticatedRequest(method !== "GET", timeoutMs);
+
+    const res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        Cookie: cookieHeader,
+        Origin: APP_URL,
+        Referer: `${APP_URL}/`,
+        "X-Request-Id": requestId,
+        ...(await proxyHeaders()),
+        ...(xsrfToken ? { "X-XSRF-TOKEN": xsrfToken } : {}),
+        ...options.headers,
+      },
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      cache: "no-store",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    setCookieHeaders.push(...res.headers.getSetCookie());
+    const data = (await res.json().catch(() => null)) as T;
+
+    return {
+      status: res.status,
+      ok: res.ok,
+      data,
+      setCookieHeaders,
+      retryAfter: res.headers.get("retry-after"),
+      requestId: res.headers.get("x-request-id") ?? requestId,
+    };
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    const timedOut = name === "TimeoutError" || name === "AbortError";
+    return {
+      ok: false,
+      status: timedOut ? 504 : 503,
+      data: {
+        code: timedOut ? "UPSTREAM_TIMEOUT" : "UPSTREAM_UNAVAILABLE",
+        message: timedOut ? "The request timed out." : "The service is unavailable.",
+      } as T,
+      setCookieHeaders: [],
+      requestId,
+    };
+  }
 }

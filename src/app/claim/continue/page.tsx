@@ -11,7 +11,8 @@ const STATE_COPY: Record<string, string> = {
   revoked: "This invitation was withdrawn by the sender.",
   claimed: "This invitation has already been used.",
   already_assigned: "This ticket has already been assigned.",
-  notfound: "We couldn't find that invitation. Check the link and try again.",
+  unavailable: "We're having trouble loading this invitation. Please try again in a moment.",
+  notfound: "We couldn't find that invitation. If you've just claimed your ticket, check your email for it. Otherwise, check the link and try again.",
 };
 
 /**
