@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { clientIpFromHeaders } from "@/lib/clientIp";
+import { buildForwardCookieHeader } from "@/lib/cookieForwarding";
 
 /**
  * Server-only Sanctum SPA cookie relay.
@@ -61,10 +62,7 @@ function parseCookiePairs(cookieHeaderOrSetCookies: string[]): Map<string, strin
 
 export async function currentCookieHeader(): Promise<string> {
   const jar = await cookies();
-  return jar
-    .getAll()
-    .map((c) => `${c.name}=${c.value}`)
-    .join("; ");
+  return buildForwardCookieHeader(jar.getAll());
 }
 
 function mergeCookieHeader(existingHeader: string, setCookies: string[]): string {
