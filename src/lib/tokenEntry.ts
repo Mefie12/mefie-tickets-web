@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendRequest } from "@/lib/backend";
+import { decodePreviewCookie, encodePreviewCookie } from "@/lib/previewCookie";
 
 /**
  * Shared token-exchange entry handler (docs/17 §18). The raw token
@@ -61,7 +62,7 @@ export async function handleTokenEntry(
     // Strip the flow-control field; keep only the render payload.
     const { status: _status, ...preview } = result.data ?? {};
     void _status;
-    response.cookies.set(previewCookie.name, JSON.stringify(preview), {
+    response.cookies.set(previewCookie.name, encodePreviewCookie(preview), {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -83,9 +84,5 @@ export async function readPreviewCookie<T>(name: string): Promise<T | null> {
   const jar = await cookies();
   const raw = jar.get(name)?.value;
   if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+  return decodePreviewCookie<T>(raw);
 }
