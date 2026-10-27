@@ -275,8 +275,9 @@ function EntitlementCard({
 
   return (
     <Card withBorder radius="lg" p="md">
-      <Group justify="space-between" wrap="nowrap" align="flex-start">
-        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
+      {/* Wraps: when the details and the actions don't fit side by side (phones), the actions drop below. */}
+      <Group justify="space-between" wrap="wrap" align="flex-start">
+        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: "1 1 14rem" }}>
           {selectable && <Checkbox checked={selected} onChange={onToggle} mt={2} aria-label="Select ticket" />}
           <Stack gap={4} style={{ minWidth: 0 }}>
             <Text fw={600} size="sm" truncate>
@@ -317,7 +318,7 @@ function EntitlementCard({
             )}
           </Stack>
         </Group>
-        <Stack gap="xs" align="flex-end" style={{ flexShrink: 0 }}>
+        <Stack gap="xs" align="flex-end" style={{ flexShrink: 0, maxWidth: "100%" }}>
           <Badge color={meta.color} variant="light">
             {meta.label}
           </Badge>
