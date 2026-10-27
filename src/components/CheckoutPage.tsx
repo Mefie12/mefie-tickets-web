@@ -7,7 +7,7 @@ import { Alert, Box, Button, Grid, GridCol, Loader, Paper, Stack, Text, Title } 
 import { IconAlertCircle, IconArrowLeft } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
-import { createPaymentIntent, getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
+import { createPaymentIntent, getOrderPaymentStatus, type Order, type OrderStatus } from "@/lib/checkoutApi";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import { loadCart, saveCart, clearCart, type StoredCartItem } from "@/lib/cartStorage";
 import { clearOffer, loadOffer, type StoredOffer } from "@/lib/offerSession";
@@ -26,7 +26,8 @@ import { createCheckoutDraft, reconcileCheckoutDraft, type CheckoutCartLine, typ
 
 type Step = "details" | "payment" | "confirmation";
 
-type PersistedCheckout = { order: Order; clientSecret: string; reservationExpiresAt: string | null };
+// `cancelToken` is optional so a checkout persisted before it existed still parses (it just has no Cancel button).
+type PersistedCheckout = { order: Order; clientSecret: string; reservationExpiresAt: string | null; cancelToken?: string | null };
 
 function checkoutStorageKey(eventId: number): string {
   return `mefie-checkout:${eventId}`;
@@ -53,6 +54,8 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   const [order, setOrder] = useState<Order | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [reservationExpiresAt, setReservationExpiresAt] = useState<string | null>(null);
+  // The buyer's capability for cancelling this reservation; handed out once, when the order is created.
+  const [cancelToken, setCancelToken] = useState<string | null>(null);
   const [draft, setDraft] = useState<CheckoutDraft | null>(null);
   const [ticketEditorOpen, setTicketEditorOpen] = useState(false);
   const [offer, setOffer] = useState<StoredOffer | null>(null);
@@ -85,9 +88,9 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     if (!order || !clientSecret || step === "confirmation") return;
     sessionStorage.setItem(
       checkoutStorageKey(event.id),
-      JSON.stringify({ order, clientSecret, reservationExpiresAt } satisfies PersistedCheckout),
+      JSON.stringify({ order, clientSecret, reservationExpiresAt, cancelToken } satisfies PersistedCheckout),
     );
-  }, [order, clientSecret, reservationExpiresAt, event.id, step]);
+  }, [order, clientSecret, reservationExpiresAt, cancelToken, event.id, step]);
 
   // Reconcile against the authoritative status before resuming anywhere
   // — a persisted copy could be stale (e.g. the webhook that completes
@@ -122,6 +125,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         } else if (authoritative.status === "RESERVED") {
           setOrder(persisted.order);
           setClientSecret(persisted.clientSecret);
+          setCancelToken(persisted.cancelToken ?? null);
           // Prefer the freshly-polled deadline over the persisted one —
           // it's the same value (reservation_expires_at is fixed at
           // creation and never changes), but this keeps a single source
@@ -229,22 +233,39 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
   // to restart from scratch. Cart selections are left untouched
   // (cartStorage), but availability is never guaranteed to still be
   // there; the next createOrder call re-checks it naturally.
-  function handleExpired() {
+  function resetToDetails(toast: { color: string; message: string }) {
     sessionStorage.removeItem(checkoutStorageKey(event.id));
     setOrder(null);
     setClientSecret(null);
     setReservationExpiresAt(null);
+    setCancelToken(null);
     setStep("details");
-    notifications.show({
+    notifications.show(toast);
+  }
+
+  function handleExpired() {
+    resetToDetails({
       color: "orange",
       message: "Your reservation expired, so we released those tickets. Please review your selections and try again.",
     });
   }
 
-  function handleOrderCreated(newOrder: Order) {
+  // The buyer cancelled (or the server says it was already ended). Same reset
+  // as expiry; the wording follows the status the server reported, so an order
+  // that was cancelled by someone else is not announced as "released by you".
+  function handleCancelled(status: OrderStatus) {
+    resetToDetails(
+      status === "ABANDONED"
+        ? { color: "teal", message: "Checkout cancelled — we released your tickets. Your selections are still saved." }
+        : { color: "orange", message: "This order is no longer active. Your selections are still saved." },
+    );
+  }
+
+  function handleOrderCreated(newOrder: Order, newCancelToken: string | null) {
     // Shopping event (docs/26, Phase 2b-2): sent before the card-entry step starts, which pauses the ad pixels.
     trackBeginCheckout(newOrder);
     setOrder(newOrder);
+    setCancelToken(newCancelToken);
     if (newOrder.status === "COMPLETED") {
       clearCart(event.id);
       clearOffer(event.id);
@@ -318,9 +339,12 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
                     clearCheckoutDraft(event.id);
                     setOrder(updatedOrder);
                     setClientSecret(null);
+                    setCancelToken(null);
                     setStep("confirmation");
                   }}
                   onExpired={handleExpired}
+                  cancelToken={cancelToken}
+                  onCancelled={handleCancelled}
                 />
               ) : (
                 // Reservation was created but the payment-intent call failed —
