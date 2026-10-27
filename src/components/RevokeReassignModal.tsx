@@ -33,12 +33,15 @@ export function RevokeReassignModal({
   entitlement,
   opened,
   onClose,
+  onExited,
   onDone,
 }: {
   mode: "revoke" | "reassign";
   entitlement: EntitlementRow | null;
   opened: boolean;
   onClose: () => void;
+  /** Fires once the close transition has finished — safe to drop the entitlement/mode then. */
+  onExited?: () => void;
   onDone: () => void;
 }) {
   const [reason, setReason] = useState("");
@@ -92,8 +95,11 @@ export function RevokeReassignModal({
       opened={opened}
       onClose={() => {
         if (run.isPending) return;
-        reset();
         onClose();
+      }}
+      onExitTransitionEnd={() => {
+        reset();
+        onExited?.();
       }}
       title={mode === "revoke" ? "Remove attendee from this ticket" : "Change attendee for this ticket"}
       centered
