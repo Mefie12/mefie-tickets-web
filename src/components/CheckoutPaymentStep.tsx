@@ -325,6 +325,8 @@ function PaymentForm({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  // The server refused the cancel token (404): retrying can never work, so stop offering Cancel.
+  const [cancelUnavailable, setCancelUnavailable] = useState(false);
   // Once Stripe itself confirms the charge, the payment is done — the
   // form must never become resubmittable again, no matter how long our
   // own webhook-driven confirmation takes. Re-confirming an
@@ -435,6 +437,11 @@ function PaymentForm({
         } catch {
           // Fall through to the message below.
         }
+      }
+      if (error instanceof ApiError && error.status === 404) {
+        setCancelUnavailable(true);
+        setCancelError("We couldn't cancel this checkout. Your tickets will be released automatically when the reservation time runs out.");
+        return;
       }
       setCancelError(
         error instanceof ApiError && error.code === "ORDER_CONFIRMATION_IN_FLIGHT"
@@ -679,7 +686,14 @@ function PaymentForm({
             {errorMessage}
           </Alert>
         )}
-        <Button type="submit" loading={submitting} disabled={!stripe || !elements || verifyingExpiry} size="md" fullWidth>
+        <Button
+          type="submit"
+          loading={submitting}
+          // Not while a cancel is in flight: the server settles that race safely, but the buyer would see two outcomes.
+          disabled={!stripe || !elements || verifyingExpiry || cancelMutation.isPending}
+          size="md"
+          fullWidth
+        >
           Pay {formatMoney(order.total_amount, order.currency)}
         </Button>
         {cancelError && (
@@ -687,7 +701,7 @@ function PaymentForm({
             {cancelError}
           </Alert>
         )}
-        {cancelToken && !submitting && !confirmationInFlight && !verifyingExpiry && (
+        {cancelToken && !cancelUnavailable && !submitting && !confirmationInFlight && !verifyingExpiry && (
           <Button variant="subtle" color="gray" size="sm" fullWidth loading={cancelMutation.isPending} onClick={confirmCancel}>
             Cancel checkout
           </Button>
