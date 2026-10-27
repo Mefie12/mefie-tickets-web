@@ -1,16 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Dropzone, IMAGE_MIME_TYPE } from "@mantine/dropzone";
 import {
   ActionIcon,
   Badge,
+  Box,
   Button,
   Card,
   Group,
   Image,
+  Loader,
   SimpleGrid,
   Stack,
   Text,
@@ -41,11 +43,45 @@ const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 // a 24 MP phone photo is ~12 MB. Backend caps at 20 MB.
 const MAX_COVER_SOURCE_BYTES = 20 * 1024 * 1024;
 
+type PendingCover = { url: string; width: number; height: number; crop: PixelCrop };
+type PendingGalleryItem = { key: string; url: string; status: "waiting" | "uploading" };
+
+/** Resolves once `url` is in the browser cache (or failed/timed out), so swapping a preview for it doesn't flash blank. */
+function preloadImage(url: string | null | undefined): Promise<void> {
+  if (!url) return Promise.resolve();
+  return new Promise((resolve) => {
+    const img = new window.Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = url;
+    setTimeout(resolve, 10000);
+  });
+}
+
+function ProcessingOverlay({ label }: { label: string }) {
+  return (
+    <Group
+      role="status"
+      aria-live="polite"
+      justify="center"
+      gap="xs"
+      style={{ position: "absolute", inset: 0, background: "rgba(0, 0, 0, 0.45)", color: "white" }}
+    >
+      <Loader size="sm" color="white" />
+      <Text size="sm" c="white">
+        {label}
+      </Text>
+    </Group>
+  );
+}
+
 /**
  * Cover + gallery editor for an event's Media tab. Processing is
- * synchronous server-side (see EventMediaService) — a successful
- * upload response already carries the finished image, so there's no
- * uploading/processing state to poll for here.
+ * synchronous server-side (see EventMediaService), so the finished image
+ * only arrives with the upload response. To hide that wait, a picked file
+ * is previewed straight from the browser (blob URL, framed to the chosen
+ * crop) with a processing overlay, and is swapped for the server image
+ * once that has been fetched.
  */
 export function EventMediaEditor({
   eventId,
@@ -67,7 +103,17 @@ export function EventMediaEditor({
   // The file picked this session — lets "Adjust crop" re-frame with full
   // pixels even before a reload.
   const [lastOriginal, setLastOriginal] = useState<File | null>(null);
+  const [lastOriginalSize, setLastOriginalSize] = useState<{ width: number; height: number } | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [pendingCover, setPendingCover] = useState<PendingCover | null>(null);
+  const [pendingGallery, setPendingGallery] = useState<PendingGalleryItem[]>([]);
+
+  useEffect(() => {
+    const url = pendingCover?.url;
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [pendingCover?.url]);
 
   function handleError(error: Error) {
     if (redirectOnAuthError(error, router)) return;
@@ -89,9 +135,18 @@ export function EventMediaEditor({
     onSuccess: (data: { event: Event }) => {
       setEvent(data.event);
       notifications.show({ color: "teal", message: "Cover uploaded." });
+      void preloadImage(data.event.cover_image_url).then(() => setPendingCover(null));
     },
-    onError: handleError,
+    onError: (error: Error) => {
+      setPendingCover(null);
+      handleError(error);
+    },
   });
+
+  function startCoverUpload(file: File, size: { width: number; height: number }, crop: PixelCrop) {
+    setPendingCover({ url: URL.createObjectURL(file), ...size, crop });
+    uploadCoverMutation.mutate({ file, crop });
+  }
 
   const recropMutation = useMutation({
     mutationFn: (crop: PixelCrop) => recropEventCover(eventId, crop),
@@ -124,9 +179,10 @@ export function EventMediaEditor({
       }
 
       setLastOriginal(file);
+      setLastOriginalSize({ width, height });
 
       if (outcome === "auto") {
-        uploadCoverMutation.mutate({ file, crop: centeredCrop(width, height) });
+        startCoverUpload(file, { width, height }, centeredCrop(width, height));
         return;
       }
 
@@ -154,7 +210,9 @@ export function EventMediaEditor({
   }
 
   function handleCropped(rect: PixelCrop) {
-    if (cropFile) {
+    if (cropFile && lastOriginalSize) {
+      startCoverUpload(cropFile, lastOriginalSize, rect);
+    } else if (cropFile) {
       uploadCoverMutation.mutate({ file: cropFile, crop: rect });
     } else {
       recropMutation.mutate(rect);
@@ -187,13 +245,27 @@ export function EventMediaEditor({
 
   async function handleGalleryFiles(files: File[]) {
     setUploadingGallery(true);
+    // Every picked file shows up as a tile immediately; the uploads still run
+    // one at a time (the slot check on the server is count-then-insert, so
+    // concurrent requests could exceed the limit).
+    const batch = files.slice(0, remainingGallerySlots).map((file, i) => ({
+      file,
+      key: `${Date.now()}-${i}`,
+      url: URL.createObjectURL(file),
+    }));
+    setPendingGallery(batch.map(({ key, url }, i) => ({ key, url, status: i === 0 ? "uploading" : "waiting" })));
     try {
-      for (const file of files.slice(0, remainingGallerySlots)) {
+      for (const { file, key, url } of batch) {
+        setPendingGallery((items) => items.map((item) => (item.key === key ? { ...item, status: "uploading" } : item)));
         try {
-          await uploadGalleryMutation.mutateAsync(file);
+          const data = await uploadGalleryMutation.mutateAsync(file);
+          await Promise.all(data.event.gallery.map((image) => preloadImage(image.thumbnail_url)));
         } catch {
           // Already surfaced via the mutation's onError; keep going so one
           // bad file (wrong format, too large) doesn't block the rest.
+        } finally {
+          setPendingGallery((items) => items.filter((item) => item.key !== key));
+          URL.revokeObjectURL(url);
         }
       }
     } finally {
@@ -243,9 +315,30 @@ export function EventMediaEditor({
           Required before this event can go live. Landscape images work best — you&apos;ll frame the crop before
           publishing.
         </Text>
-        {event.cover_image_url ? (
+        {event.cover_image_url || pendingCover ? (
           <Card withBorder radius="lg" p="sm" maw={480}>
-            <Image src={event.cover_image_url} radius="md" alt="Event cover" />
+            <Box pos="relative" style={{ borderRadius: "var(--mantine-radius-md)", overflow: "hidden" }}>
+              {pendingCover ? (
+                <Box style={{ position: "relative", aspectRatio: "16 / 9", overflow: "hidden" }}>
+                  <Image
+                    src={pendingCover.url}
+                    alt="Event cover preview"
+                    style={{
+                      position: "absolute",
+                      left: `${-(pendingCover.crop.x / pendingCover.crop.width) * 100}%`,
+                      top: `${-(pendingCover.crop.y / pendingCover.crop.height) * 100}%`,
+                      width: `${(pendingCover.width / pendingCover.crop.width) * 100}%`,
+                      height: `${(pendingCover.height / pendingCover.crop.height) * 100}%`,
+                      maxWidth: "none",
+                    }}
+                  />
+                </Box>
+              ) : (
+                <Image src={event.cover_image_url} alt="Event cover" />
+              )}
+              {uploadCoverMutation.isPending && <ProcessingOverlay label="Uploading and optimizing…" />}
+              {recropMutation.isPending && <ProcessingOverlay label="Updating crop…" />}
+            </Box>
             {!disabled && (
               <Group mt="sm" gap="xs">
                 {(lastOriginal || event.cover_original_url) && (
@@ -264,6 +357,7 @@ export function EventMediaEditor({
                   variant="light"
                   color="red"
                   loading={deleteCoverMutation.isPending}
+                  disabled={uploadCoverMutation.isPending || recropMutation.isPending}
                   onClick={() =>
                     modals.openConfirmModal({
                       title: "Remove the cover image?",
@@ -326,7 +420,7 @@ export function EventMediaEditor({
           Up to {MAX_GALLERY_IMAGES} additional images, separate from the cover image above.
         </Text>
 
-        {gallery.length > 0 && (
+        {(gallery.length > 0 || pendingGallery.length > 0) && (
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
             {gallery.map((image, index) => (
               <Card key={image.id} withBorder radius="md" p="sm">
@@ -387,6 +481,14 @@ export function EventMediaEditor({
                     </Group>
                   )}
                 </Stack>
+              </Card>
+            ))}
+            {pendingGallery.map((item) => (
+              <Card key={item.key} withBorder radius="md" p="sm">
+                <Box pos="relative" style={{ borderRadius: "var(--mantine-radius-sm)", overflow: "hidden" }}>
+                  <Image src={item.url} radius="sm" alt="Gallery image preview" h={140} />
+                  <ProcessingOverlay label={item.status === "uploading" ? "Uploading…" : "Waiting…"} />
+                </Box>
               </Card>
             ))}
           </SimpleGrid>
