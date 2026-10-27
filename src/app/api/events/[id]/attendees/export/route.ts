@@ -11,6 +11,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     { headers: { Cookie: cookieHeader, Origin: APP_URL, Referer: `${APP_URL}/` }, cache: "no-store" },
   );
 
+  // Nothing to export: pass the 204 through so the browser stays on the page (it can't carry a JSON body).
+  if (res.status === 204) return new Response(null, { status: 204 });
+
   if (!res.ok || !res.body) {
     const data = await res.json().catch(() => ({}));
     return NextResponse.json({ message: data?.message ?? "Export failed." }, { status: res.status });

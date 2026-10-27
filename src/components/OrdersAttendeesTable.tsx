@@ -20,6 +20,7 @@ import {
   Table,
   Text,
   TextInput,
+  Tooltip,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconAdjustmentsHorizontal, IconDots, IconSearch } from "@tabler/icons-react";
@@ -162,6 +163,9 @@ export function OrdersAttendeesTable({
   const meta = activeQuery.data?.meta;
   const total = meta?.total ?? 0;
   const lastPage = meta?.last_page ?? 1;
+  // `total` can belong to the previous filter while a new one loads (placeholderData), so wait for fresh data.
+  const exportLoading = activeQuery.isPlaceholderData || activeQuery.isFetching;
+  const nothingToExport = !exportLoading && total === 0;
 
   const rowId = (row: OrderListItem | AttendeeListItem) => ("short_id" in row ? row.id : (row as AttendeeListItem).ticket.id);
   const detailHref = (row: OrderListItem | AttendeeListItem) =>
@@ -202,6 +206,7 @@ export function OrdersAttendeesTable({
   function exportCsv(scope: "selected" | "all") {
     const params = new URLSearchParams(view === "orders" ? ordersParams : attendeesParams);
     params.delete("page");
+    if (scope === "all" && (exportLoading || nothingToExport)) return;
     if (scope === "selected") {
       if (selected.size === 0) return;
       [...selected].forEach((id) => params.append("ids[]", String(id)));
@@ -301,9 +306,13 @@ export function OrdersAttendeesTable({
               </Stack>
             </Popover.Dropdown>
           </Popover>
-          <Button variant="default" onClick={() => exportCsv("all")}>
-            Export
-          </Button>
+          <Tooltip label="Nothing to export" disabled={!nothingToExport}>
+            <span>
+              <Button variant="default" onClick={() => exportCsv("all")} disabled={exportLoading || nothingToExport}>
+                Export
+              </Button>
+            </span>
+          </Tooltip>
         </Group>
       </Group>
 
