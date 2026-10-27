@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadStripe, type StripePaymentElementOptions } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Alert, Button, Card, Group, Loader, Stack, Text, Title } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import { IconAlertCircle, IconClock } from "@tabler/icons-react";
 import { ApiError } from "@/lib/authApi";
-import { beginPaymentConfirmation, getOrderPaymentStatus, type Order } from "@/lib/checkoutApi";
+import { beginPaymentConfirmation, cancelOrderReservation, getOrderPaymentStatus, type Order, type OrderStatus } from "@/lib/checkoutApi";
+import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
 import { formatMoney } from "@/lib/money";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 
@@ -73,13 +75,17 @@ function reservationUrgencyColor(secondsLeft: number): "teal" | "yellow" | "red"
  * to complete the order. After provider success we poll Mefie's
  * webhook-authoritative status before showing a confirmation.
  *
- * No "back" step here on purpose: the order is already RESERVED
- * server-side by this point, and there's no update-order endpoint —
- * going "back" to re-edit details and resubmitting would create a
- * second reservation against the same inventory. If a buyer abandons
- * here, the existing reservation hold expires naturally — see
- * reservationExpiresAt/onExpired below for how the buyer is told about
- * that rather than being left to discover it by trying to pay.
+ * There is no "back and edit" step on purpose: the order is already
+ * RESERVED server-side by this point, and there's no update-order
+ * endpoint — going "back" to re-edit details and resubmitting would
+ * create a second reservation against the same inventory. What the buyer
+ * can do instead is "Cancel checkout", which releases the reservation at
+ * once (cancelOrderReservation) and returns them to the details step;
+ * it is only offered while no payment confirmation is in flight, and the
+ * server refuses it then too. If a buyer simply walks away, the hold
+ * still expires on its own — see reservationExpiresAt/onExpired below
+ * for how the buyer is told about that rather than being left to
+ * discover it by trying to pay.
  */
 export function CheckoutPaymentStep({
   order,
@@ -89,6 +95,8 @@ export function CheckoutPaymentStep({
   defaultBillingCountry,
   onPaid,
   onExpired,
+  cancelToken,
+  onCancelled,
 }: {
   order: Order;
   eventId: number;
@@ -100,6 +108,10 @@ export function CheckoutPaymentStep({
   onPaid: (order: Order) => void;
   /** The reservation expired before any payment confirmation began — safe to restart checkout from scratch. */
   onExpired: () => void;
+  /** Capability returned when the order was created; without it (an older persisted checkout) Cancel is not offered. */
+  cancelToken: string | null;
+  /** The reservation was ended at the buyer's request; `status` is what the server reported. */
+  onCancelled: (status: OrderStatus) => void;
 }) {
   // Held-funds policy: the PaymentIntent behind this client_secret is
   // created on Mefie's own platform Stripe account, not the organizer's
@@ -197,6 +209,8 @@ export function CheckoutPaymentStep({
           defaultBillingCountry={defaultBillingCountry}
           onPaid={onPaid}
           onExpired={onExpired}
+          cancelToken={cancelToken}
+          onCancelled={onCancelled}
         />
       </Elements>
     </Stack>
@@ -294,6 +308,8 @@ function PaymentForm({
   defaultBillingCountry,
   onPaid,
   onExpired,
+  cancelToken,
+  onCancelled,
 }: {
   eventId: number;
   order: Order;
@@ -301,11 +317,14 @@ function PaymentForm({
   defaultBillingCountry?: string | null;
   onPaid: (order: Order) => void;
   onExpired: () => void;
+  cancelToken: string | null;
+  onCancelled: (status: OrderStatus) => void;
 }) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   // Once Stripe itself confirms the charge, the payment is done — the
   // form must never become resubmittable again, no matter how long our
   // own webhook-driven confirmation takes. Re-confirming an
@@ -373,7 +392,11 @@ function PaymentForm({
     queryKey: ["order-payment-status", "expiry-check", eventId, order.short_id],
     queryFn: () => getOrderPaymentStatus(eventId, order.short_id),
     enabled: !confirmationInFlight && !expiredBeforeConfirmation && secondsLeft !== null && secondsLeft <= 0,
-    refetchInterval: (query) => (query.state.data?.status === "RESERVED" ? 3000 : false),
+    // Stop only once the server has actually answered with something other
+    // than RESERVED. With no data yet (a failed request) keep trying — the
+    // default retry gives up after one attempt, which previously left the
+    // buyer on "confirming…" for good.
+    refetchInterval: (query) => (query.state.data && query.state.data.status !== "RESERVED" ? false : 3000),
   });
 
   useEffect(() => {
@@ -396,6 +419,46 @@ function PaymentForm({
   }, [confirmationInFlight]);
 
   const paymentElementOptions = useMemo(() => paymentElementOptionsFor(defaultBillingCountry), [defaultBillingCountry]);
+
+  const cancelMutation = useMutation({
+    mutationFn: () => cancelOrderReservation(eventId, order.short_id, cancelToken ?? ""),
+    onSuccess: ({ status }) => onCancelled(status),
+    onError: async (error) => {
+      if (error instanceof ApiError && error.code === "ORDER_NOT_CANCELLABLE") {
+        // Most likely it just completed (e.g. paid from another tab) — show the confirmation, not an error.
+        try {
+          const latest = await getOrderPaymentStatus(eventId, order.short_id);
+          if (latest.status === "COMPLETED") {
+            onPaid(latest.order ?? order);
+            return;
+          }
+        } catch {
+          // Fall through to the message below.
+        }
+      }
+      setCancelError(
+        error instanceof ApiError && error.code === "ORDER_CONFIRMATION_IN_FLIGHT"
+          ? "A payment is already being processed for this order. Please wait."
+          : resolveApiErrorMessage(error),
+      );
+    },
+  });
+
+  function confirmCancel() {
+    setCancelError(null);
+    modals.openConfirmModal({
+      title: "Cancel checkout?",
+      centered: true,
+      children: (
+        <Text size="sm">
+          We&apos;ll release your reserved tickets. Your selections stay saved, but availability is re-checked if you start again.
+        </Text>
+      ),
+      labels: { confirm: "Cancel checkout", cancel: "Keep my tickets" },
+      confirmProps: { color: "red" },
+      onConfirm: () => cancelMutation.mutate(),
+    });
+  }
 
   const statusQuery = useQuery({
     queryKey: ["order-payment-status", eventId, order.short_id],
@@ -619,6 +682,16 @@ function PaymentForm({
         <Button type="submit" loading={submitting} disabled={!stripe || !elements || verifyingExpiry} size="md" fullWidth>
           Pay {formatMoney(order.total_amount, order.currency)}
         </Button>
+        {cancelError && (
+          <Alert color="red" icon={<IconAlertCircle size={18} />}>
+            {cancelError}
+          </Alert>
+        )}
+        {cancelToken && !submitting && !confirmationInFlight && !verifyingExpiry && (
+          <Button variant="subtle" color="gray" size="sm" fullWidth loading={cancelMutation.isPending} onClick={confirmCancel}>
+            Cancel checkout
+          </Button>
+        )}
         <Text size="xs" c="dimmed" ta="center">
           Order {order.short_id}
         </Text>

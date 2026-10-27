@@ -43,7 +43,7 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
   draft: CheckoutDraft;
   onDraftChange: (updater: (current: CheckoutDraft) => CheckoutDraft) => void;
   onEditTickets: () => void;
-  onOrderCreated: (order: Order) => void;
+  onOrderCreated: (order: Order, cancelToken: string | null) => void;
   /** Advisory server quote for the cart + applied offer; undefined when no offer is in play. */
   quote?: Quote;
   quoteLoading: boolean;
@@ -104,7 +104,7 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
         } : null,
       }));
     },
-    onSuccess: (data: { order: Order }) => onOrderCreated(data.order),
+    onSuccess: (data) => onOrderCreated(data.order, data.cancel_token ?? null),
     onError: (error: Error) => {
       if (error instanceof ApiError && error.code === "TERMS_VERSION_CHANGED") return setTermsVersionChanged(true);
       if (error instanceof ApiError && isStaleOfferCode(error.code)) {
