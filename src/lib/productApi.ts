@@ -11,6 +11,7 @@ export type TicketOption = {
   id: number;
   product_id: number;
   name: string;
+  description: string | null;
   sort_order: number;
   price: string;
   starts_at: string | null;
@@ -29,6 +30,7 @@ export type Product = {
   organization_id: string;
   event_id: number;
   title: string;
+  description: string | null;
   product_type: "TICKET" | "GENERAL";
   type: PricingType;
   price: string | null;
@@ -59,6 +61,7 @@ export type Product = {
 export type TicketOptionInput = {
   id?: number | null;
   name: string;
+  description?: string | null;
   sort_order: number;
   price: number;
   starts_at_date?: string | null;
@@ -109,6 +112,7 @@ export function createProduct(
   eventId: number,
   input: {
     title: string;
+    description?: string | null;
     type: PricingType;
     price?: number | null;
     quantity_available?: number | null;
@@ -124,6 +128,7 @@ export function updateProduct(
   productId: number,
   input: {
     title?: string;
+    description?: string | null;
     type?: PricingType;
     price?: number | null;
     quantity_available?: number | null;

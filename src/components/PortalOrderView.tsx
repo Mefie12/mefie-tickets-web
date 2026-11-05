@@ -8,6 +8,7 @@ import { notifications } from "@mantine/notifications";
 import Link from "next/link";
 import { confirmUpdatedTerms, getOrder, type EntitlementRow, type OrderDetailPayload } from "@/lib/portalApi";
 import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
+import { TicketDescription } from "@/components/TicketDescription";
 import { assignmentStatusMeta, ticketLabel } from "@/lib/portalStatus";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import { AssignEntitlementModal } from "@/components/AssignEntitlementModal";
@@ -286,6 +287,7 @@ function EntitlementCard({
                 #{e.sequence_number}
               </Text>
             </Text>
+            <TicketDescription html={e.ticket.description} color="var(--mantine-color-dimmed)" />
             <Text size="sm">
               {e.attendee ? `${e.attendee.first_name} ${e.attendee.last_name}` : "No attendee yet"}
             </Text>
