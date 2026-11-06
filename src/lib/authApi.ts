@@ -49,6 +49,8 @@ export class ApiError extends Error {
   code?: string;
   /** Seconds to wait before retrying, from a 429's Retry-After header. */
   retryAfter?: number;
+  /** Correlation id (body `request_id` or x-request-id header) to quote to support on 5xx failures. */
+  requestId?: string;
 
   constructor(message: string, status: number, errors?: Record<string, string[]>, code?: string) {
     super(message);
@@ -63,6 +65,20 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Builds an ApiError from a failed response. `retryAfter` (seconds) comes from the JSON body's
+ * `retry_after` (what our 429s send) or, failing that, the Retry-After header — so rate-limit
+ * responses can drive a live countdown instead of a generic message.
+ */
+export function buildApiError(res: Response, data: { message?: string; errors?: Record<string, string[]>; code?: string; retry_after?: number; request_id?: string } | null): ApiError {
+  const error = new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+  const retryAfter = Number(data?.retry_after ?? res.headers.get("retry-after"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = retryAfter;
+  const requestId = data?.request_id ?? res.headers.get("x-request-id");
+  if (requestId) error.requestId = requestId;
+  return error;
+}
+
 async function request<T>(
   path: string,
   options: { method?: "GET" | "POST" | "PATCH"; body?: unknown } = {},
@@ -75,12 +91,7 @@ async function request<T>(
 
   const data = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    const error = new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
-    const retryAfter = Number(res.headers.get("retry-after"));
-    if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = retryAfter;
-    throw error;
-  }
+  if (!res.ok) throw buildApiError(res, data);
 
   return data as T;
 }

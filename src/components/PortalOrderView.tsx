@@ -8,6 +8,7 @@ import { notifications } from "@mantine/notifications";
 import Link from "next/link";
 import { confirmUpdatedTerms, getOrder, type EntitlementRow, type OrderDetailPayload } from "@/lib/portalApi";
 import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
+import { TicketDescription } from "@/components/TicketDescription";
 import { assignmentStatusMeta, ticketLabel } from "@/lib/portalStatus";
 import { formatEventDateRange } from "@/lib/eventDateTime";
 import { AssignEntitlementModal } from "@/components/AssignEntitlementModal";
@@ -40,7 +41,18 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
 
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [claimTarget, setClaimTarget] = useState<EntitlementRow | null>(null);
+  // `danger` is what the modal shows; `dangerOpen` is whether it's open. They're separate so the content
+  // stays put while the modal fades out (clearing it on close flashed the "Remove attendee" variant).
   const [danger, setDanger] = useState<{ mode: "revoke" | "reassign"; row: EntitlementRow } | null>(null);
+  const [dangerOpen, setDangerOpen] = useState(false);
+  // Fresh modal instance per open, so a reason/attendee typed for one ticket can't carry into the next if it
+  // is reopened mid fade-out (the reset only runs once the fade has finished).
+  const [dangerSeq, setDangerSeq] = useState(0);
+  const openDanger = (mode: "revoke" | "reassign", row: EntitlementRow) => {
+    setDanger({ mode, row });
+    setDangerSeq((n) => n + 1);
+    setDangerOpen(true);
+  };
   const [correctTarget, setCorrectTarget] = useState<EntitlementRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -129,8 +141,8 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
             onToggle={() => toggle(e.public_id)}
             onAssign={() => setAssignTarget(e.public_id)}
             onShareLink={() => setClaimTarget(e)}
-            onReassign={() => setDanger({ mode: "reassign", row: e })}
-            onRevoke={() => setDanger({ mode: "revoke", row: e })}
+            onReassign={() => openDanger("reassign", e)}
+            onRevoke={() => openDanger("revoke", e)}
             onCorrect={() => setCorrectTarget(e)}
             onConfirmTerms={() => confirmTerms.mutate(e.public_id)}
             confirmingTerms={confirmTerms.isPending}
@@ -212,10 +224,12 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
       />
 
       <RevokeReassignModal
+        key={dangerSeq}
         mode={danger?.mode ?? "revoke"}
         entitlement={danger?.row ?? null}
-        opened={danger !== null}
-        onClose={() => setDanger(null)}
+        opened={dangerOpen}
+        onClose={() => setDangerOpen(false)}
+        onExited={() => setDanger(null)}
         onDone={invalidate}
       />
 
@@ -262,8 +276,9 @@ function EntitlementCard({
 
   return (
     <Card withBorder radius="lg" p="md">
-      <Group justify="space-between" wrap="nowrap" align="flex-start">
-        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
+      {/* Wraps: when the details and the actions don't fit side by side (phones), the actions drop below. */}
+      <Group justify="space-between" wrap="wrap" align="flex-start">
+        <Group gap="sm" wrap="nowrap" align="flex-start" style={{ minWidth: 0, flex: "1 1 14rem" }}>
           {selectable && <Checkbox checked={selected} onChange={onToggle} mt={2} aria-label="Select ticket" />}
           <Stack gap={4} style={{ minWidth: 0 }}>
             <Text fw={600} size="sm" truncate>
@@ -272,6 +287,7 @@ function EntitlementCard({
                 #{e.sequence_number}
               </Text>
             </Text>
+            <TicketDescription html={e.ticket.description} color="var(--mantine-color-dimmed)" />
             <Text size="sm">
               {e.attendee ? `${e.attendee.first_name} ${e.attendee.last_name}` : "No attendee yet"}
             </Text>
@@ -304,7 +320,7 @@ function EntitlementCard({
             )}
           </Stack>
         </Group>
-        <Stack gap="xs" align="flex-end" style={{ flexShrink: 0 }}>
+        <Stack gap="xs" align="flex-end" style={{ flexShrink: 0, maxWidth: "100%" }}>
           <Badge color={meta.color} variant="light">
             {meta.label}
           </Badge>

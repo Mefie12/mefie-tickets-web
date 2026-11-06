@@ -142,7 +142,8 @@ async function request<T>(path: string, options: { method?: "GET" | "POST"; body
 }
 
 export function createOrder(eventId: number, input: CreateOrderInput) {
-  return request<{ order: Order }>(`/api/public/events/${eventId}/order`, { method: "POST", body: input });
+  // `cancel_token` is the buyer's capability for cancelOrderReservation(); only this response ever carries it.
+  return request<{ order: Order; cancel_token?: string }>(`/api/public/events/${eventId}/order`, { method: "POST", body: input });
 }
 
 export function createPaymentIntent(eventId: number, shortId: string) {
@@ -163,6 +164,21 @@ export function beginPaymentConfirmation(eventId: number, shortId: string) {
   return request<Record<string, never>>(
     `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/payment/begin-confirmation`,
     { method: "POST" },
+  );
+}
+
+/**
+ * Releases an unpaid reservation the buyer no longer wants. Resolves with the
+ * order's authoritative status: "ABANDONED" when this call released it, or
+ * "CANCELLED" if it was already cancelled (nothing was changed). Rejects with
+ * ApiError code "ORDER_CONFIRMATION_IN_FLIGHT" (a payment is already being
+ * processed — never cancel then) or "ORDER_NOT_CANCELLABLE" (e.g. it has
+ * already completed).
+ */
+export function cancelOrderReservation(eventId: number, shortId: string, cancelToken: string) {
+  return request<{ status: OrderStatus }>(
+    `/api/public/events/${eventId}/order/${encodeURIComponent(shortId)}/cancel`,
+    { method: "POST", body: { cancel_token: cancelToken } },
   );
 }
 

@@ -5,7 +5,8 @@
  * {token}` entry handler. `verifyOtp` starts the
  * `mefie_consumer_session` on success, same as locatorApi's pair.
  */
-import { ApiError } from "@/lib/authApi";
+import { buildApiError } from "@/lib/authApi";
+import type { OtpSent } from "@/lib/locatorApi";
 
 async function request<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -15,13 +16,13 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+    throw buildApiError(res, data);
   }
   return data as T;
 }
 
 export const requestInviteOtp = () =>
-  request<{ status: "sent"; masked_email: string }>("/api/public/event-invitations/otp/request", {});
+  request<OtpSent>("/api/public/event-invitations/otp/request", {});
 
 export const verifyInviteOtp = (code: string) =>
   request<{ status: "verified"; profile: { email: string; first_name: string; last_name: string } }>(

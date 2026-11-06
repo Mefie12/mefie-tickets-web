@@ -1,0 +1,19 @@
+.root {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.root p {
+  margin: 0 0 4px;
+}
+
+.root p:last-child {
+  margin-bottom: 0;
+}
+
+.root ul,
+.root ol {
+  margin: 0 0 4px;
+  padding-left: 18px;
+}

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { backendRequest } from "@/lib/backend";
+import { backendRequestResilient } from "@/lib/backend";
 import { relayResponse } from "@/lib/relayResponse";
 
 /**
@@ -9,6 +9,10 @@ import { relayResponse } from "@/lib/relayResponse";
  */
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
-  const result = await backendRequest("/api/public/claim", { method: "POST", body });
-  return relayResponse(result);
+  const result = await backendRequestResilient("/api/public/claim", { method: "POST", body });
+  const response = relayResponse(result, { structuredErrors: true });
+  // The API keeps the flow cookie so a failed delivery can be retried safely; drop the preview so a reload
+  // does not show the form again after a successful claim.
+  if (result.status === 200) response.cookies.delete("mefie_claim_preview");
+  return response;
 }

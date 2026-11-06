@@ -20,6 +20,7 @@ import { logout } from "@/lib/authApi";
 import { portalLogout, portalLogoutAll } from "@/lib/portalApi";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MefieLogo } from "@/components/MefieLogo";
+import { DISCOVER_HOME, isDiscoverHome, isPlainLeftClick } from "@/lib/discoverHome";
 import {
   AccountIdentity,
   buildAccountSections,
@@ -79,6 +80,15 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
     </>
   );
 
+  // Already on the clean Discover landing: the logo scrolls to the top instead of re-requesting the page.
+  // Anywhere else (including filtered Discover) it navigates to /discover, which clears search and filters.
+  function scrollToTopIfHome(event: React.MouseEvent<HTMLAnchorElement>) {
+    if (!isPlainLeftClick(event) || !isDiscoverHome(window.location.pathname, window.location.search)) return;
+    event.preventDefault();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
   return (
     <>
       <Box
@@ -93,7 +103,7 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
       >
         <Container size="xl">
           <Group h={68} justify="space-between" wrap="nowrap">
-            <Link href="/" aria-label="Mefie Tickets">
+            <Link href={DISCOVER_HOME} aria-label="Mefie Tickets" onClick={scrollToTopIfHome}>
               <MefieLogo h={28} />
             </Link>
 

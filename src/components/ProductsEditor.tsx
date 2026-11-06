@@ -33,6 +33,7 @@ import {
 } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
+import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/components/TicketDescriptionEditor";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { minimumEndTime, utcIsoToZonedPartsOrEmpty, wallClockEndIsInvalid } from "@/lib/eventDateTime";
@@ -54,6 +55,8 @@ function tierIndexFromPath(path: string): number {
 type TierFormValue = {
   id: number | null;
   name: string;
+  // Optional light rich text; "" = none (sent as null).
+  description: string;
   // NumberInput's onChange hands back a number once edited (never a
   // string), even though its *initial* value can be seeded as either —
   // "" is the only valid empty state, never "" AND a numeric string.
@@ -73,6 +76,7 @@ type TierFormValue = {
 
 type ProductFormValues = {
   title: string;
+  description: string;
   type: PricingType;
   price: number | "";
   quantity_available: number | "";
@@ -115,6 +119,7 @@ function emptyTier(): TierFormValue {
   return {
     id: null,
     name: "",
+    description: "",
     price: "",
     starts_at_date: "",
     starts_at_time: "",
@@ -186,6 +191,7 @@ function productToFormValues(product: Product | undefined, eventTimezone: string
   if (!product) {
     return {
       title: "",
+      description: "",
       type: "PAID",
       price: "",
       quantity_available: "",
@@ -202,6 +208,7 @@ function productToFormValues(product: Product | undefined, eventTimezone: string
   const endsAt = utcIsoToZonedPartsOrEmpty(product.ends_at, eventTimezone);
   return {
     title: product.title,
+    description: product.description ?? "",
     type: RECOGNIZED_TYPES.includes(product.type) ? product.type : "PAID",
     price: product.price !== null ? Number(product.price) : "",
     quantity_available: product.quantity_available !== null ? product.quantity_available : "",
@@ -220,6 +227,7 @@ function productToFormValues(product: Product | undefined, eventTimezone: string
             return {
               id: t.id,
               name: t.name,
+              description: t.description ?? "",
               price: Number(t.price),
               starts_at_date: startsAt.date,
               starts_at_time: startsAt.time,
@@ -464,6 +472,8 @@ function ProductFormModal({
     initialValues: productToFormValues(product, eventTimezone),
     validate: {
       title: (v) => (v.trim().length === 0 ? "Title is required" : null),
+      // Optional: only a length check, never "required".
+      description: (v) => (v.length > TICKET_DESCRIPTION_MAX_LENGTH ? "Description is too long." : null),
       price: (v, values) => (values.type === "PAID" && v === "" ? "Price is required" : null),
       starts_at_time: (v, values) =>
         Boolean(values.starts_at_date) !== Boolean(v) ? "Set both a date and a time, or neither" : null,
@@ -484,6 +494,7 @@ function ProductFormModal({
         return sum > v ? `The enabled options' combined capacity (${sum}) exceeds this group capacity (${v}).` : null;
       },
       tiers: {
+        description: (v) => (v.length > TICKET_DESCRIPTION_MAX_LENGTH ? "Description is too long." : null),
         name: (v, values, path) =>
           values.type === "TIERED" && path.startsWith("tiers") && v.trim().length === 0 ? "Name is required" : null,
         price: (v, values) => (values.type === "TIERED" && v === "" ? "Price is required" : null),
@@ -535,6 +546,7 @@ function ProductFormModal({
     mutationFn: (values: ProductFormValues) => {
       const input = {
         title: values.title,
+        description: values.description.trim() === "" ? null : values.description,
         type: values.type,
         price: values.type === "PAID" && values.price !== "" ? values.price : null,
         quantity_available: values.quantity_available === "" ? null : values.quantity_available,
@@ -553,6 +565,7 @@ function ProductFormModal({
                 (t, index): TicketOptionInput => ({
                   id: t.id,
                   name: t.name,
+                  description: t.description.trim() === "" ? null : t.description,
                   sort_order: index,
                   price: t.price === "" ? 0 : t.price,
                   // Forwarded as typed; the server resolves them against
@@ -624,6 +637,17 @@ function ProductFormModal({
           ) : (
             <TextInput label="Ticket title" withAsterisk placeholder="General Admission" {...form.getInputProps("title")} />
           )}
+
+          <TicketDescriptionEditor
+            value={form.values.description}
+            onChange={(html) => form.setFieldValue("description", html)}
+            error={form.errors.description}
+            description={
+              form.values.type === "TIERED"
+                ? "Optional. Shown under every option in this group. An option that has its own description shows that instead of this one."
+                : undefined
+            }
+          />
 
           {form.values.type === "REGISTRATION" && (
             <Group gap="xs">
@@ -744,6 +768,13 @@ function ProductFormModal({
                       min={0}
                       decimalScale={currencyExponent(eventCurrency)}
                       {...form.getInputProps(`tiers.${index}.price`)}
+                    />
+                    <TicketDescriptionEditor
+                      label="Option description"
+                      description="Optional. If filled in, buyers see this instead of the ticket group description for this option. Leave empty to use the group description."
+                      value={tier.description}
+                      onChange={(html) => form.setFieldValue(`tiers.${index}.description`, html)}
+                      error={form.errors[`tiers.${index}.description`]}
                     />
                     <Text size="xs" c="dimmed">
                       Sale window times are in {eventTimezone}, this event&apos;s timezone.

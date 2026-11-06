@@ -4,7 +4,7 @@
  * src/lib/backend.ts), same ApiError/request<T> shape as checkoutApi.ts.
  * Mirrors App\Domain\Consumer\Services\ConsumerDashboardService.
  */
-import { ApiError } from "@/lib/authApi";
+import { buildApiError } from "@/lib/authApi";
 import type { AnswerInput } from "@/lib/checkoutApi";
 
 async function request<T>(
@@ -18,7 +18,7 @@ async function request<T>(
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+    throw buildApiError(res, data);
   }
   return data as T;
 }
@@ -34,7 +34,7 @@ export type EntitlementAssignmentStatus =
 
 export type EntitlementCommercialStatus = "ACTIVE" | "REFUNDED" | "VOIDED" | "SUSPENDED";
 
-export type PortalTicketLabel = { name: string | null; option: string | null };
+export type PortalTicketLabel = { name: string | null; option: string | null; description?: string | null };
 
 export type OrderCard = {
   short_id: string;
@@ -300,7 +300,8 @@ export const withdrawRefundRequest = (orderShortId: string, refundRequestId: num
 
 // --- step-up + session --------------------------------------------
 
-export const requestStepUp = () => request("/api/portal/consumer/step-up/request", { method: "POST" });
+export const requestStepUp = () =>
+  request<{ status: "sent"; expires_in?: number; resend_in?: number }>("/api/portal/consumer/step-up/request", { method: "POST" });
 export const verifyStepUp = (code: string) =>
   request("/api/portal/consumer/step-up/verify", { method: "POST", body: { code } });
 
@@ -308,7 +309,7 @@ export const portalLogout = () => request("/api/portal/consumer/logout", { metho
 export const portalLogoutAll = () => request("/api/portal/consumer/logout-all", { method: "POST" });
 
 export type ReceivedTicket = {
-  id: number; ticket_reference: string; ticket_name: string | null; ticket_option: string | null;
+  id: number; ticket_reference: string; ticket_name: string | null; ticket_option: string | null; ticket_description?: string | null;
   event: { title: string | null; start_date: string | null; timezone: string | null };
   attendee: { first_name: string | null; last_name: string | null };
   assignment_status: string; commercial_status: string; reacceptance_required: boolean; credential_available: boolean;

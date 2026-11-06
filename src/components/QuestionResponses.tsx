@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@mantine/hooks";
-import { Alert, Button, Card, Group, Pagination, ScrollArea, SegmentedControl, Select, Stack, Table, Text, TextInput } from "@mantine/core";
+import { Alert, Button, Card, Group, Pagination, ScrollArea, SegmentedControl, Select, Stack, Table, Text, TextInput, Tooltip } from "@mantine/core";
 import { IconDownload, IconSearch } from "@tabler/icons-react";
 import { listProducts } from "@/lib/productApi";
 
@@ -36,12 +36,18 @@ export function QuestionResponses({ eventId }: { eventId: number }) {
   const data = report.data;
   const downloadParams = new URLSearchParams(params);
   downloadParams.delete("page");
+  const nothingToExport = data !== undefined && data.meta.total === 0;
 
   return <Stack gap="md">
     <Text c="dimmed">Current order and ticket answers for this event. “For attendee” identifies the subject; “Recorded by” identifies the submitter when known.</Text>
     <Group justify="space-between" align="end">
       <SegmentedControl value={kind} onChange={(value) => { setKind(value as Kind); setPage(1); }} data={[{ label: "Order responses", value: "orders" }, { label: "Attendee responses", value: "attendees" }]} />
-      <Button component="a" href={`/api/events/${eventId}/responses/${kind}/export?${downloadParams}`} leftSection={<IconDownload size={16} />} disabled={!data}>Download filtered CSV</Button>
+      <Tooltip label="No responses to export" disabled={!nothingToExport}>
+        <span>
+          {/* No href while empty: a disabled anchor would still follow the link on keyboard Enter. */}
+          <Button component="a" href={data && !nothingToExport ? `/api/events/${eventId}/responses/${kind}/export?${downloadParams}` : undefined} leftSection={<IconDownload size={16} />} disabled={!data || nothingToExport}>Download filtered CSV</Button>
+        </span>
+      </Tooltip>
     </Group>
     <Alert color="blue" title="Sensitive information">Downloads include all recorded answers, including sensitive responses. Store and share them carefully.</Alert>
     <Group align="end">

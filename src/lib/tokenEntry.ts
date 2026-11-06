@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { backendRequest } from "@/lib/backend";
+import { decodePreviewCookie, encodePreviewCookie } from "@/lib/previewCookie";
 
 /**
  * Shared token-exchange entry handler (docs/17 §18). The raw token
@@ -19,16 +20,23 @@ export async function handleTokenEntry(
     backendPath,
     previewCookie,
     resolveDestination,
+    unavailableState,
+    request: backendCall = backendRequest,
   }: {
     backendPath: string;
     previewCookie: { name: string; minutes: number } | null;
     resolveDestination: (status: string, httpStatus: number, data: Record<string, unknown>) => string;
+    /** When set, a backend failure with status >= 500 redirects with this state instead of "notfound". */
+    unavailableState?: string;
+    /** Backend call to use; defaults to backendRequest. */
+    request?: typeof backendRequest;
   },
 ): Promise<NextResponse> {
-  const result = await backendRequest<{ status?: string } & Record<string, unknown>>(backendPath, { method: "GET" });
+  const result = await backendCall<{ status?: string } & Record<string, unknown>>(backendPath, { method: "GET" });
 
   const status = typeof result.data?.status === "string" ? result.data.status : "notfound";
-  const destination = resolveDestination(result.ok ? status : "notfound", result.status, result.data ?? {});
+  const failedState = unavailableState && result.status >= 500 ? unavailableState : "notfound";
+  const destination = resolveDestination(result.ok ? status : failedState, result.status, result.data ?? {});
 
   const response = NextResponse.redirect(new URL(destination, request.url), { status: 303 });
 
@@ -54,7 +62,7 @@ export async function handleTokenEntry(
     // Strip the flow-control field; keep only the render payload.
     const { status: _status, ...preview } = result.data ?? {};
     void _status;
-    response.cookies.set(previewCookie.name, JSON.stringify(preview), {
+    response.cookies.set(previewCookie.name, encodePreviewCookie(preview), {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
@@ -76,9 +84,5 @@ export async function readPreviewCookie<T>(name: string): Promise<T | null> {
   const jar = await cookies();
   const raw = jar.get(name)?.value;
   if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
+  return decodePreviewCookie<T>(raw);
 }

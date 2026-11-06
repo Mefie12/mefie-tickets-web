@@ -7,6 +7,15 @@ import { useDebouncedValue } from "@mantine/hooks";
 import { IconFilter, IconSearch } from "@tabler/icons-react";
 import { CountrySelector } from "@/components/CountrySelector";
 import type { PublicEventTaxonomies, PublicEventCategory } from "@/lib/publicEventApi";
+import {
+  EMPTY_DRAFT,
+  buildDiscoverUrl,
+  countActiveFilters,
+  dateRangeError,
+  draftFromParams,
+  setDraftCategory,
+  type FilterDraft,
+} from "@/lib/eventFilters";
 
 /**
  * Every change writes straight into the URL's query string (via
@@ -19,11 +28,16 @@ import type { PublicEventTaxonomies, PublicEventCategory } from "@/lib/publicEve
  * plus a "Filters" button that opens the subcategory/country/date
  * fields in a Drawer, rather than showing them inline.
  *
- * `showCategoryChips` renders the "general-event-listing" category
- * pill row (All Events + one per taxonomy category) in place of the
- * drawer's category dropdown — used only on Discover's browse/filtered
- * view, not the curated landing state, per the Figma frames (the
- * curated Discover page has no chip row).
+ * The drawer always shows the same fields (Category, Subcategory,
+ * Country, From, To) regardless of view. Edits are staged in a local
+ * draft and written to the URL once, via "Show results" — so a
+ * half-typed date never triggers a server re-fetch under the open
+ * drawer.
+ *
+ * `showCategoryChips` renders the category pill row (All Events + one
+ * per taxonomy category) as a quick shortcut on Discover's browse view.
+ * It reads and writes the same `category` URL param as the drawer, so
+ * the two can never disagree.
  */
 export function EventFilterBar({
   taxonomies,
@@ -38,24 +52,37 @@ export function EventFilterBar({
 
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [debouncedQ] = useDebouncedValue(q, 300);
-  const category = searchParams.get("category") ?? "";
-  const subcategory = searchParams.get("subcategory") ?? "";
-  const country = searchParams.get("country") ?? "";
-  const from = searchParams.get("from") ?? "";
-  const to = searchParams.get("to") ?? "";
-  const activeFilterCount = [category, subcategory, country, from, to].filter(Boolean).length;
+  const applied = draftFromParams(searchParams);
+  const category = applied.category;
+  const activeFilterCount = countActiveFilters(applied);
 
-  const selectedCategory = taxonomies.categories.find((c: PublicEventCategory) => c.slug === category);
+  const [draft, setDraft] = useState<FilterDraft>(applied);
+  const selectedCategory = taxonomies.categories.find((c: PublicEventCategory) => c.slug === draft.category);
+  const rangeError = dateRangeError(draft);
+  const draftCount = countActiveFilters(draft);
 
-  function applyFilters(updates: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams.toString());
-    for (const [key, value] of Object.entries(updates)) {
-      if (value) params.set(key, value);
-      else params.delete(key);
-    }
-    params.delete("page");
-    const query = params.toString();
-    router.push(query ? `/discover?${query}` : "/discover");
+  function applyFilters(updates: Record<string, string | null>, options?: { keepBrowse?: boolean }) {
+    router.push(buildDiscoverUrl(new URLSearchParams(searchParams.toString()), updates, options));
+  }
+
+  function openFilters() {
+    setDraft(draftFromParams(searchParams));
+    setFiltersOpened(true);
+  }
+
+  function applyDraft() {
+    if (rangeError) return;
+    applyFilters(
+      {
+        category: draft.category || null,
+        subcategory: draft.subcategory || null,
+        country: draft.country || null,
+        from: draft.from || null,
+        to: draft.to || null,
+      },
+      { keepBrowse: true },
+    );
+    setFiltersOpened(false);
   }
 
   useEffect(() => {
@@ -83,7 +110,7 @@ export function EventFilterBar({
             radius="md"
             size="md"
             leftSection={<IconFilter size={20} />}
-            onClick={() => setFiltersOpened(true)}
+            onClick={openFilters}
           >
             Filters
           </Button>
@@ -96,7 +123,7 @@ export function EventFilterBar({
             radius="xl"
             size="sm"
             variant={category ? "default" : "filled"}
-            onClick={() => applyFilters({ category: null, subcategory: null })}
+            onClick={() => applyFilters({ category: null, subcategory: null }, { keepBrowse: true })}
             style={{ flexShrink: 0 }}
           >
             All Events
@@ -118,17 +145,15 @@ export function EventFilterBar({
 
       <Drawer opened={filtersOpened} onClose={() => setFiltersOpened(false)} title="Filters" position="right">
         <Stack gap="md">
-          {!showCategoryChips && (
-            <Select
-              label="Category"
-              placeholder="All categories"
-              searchable
-              clearable
-              data={taxonomies.categories.map((c: PublicEventCategory) => ({ value: c.slug, label: c.name }))}
-              value={category || null}
-              onChange={(value) => applyFilters({ category: value, subcategory: null })}
-            />
-          )}
+          <Select
+            label="Category"
+            placeholder="All categories"
+            searchable
+            clearable
+            data={taxonomies.categories.map((c: PublicEventCategory) => ({ value: c.slug, label: c.name }))}
+            value={draft.category || null}
+            onChange={(value) => setDraft((d) => setDraftCategory(d, value))}
+          />
           <Select
             label="Subcategory"
             placeholder={selectedCategory ? "All subcategories" : "Select a category first"}
@@ -136,38 +161,43 @@ export function EventFilterBar({
             clearable
             disabled={!selectedCategory}
             data={(selectedCategory?.subcategories ?? []).map((s) => ({ value: s.slug, label: s.name }))}
-            value={subcategory || null}
-            onChange={(value) => applyFilters({ subcategory: value })}
+            value={draft.subcategory || null}
+            onChange={(value) => setDraft((d) => ({ ...d, subcategory: value ?? "" }))}
           />
           <CountrySelector
             label="Country"
             placeholder="Any country"
-            value={country ? country.toUpperCase() : null}
-            onChange={(value) => applyFilters({ country: value ? value.toLowerCase() : null })}
+            value={draft.country ? draft.country.toUpperCase() : null}
+            onChange={(value) => setDraft((d) => ({ ...d, country: value ? value.toLowerCase() : "" }))}
           />
           <TextInput
             type="date"
             label="From"
-            value={from}
-            onChange={(e) => applyFilters({ from: e.currentTarget.value || null })}
+            value={draft.from}
+            onChange={(e) => {
+              const value = e.currentTarget.value;
+              setDraft((d) => ({ ...d, from: value }));
+            }}
           />
           <TextInput
             type="date"
             label="To"
-            value={to}
-            onChange={(e) => applyFilters({ to: e.currentTarget.value || null })}
+            value={draft.to}
+            min={draft.from || undefined}
+            error={rangeError}
+            onChange={(e) => {
+              const value = e.currentTarget.value;
+              setDraft((d) => ({ ...d, to: value }));
+            }}
           />
-          {activeFilterCount > 0 && (
-            <Button
-              variant="subtle"
-              c="dimmed"
-              onClick={() => {
-                applyFilters({ category: null, subcategory: null, country: null, from: null, to: null });
-              }}
-            >
-              Clear filters
+          <Group grow mt="sm">
+            <Button variant="default" disabled={draftCount === 0} onClick={() => setDraft(EMPTY_DRAFT)}>
+              Clear all
             </Button>
-          )}
+            <Button disabled={Boolean(rangeError)} onClick={applyDraft}>
+              Show results
+            </Button>
+          </Group>
         </Stack>
       </Drawer>
     </>

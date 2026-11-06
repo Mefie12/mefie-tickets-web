@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Button, Menu, Text } from "@mantine/core";
-import { IconBolt, IconChevronDown, IconPercentage, IconPlus, IconTicket } from "@tabler/icons-react";
+import { IconBolt, IconChevronDown, IconPercentage, IconPlus, IconTicket, IconUsersGroup } from "@tabler/icons-react";
 
 /**
  * "Create offer" asks what kind of offer up front, like CreateEventMenu does for
@@ -24,6 +24,10 @@ export function CreateOfferMenu({ eventId }: { eventId: number }) {
         <Menu.Item component={Link} href={`${base}?template=fixed`} leftSection={<IconTicket size={18} />} py={8}>
           <Text size="sm" fw={600}>Fixed-amount code</Text>
           <Text size="xs" c="dimmed">e.g. 10 off each ticket</Text>
+        </Menu.Item>
+        <Menu.Item component={Link} href={`${base}?template=group`} leftSection={<IconUsersGroup size={18} />} py={8}>
+          <Text size="sm" fw={600}>Couple or group price</Text>
+          <Text size="xs" c="dimmed">e.g. 2 tickets for 350 instead of 400</Text>
         </Menu.Item>
         <Menu.Item component={Link} href={`${base}?template=automatic`} leftSection={<IconBolt size={18} />} py={8}>
           <Text size="sm" fw={600}>Automatic sale</Text>

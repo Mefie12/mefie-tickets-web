@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { backendRequestResilient } from "@/lib/backend";
 import { handleTokenEntry } from "@/lib/tokenEntry";
 
 /**
@@ -12,6 +13,8 @@ export function GET(request: NextRequest, { params }: { params: Promise<{ token:
   return params.then(({ token }) =>
     handleTokenEntry(request, {
       backendPath: `/api/public/claim/${encodeURIComponent(token)}`,
+      request: backendRequestResilient,
+      unavailableState: "unavailable",
       previewCookie: { name: "mefie_claim_preview", minutes: 30 },
       resolveDestination: (status) =>
         status === "claimable" ? "/claim/continue" : `/claim/continue?state=${encodeURIComponent(status)}`,
