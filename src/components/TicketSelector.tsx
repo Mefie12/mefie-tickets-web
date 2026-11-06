@@ -2,6 +2,7 @@
 
 import { ActionIcon, Badge, Card, Group, NumberInput, Stack, Text } from "@mantine/core";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
+import { TicketDescription } from "@/components/TicketDescription";
 import type { PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
 import { formatMoney } from "@/lib/money";
 
@@ -133,6 +134,8 @@ function TicketOptionRow({ product, option, quantity, onChange, currencyCode, di
             disabled={!available}
           />
         </Group>
+        {/* Below the stepper on purpose: expanding a long description must never push the quantity control down. */}
+        <TicketDescription html={option ? option.description : product.description} color={mutedColor} collapsible />
       </Stack>
     </Card>
   );

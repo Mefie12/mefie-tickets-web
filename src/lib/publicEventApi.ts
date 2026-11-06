@@ -72,6 +72,8 @@ export type PublicOrganization = {
 export type PublicTicketOption = {
   id: number;
   name: string;
+  // Effective text: the option's own, else the ticket group's (resolved by the API); null when neither is set.
+  description: string | null;
   price: string;
   is_available: boolean;
   status: "AVAILABLE" | "SOLD_OUT" | "COMING_SOON" | "SALE_ENDED" | "PAUSED";
@@ -86,6 +88,8 @@ export type PublicTicketOption = {
 export type PublicProduct = {
   id: number;
   title: string;
+  // Optional sanitised light rich text (bold/italic/lists); null when unset.
+  description: string | null;
   type: PricingType;
   current_price: string | null;
   is_sold_out: boolean;
