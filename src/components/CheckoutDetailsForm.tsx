@@ -78,7 +78,12 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
   const orderQuestions = event.questions.filter((q) => q.scope === "ORDER").sort((a, b) => a.sort_order - b.sort_order);
   const attendeeQuestions = event.questions.filter((q) => q.scope === "ATTENDEE").sort((a, b) => a.sort_order - b.sort_order);
   const productTypeById = new Map(event.products.map((p) => [p.id, p.type]));
-  const termsRequired = event.terms !== null && cartItems.some((item) => TERMS_TRIGGERING_TYPES.has(productTypeById.get(item.product_id) ?? ""));
+  // Bundles count by the tickets inside them (their slots carry the component product).
+  const termsRequired = event.terms !== null && (
+    cartItems.some((item) => TERMS_TRIGGERING_TYPES.has(productTypeById.get(item.product_id) ?? ""))
+    || draft.slots.some((slot) => TERMS_TRIGGERING_TYPES.has(productTypeById.get(slot.product_id) ?? ""))
+    || cartItems.some((item) => typeof item.bundle_id === "number")
+  );
   const pageCount = Math.max(1, Math.ceil(draft.slots.length / ATTENDEE_PAGE_SIZE));
   const activePage = Math.min(page, pageCount);
   const visibleSlots = draft.slots.slice((activePage - 1) * ATTENDEE_PAGE_SIZE, activePage * ATTENDEE_PAGE_SIZE);

@@ -45,19 +45,25 @@ type FormState = {
 const scopeKey = {
   product: (productId: number) => `p:${productId}`,
   option: (productId: number, optionId: number) => `o:${productId}:${optionId}`,
+  bundle: (bundleId: number) => `b:${bundleId}`,
 };
 
 function rowsToScopeState(rows: OfferScopeRow[] | undefined): Record<string, boolean> {
   const state: Record<string, boolean> = {};
   for (const row of rows ?? []) {
-    state[row.ticket_option_id === null ? scopeKey.product(row.product_id) : scopeKey.option(row.product_id, row.ticket_option_id)] = true;
+    if (row.bundle_id != null) state[scopeKey.bundle(row.bundle_id)] = true;
+    else if (row.product_id !== null) state[row.ticket_option_id === null ? scopeKey.product(row.product_id) : scopeKey.option(row.product_id, row.ticket_option_id)] = true;
   }
   return state;
 }
 
-function scopeStateToRows(scope: Record<string, boolean>, inventory: OfferTicketType[]): OfferScopeRow[] {
+function scopeStateToRows(scope: Record<string, boolean>, inventory: OfferTicketType[], bundlesAllowed = true): OfferScopeRow[] {
   const rows: OfferScopeRow[] = [];
   for (const type of inventory) {
+    if (type.bundleId !== undefined) {
+      if (bundlesAllowed && scope[scopeKey.bundle(type.bundleId)]) rows.push({ product_id: null, ticket_option_id: null, bundle_id: type.bundleId });
+      continue;
+    }
     if (scope[scopeKey.product(type.productId)]) {
       rows.push({ product_id: type.productId, ticket_option_id: null });
       continue;
@@ -175,7 +181,13 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
   const [initialStart] = useState(() => (initial ? initialState({ initial, timezone, eventStart }).starts : undefined));
   const patch = (changes: Partial<FormState>) => setForm((f) => ({ ...f, ...changes }));
 
-  const scopeRows = useMemo(() => scopeStateToRows(form.scope, inventory), [form.scope, inventory]);
+  // Bundles take percentage offers only; an offer targets tickets OR bundles.
+  const bundlesAllowed = form.discountType === "PERCENTAGE";
+  const scopeRows = useMemo(() => scopeStateToRows(form.scope, inventory, bundlesAllowed), [form.scope, inventory, bundlesAllowed]);
+  const ticketInventory = inventory.filter((t) => t.bundleId === undefined);
+  const bundleInventory = inventory.filter((t) => t.bundleId !== undefined);
+  const bundleScoped = scopeRows.some((row) => row.bundle_id != null);
+  const ticketScoped = scopeRows.some((row) => row.bundle_id == null);
   const isBundle = form.discountType === "GROUP_BUNDLE";
   const discountValue = isBundle
     ? 0
@@ -383,9 +395,9 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
             </Section>
 
             <Section title="3. Which tickets">
-              {inventory.length === 0 && <Alert color="blue" icon={<IconInfoCircle size={18} />}>Create a ticket type first, then come back to add an offer.</Alert>}
-              <Stack gap="sm">
-                {inventory.map((type) => {
+              {ticketInventory.length === 0 && <Alert color="blue" icon={<IconInfoCircle size={18} />}>Create a ticket type first, then come back to add an offer.</Alert>}
+              <Stack gap="sm" style={bundleScoped ? { opacity: 0.5, pointerEvents: "none" } : undefined} aria-disabled={bundleScoped}>
+                {ticketInventory.map((type) => {
                   const wholeKey = scopeKey.product(type.productId);
                   const whole = !!form.scope[wholeKey];
                   return (
@@ -409,6 +421,20 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
                   );
                 })}
               </Stack>
+              {bundlesAllowed && bundleInventory.length > 0 && (
+                <Stack gap={6} mt="sm">
+                  <Text fw={600} size="sm">Bundles</Text>
+                  <Text size="xs" c="dimmed">
+                    The percentage comes off the bundle price. An offer applies to tickets or to bundles, not both — and its limits then count bundles bought (a Rave Crew counts as one).
+                  </Text>
+                  {bundleInventory.map((type) => (
+                    <Checkbox key={type.bundleId} label={type.title} description={type.priceMinor !== null ? formatMinorAmount(type.priceMinor, currency) : undefined}
+                      disabled={ticketScoped}
+                      checked={!!form.scope[scopeKey.bundle(type.bundleId as number)]}
+                      onChange={(e) => patch({ scope: { ...form.scope, [scopeKey.bundle(type.bundleId as number)]: e.currentTarget.checked } })} />
+                  ))}
+                </Stack>
+              )}
               {errors.scope && <Text size="sm" c="var(--mantine-color-error)" role="alert">{errors.scope}</Text>}
               <Text size="xs" c="dimmed">
                 {isBundle || minQuantity !== null

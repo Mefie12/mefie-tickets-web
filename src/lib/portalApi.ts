@@ -34,7 +34,13 @@ export type EntitlementAssignmentStatus =
 
 export type EntitlementCommercialStatus = "ACTIVE" | "REFUNDED" | "VOIDED" | "SUSPENDED";
 
-export type PortalTicketLabel = { name: string | null; option: string | null; description?: string | null };
+export type PortalTicketLabel = {
+  name: string | null;
+  option: string | null;
+  description?: string | null;
+  /** Set when bought inside a bundle: "Rave Crew · 2 of 5". */
+  bundle?: { title: string; position: number; size: number; label: string } | null;
+};
 
 export type OrderCard = {
   short_id: string;
@@ -310,6 +316,7 @@ export const portalLogoutAll = () => request("/api/portal/consumer/logout-all", 
 
 export type ReceivedTicket = {
   id: number; ticket_reference: string; ticket_name: string | null; ticket_option: string | null; ticket_description?: string | null;
+  ticket_bundle?: { label: string } | null;
   event: { title: string | null; start_date: string | null; timezone: string | null };
   attendee: { first_name: string | null; last_name: string | null };
   assignment_status: string; commercial_status: string; reacceptance_required: boolean; credential_available: boolean;
