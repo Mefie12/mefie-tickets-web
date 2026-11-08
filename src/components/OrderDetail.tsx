@@ -458,29 +458,13 @@ export function OrderDetail({
       )}
 
       <Section title={ITEMS_LABEL[view]}>
-        {order.items.filter((item) => item.order_bundle_id == null).map((item) => (
+        {order.items.map((item) => (
           <Group key={item.id} justify="space-between">
             <Text size="sm">
               {item.quantity} × {item.ticket_display_name}
             </Text>
             <Text size="sm">{formatAmount(item.item_total, order.currency)}</Text>
           </Group>
-        ))}
-        {(order.bundles ?? []).map((bundle) => (
-          <Stack key={`bundle-${bundle.id}`} gap={2}>
-            <Group justify="space-between">
-              <Text size="sm">
-                {bundle.quantity} × {bundle.title}{" "}
-                <Text span size="xs" c="dimmed">({bundle.tickets_per_bundle} tickets each)</Text>
-              </Text>
-              <Text size="sm">{formatAmount(order.items.filter((item) => item.order_bundle_id === bundle.id).reduce((sum, item) => sum + Number(item.item_total), 0), order.currency)}</Text>
-            </Group>
-            {order.items.filter((item) => item.order_bundle_id === bundle.id).map((item) => (
-              <Text key={item.id} size="xs" c="dimmed" pl="md">
-                {item.quantity} × {item.ticket_display_name}
-              </Text>
-            ))}
-          </Stack>
         ))}
         <Divider />
         {showFees && (
@@ -618,7 +602,7 @@ export function OrderDetail({
                                 {ticket.ticket_name ?? "Ticket"}
                               </Text>
                               <Text size="xs" c="dimmed">
-                                #{ticket.sequence_number}{ticket.bundle_label ? ` · ${ticket.bundle_label}` : ""}
+                                #{ticket.sequence_number}
                               </Text>
                             </Stack>
                           </Group>

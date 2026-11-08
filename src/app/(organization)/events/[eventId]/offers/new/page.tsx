@@ -3,7 +3,7 @@ import { Stack, Text, Title } from "@mantine/core";
 import { backendRequest } from "@/lib/backend";
 import { getCurrentOrganization, getEventById } from "@/lib/session";
 import type { Offer } from "@/lib/offersApi";
-import type { Bundle, Product } from "@/lib/productApi";
+import type { Product } from "@/lib/productApi";
 import { offerInventory } from "@/lib/offerInventory";
 import { OfferForm } from "@/components/OfferForm";
 
@@ -13,13 +13,11 @@ export default async function NewOfferPage({ params, searchParams }: {
 }) {
   const { eventId } = await params;
   const { template, from } = await searchParams;
-  const [event, organization, products, offers, bundlesResult] = await Promise.all([
+  const [event, organization, products, offers] = await Promise.all([
     getEventById(eventId),
     getCurrentOrganization(),
     backendRequest<{ products: Product[] }>(`/api/events/${eventId}/products`),
     backendRequest<{ offers: Offer[] }>(`/api/events/${eventId}/offers`),
-    // 404 while bundles are off — then simply no bundles to target.
-    backendRequest<{ bundles: Bundle[] }>(`/api/events/${eventId}/bundles`),
   ]);
   // ?from=<offer id> duplicates one of THIS event's offers (looked up in the event's own list, so
   // an id from elsewhere is simply ignored).
@@ -38,7 +36,7 @@ export default async function NewOfferPage({ params, searchParams }: {
         currency={event.currency_code}
         timezone={event.timezone}
         eventStart={event.start_date}
-        inventory={offerInventory(products.data.products, event.currency_code, bundlesResult.ok ? bundlesResult.data.bundles : [])}
+        inventory={offerInventory(products.data.products, event.currency_code)}
         otherOffers={offers.data.offers}
         prefill={source}
         template={template === "fixed" || template === "automatic" || template === "percent" || template === "group" ? template : undefined}

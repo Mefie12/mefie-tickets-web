@@ -12,7 +12,7 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
   const { eventId } = await params;
   const [eventResult, productsResult, questionsResult, complimentaryResult, organization] = await Promise.all([
     backendRequest<{ event: Event }>(`/api/events/${eventId}`),
-    backendRequest<{ products: Product[]; bundles_enabled?: boolean }>(`/api/events/${eventId}/products`),
+    backendRequest<{ products: Product[] }>(`/api/events/${eventId}/products`),
     backendRequest<{ questions: Question[] }>(`/api/events/${eventId}/questions`),
     backendRequest<{ program: ComplimentaryProgram }>(`/api/events/${eventId}/complimentary-program`),
     getCurrentOrganization(),
@@ -23,7 +23,6 @@ export default async function EventSettingsPage({ params }: { params: Promise<{ 
       <EventManager
         initialEvent={eventResult.data.event}
         initialProducts={productsResult.status === 200 ? productsResult.data.products : []}
-        bundlesEnabled={productsResult.status === 200 ? Boolean(productsResult.data.bundles_enabled) : false}
         initialQuestions={questionsResult.status === 200 ? questionsResult.data.questions : []}
         initialComplimentaryProgram={complimentaryResult.data.program}
         organizationSlug={organization?.slug ?? ""}
