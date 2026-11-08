@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { quoteOffers, type Quote } from "@/lib/offersApi";
+import { toApiItems } from "@/lib/bundleCart";
 import { classifyQuoteError, quoteRetryDelay, rateLimitWaitSeconds, shouldRetryQuote, type QuoteProblem } from "@/lib/quoteProblem";
 import { parseQuoteSignature, quoteSignature, signatureHasItems, type QuoteLine } from "@/lib/quoteSignature";
 
@@ -43,7 +44,7 @@ export function useOfferQuote(args: {
     queryFn: async () => {
       const parsed = parseQuoteSignature(debounced);
       const { quote } = await quoteOffers(eventId, {
-        items: parsed.items,
+        items: toApiItems(parsed.items),
         promo_code: parsed.promoCode,
         offer_token: parsed.offerToken,
       });

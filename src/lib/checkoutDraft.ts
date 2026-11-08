@@ -1,5 +1,6 @@
 import type { AnswerValue, CreateOrderInput } from "@/lib/checkoutApi";
 import type { StoredCartItem } from "@/lib/cartStorage";
+import { toApiItems } from "@/lib/bundleCart";
 import type { PublicQuestion } from "@/lib/publicEventApi";
 import { isQuestionAnswered } from "@/components/EditableQuestionField";
 import { isValidInternationalPhoneNumber } from "@/lib/phone";
@@ -10,12 +11,20 @@ export const ATTENDEE_PAGE_SIZE = 10;
 export type AssignmentMode = "now" | "later";
 export type SlotAssignment = "me" | "other" | "later" | null;
 
-export type CheckoutCartLine = StoredCartItem & { product_title: string };
+/**
+ * A line attendee slots are built from. For a bundle, the checkout page
+ * passes one line per ticket type inside it, with `line_key`
+ * "b{bundle}:{product}:{option}" so those slots never mix with the same
+ * ticket bought directly.
+ */
+export type CheckoutCartLine = StoredCartItem & { product_title: string; line_key?: string };
 
 export type AttendeeSlot = {
   clientId: string;
   product_id: number;
   ticket_option_id: number | null;
+  /** Set for a ticket inside a bundle (see CheckoutCartLine.line_key). */
+  line_key?: string;
   product_title: string;
   assignment: SlotAssignment;
   assignmentTouched: boolean;
@@ -46,11 +55,16 @@ export type CheckoutDraft = {
 export const checkoutLineKey = (productId: number, optionId: number | null) =>
   `${productId}:${optionId ?? "direct"}`;
 
+/** The key a slot/line is grouped by: its bundle line key, else product:option. */
+const lineKeyOf = (line: { product_id: number; ticket_option_id: number | null; line_key?: string }) =>
+  line.line_key ?? checkoutLineKey(line.product_id, line.ticket_option_id);
+
 function newSlot(line: CheckoutCartLine, assignment: SlotAssignment): AttendeeSlot {
   return {
     clientId: crypto.randomUUID(),
     product_id: line.product_id,
     ticket_option_id: line.ticket_option_id,
+    ...(line.line_key ? { line_key: line.line_key } : {}),
     product_title: line.product_title,
     assignment,
     assignmentTouched: false,
@@ -126,10 +140,10 @@ export function planCartReconciliation(
   slots: AttendeeSlot[],
   nextCart: CheckoutCartLine[],
 ): ReconciliationPlan {
-  const nextCounts = new Map(nextCart.map((line) => [checkoutLineKey(line.product_id, line.ticket_option_id), line.quantity]));
+  const nextCounts = new Map(nextCart.map((line) => [lineKeyOf(line), line.quantity]));
   const currentLines = new Map<string, AttendeeSlot[]>();
   for (const slot of slots) {
-    const key = checkoutLineKey(slot.product_id, slot.ticket_option_id);
+    const key = lineKeyOf(slot);
     currentLines.set(key, [...(currentLines.get(key) ?? []), slot]);
   }
 
@@ -166,12 +180,12 @@ export function reconcileCheckoutDraft(
   const existingByLine = new Map<string, AttendeeSlot[]>();
   for (const slot of draft.slots) {
     if (removed.has(slot.clientId)) continue;
-    const key = checkoutLineKey(slot.product_id, slot.ticket_option_id);
+    const key = lineKeyOf(slot);
     existingByLine.set(key, [...(existingByLine.get(key) ?? []), slot]);
   }
 
   const slots = nextCart.flatMap((line) => {
-    const key = checkoutLineKey(line.product_id, line.ticket_option_id);
+    const key = lineKeyOf(line);
     const surviving = (existingByLine.get(key) ?? []).slice(0, line.quantity)
       .map((slot) => ({ ...slot, product_title: line.product_title }));
     const added = Array.from({ length: Math.max(0, line.quantity - surviving.length) }, () =>
@@ -296,7 +310,8 @@ export function serializeCheckoutOrder(
     email: draft.email,
     phone: draft.phone,
     checkout_idempotency_key: context.checkoutIdempotencyKey,
-    items: cartItems.map(({ product_id, ticket_option_id, quantity }) => ({ product_id, ticket_option_id, quantity })),
+    // The cart as bought (bundle lines stay bundles — the server expands them).
+    items: toApiItems(cartItems),
     order_answers: context.orderQuestions.map((q) => ({ question_id: q.id, answer: draft.orderAnswers[q.id] ?? "" })),
     notify_attendees: draft.notifyAttendees,
     ...(context.offer
@@ -319,6 +334,7 @@ export function serializeCheckoutOrder(
           return {
             product_id: slot.product_id,
             ticket_option_id: slot.ticket_option_id,
+            ...(slot.line_key ? { line_key: slot.line_key } : {}),
             first_name: me ? draft.firstName : slot.guestFirstName,
             last_name: me ? draft.lastName : slot.guestLastName,
             email: me ? draft.email : slot.guestEmail.trim() || null,

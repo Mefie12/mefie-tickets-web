@@ -40,7 +40,7 @@ export function offerNudges(
   const need = offer ? requiredQuantity(offer) : null;
   if (!offer || !need) return [];
 
-  const inScope = new Set(offer.scope.map((row) => ticketLineKey(row.product_id, row.ticket_option_id)));
+  const inScope = new Set(offer.scope.filter((row) => row.product_id !== null).map((row) => ticketLineKey(row.product_id as number, row.ticket_option_id)));
   const out: LineNudge[] = [];
 
   for (const line of lines) {

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Alert, Button, Checkbox, Group, Modal, Stack, Text } from "@mantine/core";
 import { TicketSelector, ticketLineKey } from "@/components/TicketSelector";
+import { bundleLineKey, bundleSlotLines } from "@/lib/bundleCart";
 import type { PublicEvent } from "@/lib/publicEventApi";
 import type { StoredCartItem } from "@/lib/cartStorage";
 import {
@@ -40,7 +41,10 @@ export function CheckoutTicketEditor({
   onSave: (cart: StoredCartItem[], removedAuthoredIds: string[]) => void;
 }) {
   const initialQuantities = useMemo(
-    () => Object.fromEntries(cart.map((line) => [ticketLineKey(line.product_id, line.ticket_option_id), line.quantity])),
+    () => Object.fromEntries(cart.map((line) => [
+      typeof line.bundle_id === "number" ? bundleLineKey(line.bundle_id) : ticketLineKey(line.product_id, line.ticket_option_id),
+      line.quantity,
+    ])),
     [cart],
   );
   const [quantities, setQuantities] = useState<Record<string, number>>(initialQuantities);
@@ -69,9 +73,17 @@ export function CheckoutTicketEditor({
         } satisfies CheckoutCartLine];
       });
     });
+    const bundleLines = (event.bundles ?? []).flatMap((bundle) => {
+      const quantity = quantities[bundleLineKey(bundle.id)] ?? 0;
+      return quantity > 0 ? [{ bundle, quantity }] : [];
+    });
     return {
-      lines,
-      stored: lines.map(({ product_id, ticket_option_id, quantity }) => ({ product_id, ticket_option_id, quantity })),
+      // Attendee slots: a bundle contributes one line per ticket type inside it.
+      lines: [...lines, ...bundleLines.flatMap(({ bundle, quantity }) => bundleSlotLines(bundle, bundle.id, quantity))],
+      stored: [
+        ...lines.map(({ product_id, ticket_option_id, quantity }) => ({ product_id, ticket_option_id, quantity })),
+        ...bundleLines.map(({ bundle, quantity }) => ({ product_id: 0, ticket_option_id: null, quantity, bundle_id: bundle.id })),
+      ],
     };
   }
 
@@ -106,6 +118,8 @@ export function CheckoutTicketEditor({
             onQuantityChange={(productId, optionId, quantity) =>
               setQuantities((current) => ({ ...current, [ticketLineKey(productId, optionId)]: quantity }))
             }
+            bundles={event.bundles ?? []}
+            onBundleQuantityChange={(bundleId, quantity) => setQuantities((current) => ({ ...current, [bundleLineKey(bundleId)]: quantity }))}
             currencyCode={event.currency_code}
           />
           {Object.values(quantities).every((quantity) => quantity <= 0) && (

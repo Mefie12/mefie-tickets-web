@@ -34,6 +34,7 @@ import {
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/components/TicketDescriptionEditor";
+import { BundlesEditor } from "@/components/BundlesEditor";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { minimumEndTime, utcIsoToZonedPartsOrEmpty, wallClockEndIsInvalid } from "@/lib/eventDateTime";
@@ -69,6 +70,8 @@ type TierFormValue = {
   ends_at_time: string;
   quantity_available: number | "";
   is_enabled: boolean;
+  // Hidden from the ticket list; sold only inside bundles.
+  bundle_only: boolean;
   // Caps how many attendees one order may register for this specific
   // tier — independent of the product's own cap below. "" = unlimited.
   max_attendees_per_registration: number | "";
@@ -92,6 +95,7 @@ type ProductFormValues = {
   ends_at_date: string;
   ends_at_time: string;
   is_enabled: boolean;
+  bundle_only: boolean;
   tiers: TierFormValue[];
 };
 
@@ -127,6 +131,7 @@ function emptyTier(): TierFormValue {
     ends_at_time: "",
     quantity_available: "",
     is_enabled: true,
+    bundle_only: false,
     max_attendees_per_registration: "",
   };
 }
@@ -201,6 +206,7 @@ function productToFormValues(product: Product | undefined, eventTimezone: string
       ends_at_date: "",
       ends_at_time: "",
       is_enabled: true,
+      bundle_only: false,
       tiers: [emptyTier()],
     };
   }
@@ -219,6 +225,7 @@ function productToFormValues(product: Product | undefined, eventTimezone: string
     ends_at_date: endsAt.date,
     ends_at_time: endsAt.time,
     is_enabled: product.disabled_at === null,
+    bundle_only: product.bundle_only ?? false,
     tiers:
       product.price_tiers.length > 0
         ? product.price_tiers.map((t) => {
@@ -235,6 +242,7 @@ function productToFormValues(product: Product | undefined, eventTimezone: string
               ends_at_time: endsAt.time,
               quantity_available: t.quantity_available,
               is_enabled: t.is_enabled,
+              bundle_only: t.bundle_only ?? false,
               max_attendees_per_registration:
                 t.max_attendees_per_registration !== null ? t.max_attendees_per_registration : "",
             };
@@ -249,12 +257,14 @@ export function ProductsEditor({
   eventCurrency,
   initialProducts,
   disabled,
+  bundlesEnabled = false,
 }: {
   eventId: number;
   eventTimezone: string;
   eventCurrency: string;
   initialProducts: Product[];
   disabled: boolean;
+  bundlesEnabled?: boolean;
 }) {
   const router = useRouter();
   const [products, setProducts] = useState(initialProducts);
@@ -356,6 +366,11 @@ export function ProductsEditor({
                     <Badge size="sm" variant="light">
                       {product.type}
                     </Badge>
+                    {(product.bundle_only || (product.type === "TIERED" && product.price_tiers.length > 0 && product.price_tiers.every((t) => t.bundle_only))) && (
+                      <Badge size="sm" color="grape" variant="light">
+                        Bundles only
+                      </Badge>
+                    )}
                     {product.is_sold_out && (
                       <Badge size="sm" color="red" variant="light">
                         Sold out
@@ -417,6 +432,7 @@ export function ProductsEditor({
           eventTimezone={eventTimezone}
           eventCurrency={eventCurrency}
           product={modalProduct === "new" ? undefined : modalProduct}
+          bundlesEnabled={bundlesEnabled}
           onClose={() => setModalProduct(null)}
           onSaved={(saved) => {
             setProducts((prev) => {
@@ -426,6 +442,10 @@ export function ProductsEditor({
             setModalProduct(null);
           }}
         />
+      )}
+
+      {bundlesEnabled && (
+        <BundlesEditor eventId={eventId} eventCurrency={eventCurrency} products={products} disabled={disabled} />
       )}
     </Stack>
   );
@@ -456,6 +476,7 @@ function ProductFormModal({
   product,
   onClose,
   onSaved,
+  bundlesEnabled = false,
 }: {
   eventId: number;
   eventTimezone: string;
@@ -463,6 +484,7 @@ function ProductFormModal({
   product?: Product;
   onClose: () => void;
   onSaved: (product: Product) => void;
+  bundlesEnabled?: boolean;
 }) {
   const isEdit = product !== undefined;
 
@@ -559,6 +581,8 @@ function ProductFormModal({
         ends_at_date: values.ends_at_date || null,
         ends_at_time: values.ends_at_time || null,
         is_enabled: values.is_enabled,
+        // Only sent when the bundles feature is on, so a stale value never flips it.
+        ...(bundlesEnabled ? { bundle_only: values.type === "TIERED" ? false : values.bundle_only } : {}),
         tiers:
           values.type === "TIERED"
             ? values.tiers.map(
@@ -576,6 +600,7 @@ function ProductFormModal({
                   ends_at_time: t.ends_at_time || null,
                   quantity_available: t.quantity_available === "" ? 0 : t.quantity_available,
                   is_enabled: t.is_enabled,
+                  ...(bundlesEnabled ? { bundle_only: t.bundle_only } : {}),
                   max_attendees_per_registration:
                     t.max_attendees_per_registration === "" ? null : t.max_attendees_per_registration,
                 }),
@@ -708,6 +733,13 @@ function ProductFormModal({
             <TextInput type="time" label="At" min={minimumEndTime(form.values.starts_at_date, form.values.starts_at_time, form.values.ends_at_date)} disabled={form.values.starts_at_date === form.values.ends_at_date && form.values.starts_at_time === "23:59"} {...form.getInputProps("ends_at_time")} />
           </Group>
           <Switch label="Enabled" {...form.getInputProps("is_enabled", { type: "checkbox" })} />
+          {bundlesEnabled && form.values.type !== "TIERED" && (
+            <Switch
+              label="Only sold in bundles"
+              description="Hidden from the ticket list. Buyers get it only as part of a bundle (e.g. Child tickets in a Family Pass)."
+              {...form.getInputProps("bundle_only", { type: "checkbox" })}
+            />
+          )}
 
           {form.values.type === "TIERED" && (
             <>
@@ -815,6 +847,13 @@ function ProductFormModal({
                       label="Enabled"
                       {...form.getInputProps(`tiers.${index}.is_enabled`, { type: "checkbox" })}
                     />
+                    {bundlesEnabled && (
+                      <Switch
+                        label="Only sold in bundles"
+                        description="Hidden from buyers; sold only inside bundles."
+                        {...form.getInputProps(`tiers.${index}.bundle_only`, { type: "checkbox" })}
+                      />
+                    )}
                   </Stack>
                 </Card>
               ))}
