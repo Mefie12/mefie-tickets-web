@@ -1,4 +1,3 @@
-import { bundleLineKey } from "@/lib/bundleCart";
 import { discountLabel, endsLabel } from "@/lib/offerFormat";
 import { ticketLineKey } from "@/components/TicketSelector";
 import { formatMinorAmount } from "@/lib/money";
@@ -25,10 +24,8 @@ export function lineDiscounts(args: {
     for (const line of quote.lines) {
       if (line.discounted_units <= 0) continue;
       const partial = line.discounted_units < line.quantity;
-      const key = line.bundle_id != null ? bundleLineKey(line.bundle_id) : ticketLineKey(line.product_id ?? 0, line.ticket_option_id);
-      const unit = line.bundle_id != null ? "bundles" : "tickets";
-      out[key] = {
-        badge: `Save ${formatMinorAmount(line.discount_minor, quote.currency)}${partial ? ` · ${line.discounted_units} of ${line.quantity} ${unit}` : ""}`,
+      out[ticketLineKey(line.product_id, line.ticket_option_id)] = {
+        badge: `Save ${formatMinorAmount(line.discount_minor, quote.currency)}${partial ? ` · ${line.discounted_units} of ${line.quantity} tickets` : ""}`,
       };
     }
     return out;
@@ -39,7 +36,7 @@ export function lineDiscounts(args: {
       // A whole-product row covers every option of that product; the
       // selector builds keys per option, so cover both shapes.
       const label = `${discountLabel(advertised)} · ${endsLabel(advertised.ends_at, timezone)}`.trim();
-      out[row.bundle_id != null ? bundleLineKey(row.bundle_id) : ticketLineKey(row.product_id ?? 0, row.ticket_option_id)] = { badge: label };
+      out[ticketLineKey(row.product_id, row.ticket_option_id)] = { badge: label };
     }
   }
   return out;

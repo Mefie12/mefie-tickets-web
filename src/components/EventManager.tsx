@@ -133,14 +133,12 @@ export function EventManager({
   initialQuestions,
   initialComplimentaryProgram,
   organizationSlug,
-  bundlesEnabled = false,
 }: {
   initialEvent: Event;
   initialProducts: Product[];
   initialQuestions: Question[];
   initialComplimentaryProgram: ComplimentaryProgram;
   organizationSlug: string;
-  bundlesEnabled?: boolean;
 }) {
   const [event, setEvent] = useState(initialEvent);
   const sellsPaidTickets = initialProducts.some((product) => ["PAID", "TIERED", "DONATION"].includes(product.type));
@@ -397,7 +395,6 @@ export function EventManager({
             eventCurrency={event.currency_code}
             initialProducts={initialProducts}
             disabled={archived}
-            bundlesEnabled={bundlesEnabled}
           />
         </Tabs.Panel>
         <Tabs.Panel value="complimentary" pt="lg">

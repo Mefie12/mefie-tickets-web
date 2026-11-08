@@ -114,7 +114,7 @@ export type PublicProduct = {
  * currently purchasable. Shared by cheapestPriceLabel() and
  * isEventFree() so both agree on what counts as "purchasable."
  */
-function cheapestPrice(event: { products: PublicProduct[]; bundles?: PublicBundle[] }): number | null {
+function cheapestPrice(event: { products: PublicProduct[] }): number | null {
   const prices: number[] = [];
   for (const product of event.products) {
     if (product.type === "TIERED") {
@@ -129,13 +129,6 @@ function cheapestPrice(event: { products: PublicProduct[]; bundles?: PublicBundl
       prices.push(product.current_price !== null ? Number(product.current_price) : 0);
     }
   }
-  // An event that only sells bundles still shows a price: the cheapest bundle
-  // on sale (mirrors PublicEventCardResource::startsFromPrice()).
-  if (prices.length === 0) {
-    for (const bundle of event.bundles ?? []) {
-      if (bundle.is_on_sale && bundle.status === "AVAILABLE") prices.push(Number(bundle.price));
-    }
-  }
   return prices.length === 0 ? null : Math.min(...prices);
 }
 
@@ -144,7 +137,7 @@ function cheapestPrice(event: { products: PublicProduct[]; bundles?: PublicBundl
  * a full price breakdown already exists (TicketSelector shows real
  * per-tier prices).
  */
-export function cheapestPriceLabel(event: { products: PublicProduct[]; bundles?: PublicBundle[]; currency_code: string }): string | null {
+export function cheapestPriceLabel(event: { products: PublicProduct[]; currency_code: string }): string | null {
   const price = cheapestPrice(event);
   return price === null ? null : formatMoney(price, event.currency_code);
 }
@@ -236,24 +229,6 @@ export type PaginationMeta = {
   total: number;
 };
 
-/** A bundle as buyers see it (PublicBundleResource). Prices are major-unit strings. */
-export type PublicBundle = {
-  id: number;
-  title: string;
-  description: string | null;
-  price: string;
-  package_size: number;
-  price_per_person: string;
-  list_total: string;
-  saving: string;
-  components: { product_id: number; ticket_option_id: number | null; quantity: number; label: string | null }[];
-  is_on_sale: boolean;
-  status: "AVAILABLE" | "SOLD_OUT" | "UNAVAILABLE";
-  /** null = unlimited. */
-  buyable: number | null;
-  max_per_order: number | null;
-};
-
 export type PublicEvent = {
   id: number;
   title: string;
@@ -284,8 +259,6 @@ export type PublicEvent = {
   location: EventLocation | null;
   organization: PublicOrganization;
   products: PublicProduct[];
-  /** Present only while bundles are enabled. */
-  bundles?: PublicBundle[];
   questions: PublicQuestion[];
   /** null when the organizer hasn't enabled a published version — no acceptance is required at checkout. */
   terms: PublicEventTerms | null;

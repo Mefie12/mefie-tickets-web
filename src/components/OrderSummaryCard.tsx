@@ -5,8 +5,7 @@ import { formatMinorAmount, toMinorUnits } from "@/lib/money";
 export type OrderSummaryLine = { label: string; quantity: number; totalMinor: number };
 
 function linesFromOrder(order: Order): OrderSummaryLine[] {
-  // Tickets bought inside a bundle are shown as the bundle (one line).
-  const ticketLines = order.items.filter((item) => item.order_bundle_id == null).map((item) => ({
+  return order.items.map((item) => ({
     label: item.ticket_display_name,
     quantity: item.quantity,
     // With an offer, list each line at its ORIGINAL amount and show the
@@ -15,12 +14,6 @@ function linesFromOrder(order: Order): OrderSummaryLine[] {
       ? item.original_price_minor * item.quantity
       : toMinorUnits(item.item_total, order.currency),
   }));
-  const bundleLines = (order.bundles ?? []).map((bundle) => ({
-    label: `${bundle.title} (${bundle.components.reduce((n, c) => n + c.count, 0)} tickets)`,
-    quantity: bundle.quantity,
-    totalMinor: bundle.discount_minor > 0 ? bundle.gross_minor : bundle.final_total_minor,
-  }));
-  return [...ticketLines, ...bundleLines];
 }
 
 export type OrderSummaryDiscount = { label: string | null; minor: number };

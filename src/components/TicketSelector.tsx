@@ -3,97 +3,36 @@
 import { ActionIcon, Badge, Card, Group, NumberInput, Stack, Text } from "@mantine/core";
 import { IconMinus, IconPlus } from "@tabler/icons-react";
 import { TicketDescription } from "@/components/TicketDescription";
-import type { PublicBundle, PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
-import { bundleLineKey, isBundleAvailable, maxBundleQuantity, maxTicketQuantityInCart } from "@/lib/bundleCart";
+import type { PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
 import { formatMoney } from "@/lib/money";
 
 import { isLineAvailable, maxQuantityFor, ticketLineKey } from "@/lib/ticketLimits";
 
 export { ticketLineKey };
 
-export function TicketSelector({ products, quantities, onQuantityChange, currencyCode, lineDiscounts, bundles = [], onBundleQuantityChange }: {
+export function TicketSelector({ products, quantities, onQuantityChange, currencyCode, lineDiscounts }: {
   products: PublicProduct[];
   quantities: Record<string, number>;
   onQuantityChange: (productId: number, optionId: number | null, quantity: number) => void;
   currencyCode: string;
-  /** Per-line offer badge (see lib/offerLineBadges.ts), keyed by ticketLineKey / bundleLineKey. */
+  /** Per-line offer badge (see lib/offerLineBadges.ts), keyed by ticketLineKey. */
   lineDiscounts?: Record<string, { badge: string }>;
-  /** Packages (Rave Crew = 5 × General Access). Quantities are keyed by bundleLineKey. */
-  bundles?: PublicBundle[];
-  onBundleQuantityChange?: (bundleId: number, quantity: number) => void;
 }) {
-  if (products.length === 0 && bundles.length === 0) return <Text c="dimmed" size="sm">No tickets available for this event yet.</Text>;
+  if (products.length === 0) return <Text c="dimmed" size="sm">No tickets available for this event yet.</Text>;
 
-  // Steppers account for stock already taken by the rest of the cart (a
-  // Crew and a Solo General Access share the same General Access tickets).
-  const ticketMax = (product: PublicProduct, option: PublicTicketOption | null) =>
-    maxTicketQuantityInCart(maxQuantityFor(product, option), quantities, products, bundles, product.id, option?.id ?? null);
-
-  return <Stack gap="sm">
-    {products.map((product) => (
-      product.type === "TIERED" ? product.options?.map((option) => (
-        <TicketOptionRow key={ticketLineKey(product.id, option.id)} product={product} option={option}
-          quantity={quantities[ticketLineKey(product.id, option.id)] ?? 0} max={ticketMax(product, option)}
-          onChange={(quantity) => onQuantityChange(product.id, option.id, quantity)} currencyCode={currencyCode}
-          discountBadge={lineDiscounts?.[ticketLineKey(product.id, option.id)]?.badge} />
-      )) : (
-        <TicketOptionRow key={ticketLineKey(product.id, null)} product={product} option={null}
-          quantity={quantities[ticketLineKey(product.id, null)] ?? 0} max={ticketMax(product, null)}
-          onChange={(quantity) => onQuantityChange(product.id, null, quantity)} currencyCode={currencyCode}
-          discountBadge={lineDiscounts?.[ticketLineKey(product.id, null)]?.badge} />
-      )
-    ))}
-    {bundles.length > 0 && onBundleQuantityChange && (
-      <>
-        <Text size="xs" fw={600} c="dimmed" tt="uppercase" mt={products.length > 0 ? "xs" : 0}>Packages</Text>
-        {bundles.map((bundle) => (
-          <BundleRow key={bundle.id} bundle={bundle} quantity={quantities[bundleLineKey(bundle.id)] ?? 0}
-            max={maxBundleQuantity(bundle, quantities, products, bundles)}
-            onChange={(quantity) => onBundleQuantityChange(bundle.id, quantity)} currencyCode={currencyCode}
-            discountBadge={lineDiscounts?.[bundleLineKey(bundle.id)]?.badge} />
-        ))}
-      </>
-    )}
-  </Stack>;
-}
-
-/** A package row: one price for several tickets, each person still getting their own ticket. */
-function BundleRow({ bundle, quantity, max, onChange, currencyCode, discountBadge }: {
-  bundle: PublicBundle; quantity: number; max: number; onChange: (quantity: number) => void; currencyCode: string; discountBadge?: string;
-}) {
-  const available = isBundleAvailable(bundle) && max > 0;
-  const textColor = "var(--mantine-color-grey-9)";
-  const mutedColor = "var(--mantine-color-grey-6)";
-  const contents = bundle.components.map((c) => `${c.quantity} × ${c.label ?? "Ticket"}`).join(" + ");
-  const saving = Number(bundle.saving);
-
-  return (
-    <Card radius="lg" p="md" bg="var(--mantine-color-grey-1)">
-      <Stack gap={8}>
-        <Group justify="space-between" wrap="nowrap" gap="sm" align="flex-start">
-          <Text fw={500} size="sm" c={textColor} style={{ overflowWrap: "anywhere" }}>{bundle.title}</Text>
-          <Text fw={500} size="sm" c={textColor} style={{ whiteSpace: "nowrap" }}>{formatMoney(bundle.price, currencyCode)}</Text>
-        </Group>
-        <Text size="xs" c={mutedColor}>
-          {contents} · {formatMoney(bundle.price_per_person, currencyCode)} per person
-          {saving > 0 ? ` · save ${formatMoney(saving, currencyCode)}` : ""}
-        </Text>
-        {discountBadge && available && <Text size="xs" fw={600} c="#18794e" role="status">{discountBadge}</Text>}
-        {!available && (
-          <Group justify="flex-end">
-            <Badge color={bundle.status === "SOLD_OUT" || max === 0 ? "red" : "gray"} variant="light" size="sm">
-              {bundle.status === "UNAVAILABLE" ? "NOT ON SALE" : "SOLD OUT"}
-            </Badge>
-          </Group>
-        )}
-        <Group justify="space-between" align="center">
-          <Text size="xs" c={mutedColor}>Quantity</Text>
-          <QuantityStepper value={quantity} onChange={onChange} max={max} disabled={!available && quantity === 0} />
-        </Group>
-        <TicketDescription html={bundle.description} color={mutedColor} collapsible />
-      </Stack>
-    </Card>
-  );
+  return <Stack gap="sm">{products.map((product) => (
+    product.type === "TIERED" ? product.options?.map((option) => (
+      <TicketOptionRow key={ticketLineKey(product.id, option.id)} product={product} option={option}
+        quantity={quantities[ticketLineKey(product.id, option.id)] ?? 0}
+        onChange={(quantity) => onQuantityChange(product.id, option.id, quantity)} currencyCode={currencyCode}
+        discountBadge={lineDiscounts?.[ticketLineKey(product.id, option.id)]?.badge} />
+    )) : (
+      <TicketOptionRow key={ticketLineKey(product.id, null)} product={product} option={null}
+        quantity={quantities[ticketLineKey(product.id, null)] ?? 0}
+        onChange={(quantity) => onQuantityChange(product.id, null, quantity)} currencyCode={currencyCode}
+        discountBadge={lineDiscounts?.[ticketLineKey(product.id, null)]?.badge} />
+    )
+  ))}</Stack>;
 }
 
 /**
@@ -143,8 +82,8 @@ function QuantityStepper({ value, onChange, max, disabled }: {
   );
 }
 
-function TicketOptionRow({ product, option, quantity, max, onChange, currencyCode, discountBadge }: {
-  product: PublicProduct; option: PublicTicketOption | null; quantity: number; max: number;
+function TicketOptionRow({ product, option, quantity, onChange, currencyCode, discountBadge }: {
+  product: PublicProduct; option: PublicTicketOption | null; quantity: number;
   onChange: (quantity: number) => void; currencyCode: string; discountBadge?: string;
 }) {
   const status = option?.status ?? (product.is_sold_out ? "SOLD_OUT" : product.is_on_sale ? "AVAILABLE" : "PAUSED");
@@ -191,7 +130,7 @@ function TicketOptionRow({ product, option, quantity, max, onChange, currencyCod
           <QuantityStepper
             value={quantity}
             onChange={onChange}
-            max={Math.max(quantity, max)}
+            max={maxQuantityFor(product, option)}
             disabled={!available}
           />
         </Group>

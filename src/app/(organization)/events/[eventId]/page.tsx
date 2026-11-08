@@ -18,7 +18,7 @@ import {
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { APP_URL, backendRequest } from "@/lib/backend";
 import { getCurrentOrganization, getEventById } from "@/lib/session";
-import { formatAmount, formatMinorAmount } from "@/lib/money";
+import { formatAmount } from "@/lib/money";
 import type { EventOverview } from "@/lib/overviewApi";
 import { PublicShareCard } from "@/components/PublicShareCard";
 
@@ -58,13 +58,7 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
       <Title order={3}>Overview</Title>
       {attention !== undefined && attention > 0 && <Alert color="yellow" icon={<IconAlertTriangle size={18} />} title="Requires attention">{attention} confirmed attendee{attention === 1 ? " has" : "s have"} unanswered required registration questions.</Alert>}
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-        <Stat
-          label="Tickets sold"
-          value={String(overview.tickets?.sold ?? overview.attendees.confirmed)}
-          help={overview.tickets && overview.tickets.awaiting_names > 0
-            ? `${overview.attendees.confirmed} named · ${overview.tickets.awaiting_names} waiting for the buyer to add names`
-            : "Excludes pending payments and reservations"}
-        />
+        <Stat label="Confirmed attendees" value={String(overview.attendees.confirmed)} help="Excludes pending payments and reservations" />
         <Stat label="Checked in" value={String(overview.checked_in)} />
         <Stat label="Completed orders" value={String(overview.orders.orders)} />
         <Stat label="Gross customer payments" value={formatAmount(overview.orders.gross_sales, overview.orders.currency)} />
@@ -75,15 +69,6 @@ export default async function EventOverviewPage({ params }: { params: Promise<{ 
           {overview.ticket_performance.map((row) => <TableTr key={`${row.row_type}-${row.product_id}-${row.price_tier_id ?? "all"}`}><TableTd><Text fw={row.row_type === "product" ? 600 : 400} pl={row.row_type === "tier" ? "md" : 0}>{row.row_type === "tier" ? `↳ ${row.name}` : row.name}</Text></TableTd><TableTd>{row.is_unlimited ? "Unlimited" : row.capacity}</TableTd><TableTd>{row.issued}</TableTd><TableTd>{row.remaining ?? "Unlimited"}</TableTd><TableTd>{formatAmount(row.revenue, row.currency)}</TableTd></TableTr>)}
         </TableTbody></Table></TableScrollContainer>
       </Card>
-      {(overview.bundle_performance?.length ?? 0) > 0 && (
-        <Card withBorder radius="lg" p="lg">
-          <Title order={4} mb="md">Bundles</Title>
-          <TableScrollContainer minWidth={600}><Table striped><TableThead><TableTr><TableTh>Bundle</TableTh><TableTh>Sold</TableTh><TableTh>Tickets</TableTh><TableTh>Limit</TableTh><TableTh>Revenue</TableTh></TableTr></TableThead><TableTbody>
-            {overview.bundle_performance!.map((row) => <TableTr key={row.bundle_id}><TableTd><Text fw={600}>{row.title}</Text><Text size="xs" c="dimmed">{row.tickets_per_bundle} tickets each</Text></TableTd><TableTd>{row.bundles_sold}</TableTd><TableTd>{row.tickets_sold}</TableTd><TableTd>{row.cap ?? "—"}</TableTd><TableTd>{formatMinorAmount(row.revenue_minor, row.currency)}</TableTd></TableTr>)}
-          </TableTbody></Table></TableScrollContainer>
-          <Text size="xs" c="dimmed" mt="xs">Bundle tickets are also counted under their ticket types above, with the bundle price split across them.</Text>
-        </Card>
-      )}
     </Stack>
   );
 }

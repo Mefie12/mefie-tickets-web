@@ -1,5 +1,4 @@
-import type { PublicBundle, PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
-import { bundleLineKey, isBundleAvailable } from "@/lib/bundleCart";
+import type { PublicProduct, PublicTicketOption } from "@/lib/publicEventApi";
 import type { StoredCartItem } from "@/lib/cartStorage";
 
 export const ticketLineKey = (productId: number, optionId: number | null) => `${productId}:${optionId ?? "direct"}`;
@@ -27,16 +26,9 @@ export function maxQuantityFor(product: PublicProduct, option: PublicTicketOptio
  * quantities are clamped to what can still be bought. Anything the buyer
  * can't actually select any more simply isn't restored.
  */
-export function restoreQuantities(items: StoredCartItem[], products: PublicProduct[], bundles: PublicBundle[] = []): Record<string, number> {
+export function restoreQuantities(items: StoredCartItem[], products: PublicProduct[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const item of items) {
-    if (typeof item.bundle_id === "number") {
-      const bundle = bundles.find((b) => b.id === item.bundle_id);
-      if (!bundle || !isBundleAvailable(bundle)) continue;
-      const quantity = Math.min(item.quantity, bundle.max_per_order ?? 10, bundle.buyable ?? Infinity);
-      if (quantity > 0) out[bundleLineKey(bundle.id)] = quantity;
-      continue;
-    }
     const product = products.find((p) => p.id === item.product_id);
     if (!product) continue;
     const tiered = product.type === "TIERED";

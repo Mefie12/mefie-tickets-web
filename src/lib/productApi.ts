@@ -12,7 +12,6 @@ export type TicketOption = {
   product_id: number;
   name: string;
   description: string | null;
-  bundle_only: boolean;
   sort_order: number;
   price: string;
   starts_at: string | null;
@@ -32,7 +31,6 @@ export type Product = {
   event_id: number;
   title: string;
   description: string | null;
-  bundle_only: boolean;
   product_type: "TICKET" | "GENERAL";
   type: PricingType;
   price: string | null;
@@ -64,7 +62,6 @@ export type TicketOptionInput = {
   id?: number | null;
   name: string;
   description?: string | null;
-  bundle_only?: boolean | null;
   sort_order: number;
   price: number;
   starts_at_date?: string | null;
@@ -96,7 +93,7 @@ async function request<T>(
 }
 
 export function listProducts(eventId: number) {
-  return request<{ products: Product[]; bundles_enabled?: boolean }>(`/api/events/${eventId}/products`);
+  return request<{ products: Product[] }>(`/api/events/${eventId}/products`);
 }
 
 /**
@@ -116,7 +113,6 @@ export function createProduct(
   input: {
     title: string;
     description?: string | null;
-    bundle_only?: boolean;
     type: PricingType;
     price?: number | null;
     quantity_available?: number | null;
@@ -133,7 +129,6 @@ export function updateProduct(
   input: {
     title?: string;
     description?: string | null;
-    bundle_only?: boolean;
     type?: PricingType;
     price?: number | null;
     quantity_available?: number | null;
@@ -149,66 +144,4 @@ export function updateProduct(
 
 export function deleteProduct(eventId: number, productId: number) {
   return request<void>(`/api/events/${eventId}/products/${productId}`, { method: "DELETE" });
-}
-
-// --- bundles -----------------------------------------------------------
-
-/** One ticket (or ticket option) inside a bundle, × count. */
-export type BundleComponent = {
-  product_id: number;
-  ticket_option_id: number | null;
-  quantity: number;
-  label?: string;
-  list_price?: string;
-};
-
-/** Organizer view of a bundle (BundleResource). */
-export type Bundle = {
-  id: number;
-  title: string;
-  description: string | null;
-  price: string;
-  quantity_available: number | null;
-  quantity_sold: number;
-  quantity_reserved: number;
-  max_per_order: number | null;
-  sort_order: number;
-  starts_at: string | null;
-  ends_at: string | null;
-  is_enabled: boolean;
-  /** Price and components are frozen once anything has sold. */
-  is_locked: boolean;
-  package_size: number;
-  list_total: string;
-  /** null = unlimited. */
-  buyable: number | null;
-  /** Why it can't be bought right now (paused, a component is off sale, sold out…); null when it can. */
-  unavailable_reason: string | null;
-  components: BundleComponent[];
-};
-
-export type BundleInput = {
-  title?: string;
-  description?: string | null;
-  price?: number;
-  components?: { product_id: number; ticket_option_id?: number | null; quantity: number }[];
-  quantity_available?: number | null;
-  max_per_order?: number | null;
-  is_enabled?: boolean;
-} & Omit<ProductWindowInput, "is_enabled">;
-
-export function listBundles(eventId: number) {
-  return request<{ bundles: Bundle[] }>(`/api/events/${eventId}/bundles`);
-}
-
-export function createBundle(eventId: number, input: BundleInput) {
-  return request<{ bundle: Bundle; warnings: string[] }>(`/api/events/${eventId}/bundles`, { method: "POST", body: input });
-}
-
-export function updateBundle(eventId: number, bundleId: number, input: BundleInput) {
-  return request<{ bundle: Bundle; warnings: string[] }>(`/api/events/${eventId}/bundles/${bundleId}`, { method: "PATCH", body: input });
-}
-
-export function deleteBundle(eventId: number, bundleId: number) {
-  return request<void>(`/api/events/${eventId}/bundles/${bundleId}`, { method: "DELETE" });
 }

@@ -131,26 +131,13 @@ export type OrderTicket = {
   entitlement_id: number;
   sequence_number: number;
   ticket_name: string | null;
-  /** "Rave Crew · 2 of 5" when bought inside a bundle. */
-  bundle_label?: string | null;
   status: OrderTicketStatus;
   delivery_status: OrderTicketDeliveryStatus;
   assignment: OrderTicketAssignment | null;
   history: OrderTicketHistoryEntry[];
 };
 
-export type OrderBundleDetail = {
-  id: number;
-  title: string;
-  quantity: number;
-  tickets_per_bundle: number;
-  gross_minor: number;
-  discount_minor: number;
-  final_total_minor: number;
-};
-
 export type OrderItemDetail = {
-  order_bundle_id?: number | null;
   id: number;
   product_id: number;
   product_price_tier_id: number | null;
@@ -185,8 +172,6 @@ export type OrderDetail = OrderListItem & {
   platform_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
   processing_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
   items: OrderItemDetail[];
-  /** Bundles in this order; their component lines carry `order_bundle_id`. */
-  bundles?: OrderBundleDetail[];
   /** One row per purchased admission unit, ordered by sequence_number. Empty before payment completes. */
   tickets: OrderTicket[];
   answers: OrderQuestionAnswer[];

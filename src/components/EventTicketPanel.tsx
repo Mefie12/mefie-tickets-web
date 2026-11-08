@@ -23,7 +23,6 @@ import { OfferVerifyModal } from "@/components/OfferVerifyModal";
 import { OfferNudge } from "@/components/OfferNudge";
 import { offerNudges, type NudgeLine } from "@/lib/offerNudge";
 import { toMinorUnits } from "@/lib/money";
-import { bundleLineKey, isBundleAvailable } from "@/lib/bundleCart";
 
 /**
  * Ticket selection only — the event page's sidebar card. Buyer
@@ -55,7 +54,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   useEffect(() => {
     const stored = loadCart(event.id);
     Promise.resolve().then(() => {
-      if (stored) setQuantities(restoreQuantities(stored, event.products, event.bundles ?? []));
+      if (stored) setQuantities(restoreQuantities(stored, event.products));
       setCartHydrated(true);
     });
     // Restore once per event; later product data refreshes must not undo the buyer's edits.
@@ -95,11 +94,8 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
           const quantity = quantities[ticketLineKey(product.id, option?.id ?? null)] ?? 0;
           return quantity > 0 ? [{ product_id: product.id, ticket_option_id: option?.id ?? null, quantity } satisfies StoredCartItem] : [];
         });
-      }).concat((event.bundles ?? []).flatMap((bundle) => {
-        const quantity = quantities[bundleLineKey(bundle.id)] ?? 0;
-        return quantity > 0 ? [{ product_id: 0, ticket_option_id: null, quantity, bundle_id: bundle.id } satisfies StoredCartItem] : [];
-      })),
-    [event.products, event.bundles, quantities],
+      }),
+    [event.products, quantities],
   );
 
   // Keep the stored selection in step with the stepper (an empty selection clears it).
@@ -156,13 +152,12 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
   }, [quoteSettled, quote, promoCode, offerToken, event.id]);
 
   const total = useMemo(() => {
-    const tickets = event.products.reduce((sum, product) => {
+    return event.products.reduce((sum, product) => {
       if (product.type !== "TIERED") return sum + Number(product.current_price ?? 0) * (quantities[ticketLineKey(product.id, null)] ?? 0);
       return sum + (product.options ?? []).reduce((optionTotal, option) =>
         optionTotal + Number(option.price) * (quantities[ticketLineKey(product.id, option.id)] ?? 0), 0);
     }, 0);
-    return tickets + (event.bundles ?? []).reduce((sum, bundle) => sum + Number(bundle.price) * (quantities[bundleLineKey(bundle.id)] ?? 0), 0);
-  }, [event.products, event.bundles, quantities]);
+  }, [event.products, quantities]);
 
   // All-in figures shown up front (mandatory fees + tax included), so the
   // "Total" the buyer sees before Continue is the amount they'll actually
@@ -187,7 +182,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
     product.type === "TIERED"
       ? (product.options ?? []).some((option) => option.is_available)
       : product.is_on_sale && !product.is_sold_out,
-  ) || (event.bundles ?? []).some(isBundleAvailable);
+  );
   const startingPrice = cheapestPriceLabel(event);
 
   return (
@@ -226,8 +221,6 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         products={event.products}
         quantities={quantities}
         onQuantityChange={(productId, optionId, qty) => setQuantities((prev) => ({ ...prev, [ticketLineKey(productId, optionId)]: qty }))}
-        bundles={event.bundles ?? []}
-        onBundleQuantityChange={(bundleId, qty) => setQuantities((prev) => ({ ...prev, [bundleLineKey(bundleId)]: qty }))}
         currencyCode={event.currency_code}
       />
 

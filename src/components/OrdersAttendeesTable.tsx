@@ -435,7 +435,7 @@ export function OrdersAttendeesTable({
                                 <TwoLine primary={`${a.first_name} ${a.last_name}`} secondary={a.email} />
                               </Table.Td>
                               <Table.Td>
-                                <TwoLine primary={a.ticket.name} secondary={a.ticket.bundle_label ? `${a.ticket.reference} · ${a.ticket.bundle_label}` : a.ticket.reference} />
+                                <TwoLine primary={a.ticket.name} secondary={a.ticket.reference} />
                               </Table.Td>
                               <Table.Td>
                                 <TwoLine primary={`#${a.order.short_id}`} secondary={a.order.buyer_name} />
