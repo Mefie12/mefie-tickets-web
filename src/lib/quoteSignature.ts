@@ -4,7 +4,7 @@
  * already hold a ticket while the debounced copy still describes the empty cart, and asking then sends an empty
  * quote the API rejects (422), which flashed a "Couldn't check your discount" notice on the first selection.
  */
-export type QuoteLine = { product_id: number; ticket_option_id: number | null; quantity: number };
+export type QuoteLine = { product_id: number; ticket_option_id: number | null; quantity: number; bundle_id?: number | null };
 
 export type QuoteSignatureInput = { items: QuoteLine[]; promoCode: string | null; offerToken: string | null };
 

@@ -12,7 +12,13 @@
  * can't revive stale state; malformed data is ignored. Storage failures
  * (private mode, quota) degrade silently to "doesn't survive navigation".
  */
-export type StoredCartItem = { product_id: number; ticket_option_id: number | null; quantity: number };
+export type StoredCartItem = {
+  product_id: number;
+  ticket_option_id: number | null;
+  quantity: number;
+  /** Set for a bundle line (product_id is then 0). */
+  bundle_id?: number | null;
+};
 
 const VERSION = 1;
 export const CART_TTL_MS = 24 * 60 * 60 * 1000;
@@ -35,7 +41,8 @@ export function saveCart(eventId: number, items: StoredCartItem[], now: number =
 const isItem = (i: unknown): i is StoredCartItem => {
   const item = i as StoredCartItem;
   return !!item && Number.isInteger(item.product_id) && Number.isInteger(item.quantity) && item.quantity > 0
-    && (item.ticket_option_id === null || Number.isInteger(item.ticket_option_id));
+    && (item.ticket_option_id === null || Number.isInteger(item.ticket_option_id))
+    && (item.bundle_id === undefined || item.bundle_id === null || Number.isInteger(item.bundle_id));
 };
 
 /** Null when nothing (valid) is stored — callers treat that as "no cart". */

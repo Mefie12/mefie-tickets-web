@@ -21,11 +21,7 @@ export type AnswerInput = {
   answer: AnswerValue;
 };
 
-export type CartItemInput = {
-  product_id: number;
-  ticket_option_id?: number | null;
-  quantity: number;
-};
+export type CartItemInput = import("@/lib/bundleCart").ApiCartItem;
 
 export type AttendeeInput = {
   product_id: number;
@@ -38,6 +34,8 @@ export type AttendeeInput = {
   phone?: string | null;
   is_buyer?: boolean;
   answers?: AnswerInput[];
+  /** Required for a ticket inside a bundle: "b{bundleId}:{productId}:{option|direct}". */
+  line_key?: string | null;
 };
 
 export type CreateOrderInput = {
@@ -88,6 +86,21 @@ export type OrderItemSummary = {
   discounted_units?: number;
   discount_minor?: number;
   final_total_minor?: number | null;
+  /** Set when this line is a ticket bought inside a bundle (see Order.bundles). */
+  order_bundle_id?: number | null;
+};
+
+/** A bundle line on an order, from its immutable snapshot. */
+export type OrderBundleSummary = {
+  id: number;
+  bundle_id: number;
+  title: string;
+  quantity: number;
+  unit_price_minor: number;
+  gross_minor: number;
+  discount_minor: number;
+  final_total_minor: number;
+  components: { label: string; count: number }[];
 };
 
 export type OrderAttendeeSummary = {
@@ -119,6 +132,7 @@ export type Order = {
   platform_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
   processing_fee_bearer: "ATTENDEE" | "ORGANIZER" | null;
   items: OrderItemSummary[];
+  bundles?: OrderBundleSummary[];
   attendees: OrderAttendeeSummary[];
   terms_acceptance: OrderTermsAcceptance | null;
   /** Purchased admission units still BUYER_HELD (buy-now-assign-later, docs/17 §7.4). 0 for a non-deferred or RESERVED order. */

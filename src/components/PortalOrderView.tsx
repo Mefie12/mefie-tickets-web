@@ -287,6 +287,7 @@ function EntitlementCard({
                 #{e.sequence_number}
               </Text>
             </Text>
+            {e.ticket.bundle && <Text size="xs" c="dimmed">Part of {e.ticket.bundle.label}</Text>}
             <TicketDescription html={e.ticket.description} color="var(--mantine-color-dimmed)" />
             <Text size="sm">
               {e.attendee ? `${e.attendee.first_name} ${e.attendee.last_name}` : "No attendee yet"}
