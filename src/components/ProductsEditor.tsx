@@ -4,17 +4,21 @@ import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
+import { useMediaQuery } from "@mantine/hooks";
 import {
   ActionIcon,
   Badge,
   Button,
   Card,
   Divider,
+  Grid,
   Group,
+  Menu,
   Modal,
   NumberInput,
   Popover,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
@@ -24,12 +28,15 @@ import {
 import {
   IconChevronDown,
   IconChevronUp,
+  IconCopy,
   IconInfoCircle,
   IconPlayerPause,
   IconPlayerPlay,
   IconPlus,
+  IconStack2,
   IconTicket,
   IconTrash,
+  IconUserCheck,
 } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
@@ -37,7 +44,14 @@ import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/compon
 import { BundlesEditor } from "@/components/BundlesEditor";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
-import { minimumEndTime, utcIsoToZonedPartsOrEmpty, wallClockEndIsInvalid } from "@/lib/eventDateTime";
+import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
+import {
+  describeSaleWindow,
+  hasSaleWindow,
+  MoreSettings,
+  SaleWindowFields,
+  type WindowParts,
+} from "@/components/TicketFormParts";
 import {
   createProduct,
   deleteProduct,
@@ -54,6 +68,8 @@ function tierIndexFromPath(path: string): number {
 }
 
 type TierFormValue = {
+  /** Stable client key, so reordering/removing options keeps each card's own open/closed state. */
+  uid: string;
   id: number | null;
   name: string;
   // Optional light rich text; "" = none (sent as null).
@@ -99,6 +115,14 @@ type ProductFormValues = {
   tiers: TierFormValue[];
 };
 
+/** What each creatable ticket type means, for the "Add ticket type" menu and the form header. */
+const TYPE_META: Record<"PAID" | "REGISTRATION" | "TIERED", { label: string; description: string; icon: typeof IconTicket }> = {
+  PAID: { label: "Paid ticket", description: "One price for everyone", icon: IconTicket },
+  REGISTRATION: { label: "Free ticket", description: "No payment — attendees register", icon: IconUserCheck },
+  TIERED: { label: "Ticket group with options", description: "Early bird, VIP, student… each with its own price", icon: IconStack2 },
+};
+const CREATABLE_TYPES = ["PAID", "REGISTRATION", "TIERED"] as const;
+
 const PRICING_OPTIONS: { value: PricingType; label: string }[] = [
   { value: "REGISTRATION", label: "Free (requires registration)" },
   { value: "PAID", label: "Paid (single price)" },
@@ -121,6 +145,7 @@ function enabledTierQuantitySum(tiers: TierFormValue[]): number | null {
 
 function emptyTier(): TierFormValue {
   return {
+    uid: crypto.randomUUID(),
     id: null,
     name: "",
     description: "",
@@ -192,12 +217,12 @@ function HelpFieldLabel({
   );
 }
 
-function productToFormValues(product: Product | undefined, eventTimezone: string): ProductFormValues {
+function productToFormValues(product: Product | undefined, eventTimezone: string, newType: PricingType = "PAID"): ProductFormValues {
   if (!product) {
     return {
       title: "",
       description: "",
-      type: "PAID",
+      type: newType,
       price: "",
       quantity_available: "",
       max_attendees_per_registration: "",
@@ -232,6 +257,7 @@ function productToFormValues(product: Product | undefined, eventTimezone: string
             const startsAt = utcIsoToZonedPartsOrEmpty(t.starts_at, eventTimezone);
             const endsAt = utcIsoToZonedPartsOrEmpty(t.ends_at, eventTimezone);
             return {
+              uid: crypto.randomUUID(),
               id: t.id,
               name: t.name,
               description: t.description ?? "",
@@ -268,7 +294,8 @@ export function ProductsEditor({
 }) {
   const router = useRouter();
   const [products, setProducts] = useState(initialProducts);
-  const [modalProduct, setModalProduct] = useState<Product | "new" | null>(null);
+  // A product being edited, or { newType } when adding one (the type is chosen from the menu first).
+  const [modalProduct, setModalProduct] = useState<Product | { newType: PricingType } | null>(null);
 
   const deleteMutation = useMutation({
     mutationFn: (productId: number) => deleteProduct(eventId, productId),
@@ -340,9 +367,24 @@ export function ProductsEditor({
           Ticket types buyers can choose from at checkout.
         </Text>
         {!disabled && (
-          <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setModalProduct("new")}>
-            Add ticket type
-          </Button>
+          <Menu position="bottom-end" shadow="md" width={290} radius="md" offset={6}>
+            <Menu.Target>
+              <Button size="xs" leftSection={<IconPlus size={14} />} rightSection={<IconChevronDown size={14} />}>
+                Add ticket type
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              {CREATABLE_TYPES.map((type) => {
+                const meta = TYPE_META[type];
+                return (
+                  <Menu.Item key={type} leftSection={<meta.icon size={18} />} py={8} onClick={() => setModalProduct({ newType: type })}>
+                    <Text size="sm" fw={600}>{meta.label}</Text>
+                    <Text size="xs" c="dimmed">{meta.description}</Text>
+                  </Menu.Item>
+                );
+              })}
+            </Menu.Dropdown>
+          </Menu>
         )}
       </Group>
 
@@ -431,7 +473,8 @@ export function ProductsEditor({
           eventId={eventId}
           eventTimezone={eventTimezone}
           eventCurrency={eventCurrency}
-          product={modalProduct === "new" ? undefined : modalProduct}
+          product={"newType" in modalProduct ? undefined : modalProduct}
+          newType={"newType" in modalProduct ? modalProduct.newType : undefined}
           bundlesEnabled={bundlesEnabled}
           onClose={() => setModalProduct(null)}
           onSaved={(saved) => {
@@ -445,7 +488,7 @@ export function ProductsEditor({
       )}
 
       {bundlesEnabled && (
-        <BundlesEditor eventId={eventId} eventCurrency={eventCurrency} products={products} disabled={disabled} />
+        <BundlesEditor eventId={eventId} eventCurrency={eventCurrency} eventTimezone={eventTimezone} products={products} disabled={disabled} />
       )}
     </Stack>
   );
@@ -474,6 +517,7 @@ function ProductFormModal({
   eventTimezone,
   eventCurrency,
   product,
+  newType,
   onClose,
   onSaved,
   bundlesEnabled = false,
@@ -482,16 +526,19 @@ function ProductFormModal({
   eventTimezone: string;
   eventCurrency: string;
   product?: Product;
+  /** The type picked from the "Add ticket type" menu (create only). */
+  newType?: PricingType;
   onClose: () => void;
   onSaved: (product: Product) => void;
   bundlesEnabled?: boolean;
 }) {
   const isEdit = product !== undefined;
+  const isMobile = useMediaQuery("(max-width: 36em)");
 
   const router = useRouter();
 
   const form = useForm<ProductFormValues>({
-    initialValues: productToFormValues(product, eventTimezone),
+    initialValues: productToFormValues(product, eventTimezone, newType),
     validate: {
       title: (v) => (v.trim().length === 0 ? "Title is required" : null),
       // Optional: only a length check, never "required".
@@ -543,26 +590,52 @@ function ProductFormModal({
     },
   });
 
-  const setProductStartPart = (part: "starts_at_date" | "starts_at_time", value: string) => {
-    const nextStartDate = part === "starts_at_date" ? value : form.values.starts_at_date;
-    const nextStartTime = part === "starts_at_time" ? value : form.values.starts_at_time;
-    form.setFieldValue(part, value);
-    if (wallClockEndIsInvalid(nextStartDate, nextStartTime, form.values.ends_at_date, form.values.ends_at_time)) {
-      form.setFieldValue("ends_at_date", "");
-      form.setFieldValue("ends_at_time", "");
+  const productWindow = (v: ProductFormValues): WindowParts => ({
+    starts_at_date: v.starts_at_date, starts_at_time: v.starts_at_time, ends_at_date: v.ends_at_date, ends_at_time: v.ends_at_time,
+  });
+
+  // "More settings" start closed so the form stays short — but open straight away when editing a
+  // ticket that already customises something, and whenever an error lands inside one.
+  // A group keeps its description and Enabled switch in here, so a description or a paused group counts as customised.
+  const productCustomised = (v: ProductFormValues) =>
+    v.type === "TIERED"
+      ? v.description.trim() !== "" || !v.is_enabled || hasSaleWindow(productWindow(v))
+      : v.max_attendees_per_registration !== "" || v.bundle_only || hasSaleWindow(productWindow(v));
+  const tierCustomised = (t: TierFormValue) =>
+    t.max_attendees_per_registration !== "" || t.bundle_only || hasSaleWindow(t);
+
+  const [moreOpen, setMoreOpen] = useState(() => isEdit && productCustomised(form.values));
+  const [openOptions, setOpenOptions] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(form.values.tiers.filter((t) => isEdit && tierCustomised(t)).map((t) => [t.uid, true])),
+  );
+
+  /** Open whichever collapsed section holds a field that has an error. */
+  const revealErrors = (errors: Record<string, unknown>) => {
+    const inMore = /(^|\.)(max_attendees_per_registration|starts_at_(date|time)|ends_at_(date|time))$/;
+    for (const key of Object.keys(errors)) {
+      const tier = key.match(/^tiers\.(\d+)\.(.+)$/);
+      if (tier) {
+        const uid = form.values.tiers[Number(tier[1])]?.uid;
+        if (uid && inMore.test(tier[2])) setOpenOptions((current) => ({ ...current, [uid]: true }));
+      } else if (inMore.test(key) || (key === "description" && form.values.type === "TIERED")) {
+        setMoreOpen(true);
+      }
     }
   };
 
-  const setTierStartPart = (index: number, part: "starts_at_date" | "starts_at_time", value: string) => {
-    const tier = form.values.tiers[index];
-    const nextStartDate = part === "starts_at_date" ? value : tier.starts_at_date;
-    const nextStartTime = part === "starts_at_time" ? value : tier.starts_at_time;
-    form.setFieldValue(`tiers.${index}.${part}`, value);
-    if (wallClockEndIsInvalid(nextStartDate, nextStartTime, tier.ends_at_date, tier.ends_at_time)) {
-      form.setFieldValue(`tiers.${index}.ends_at_date`, "");
-      form.setFieldValue(`tiers.${index}.ends_at_time`, "");
-    }
-  };
+  const summarize = (max: number | "", window: WindowParts, bundleOnly: boolean, showMax: boolean) =>
+    [
+      showMax ? (max === "" ? "No per-order limit" : `Up to ${max} per order`) : null,
+      describeSaleWindow(window),
+      bundleOnly ? "Bundles only" : null,
+    ].filter(Boolean).join(" · ");
+
+  const summarizeGroup = (v: ProductFormValues) =>
+    [
+      v.is_enabled ? null : "Hidden from buyers",
+      v.description.trim() !== "" ? "Has a description" : "No description",
+      describeSaleWindow(productWindow(v)),
+    ].filter(Boolean).join(" · ");
 
   const saveMutation = useMutation({
     mutationFn: (values: ProductFormValues) => {
@@ -618,6 +691,7 @@ function ProductFormModal({
       if (error instanceof ApiError && error.errors) {
         const flat = Object.fromEntries(Object.entries(error.errors).map(([field, messages]) => [field, messages[0]]));
         form.setErrors(flat);
+        revealErrors(flat);
         if (flat.tiers) {
           notifications.show({ color: "red", message: flat.tiers });
         }
@@ -628,23 +702,60 @@ function ProductFormModal({
   });
 
   const tiers = form.values.tiers;
+  const isTiered = form.values.type === "TIERED";
+  const allOptionsOff = isTiered && tiers.length > 0 && tiers.every((t) => !t.is_enabled);
+
+  // For a single ticket this sits in the main form; a group tucks it into "More group settings".
+  const descriptionEditor = (
+    <TicketDescriptionEditor
+      value={form.values.description}
+      onChange={(html) => form.setFieldValue("description", html)}
+      error={form.errors.description}
+      description={
+        isTiered
+          ? "Optional. Shown under every option in this group. An option that has its own description shows that instead of this one."
+          : undefined
+      }
+    />
+  );
+
+  const meta = form.values.type === "PAID" || form.values.type === "REGISTRATION" || form.values.type === "TIERED" ? TYPE_META[form.values.type] : null;
 
   return (
-    <Modal opened onClose={onClose} title={isEdit ? "Edit ticket type" : "Add ticket type"} size="lg">
-      <form onSubmit={form.onSubmit((values) => saveMutation.mutate(values))}>
-        <Stack>
-          <Select
-            label="Pricing type"
-            withAsterisk
-            data={
-              product?.type === "FREE"
-                ? [{ value: "FREE", label: "Free (legacy)", disabled: true }, ...PRICING_OPTIONS]
-                : PRICING_OPTIONS
-            }
-            allowDeselect={false}
-            {...form.getInputProps("type")}
-          />
-          {form.values.type === "TIERED" ? (
+    <Modal
+      opened
+      onClose={onClose}
+      title={<Text fw={600} size="lg">{isEdit ? "Edit ticket type" : "Add ticket type"}</Text>}
+      size="lg"
+      fullScreen={isMobile}
+    >
+      <form onSubmit={form.onSubmit((values) => saveMutation.mutate(values), revealErrors)}>
+        <Stack gap="lg">
+          {isEdit ? (
+            <Select
+              label="Pricing type"
+              withAsterisk
+              data={
+                product?.type === "FREE"
+                  ? [{ value: "FREE", label: "Free (legacy)", disabled: true }, ...PRICING_OPTIONS]
+                  : PRICING_OPTIONS
+              }
+              allowDeselect={false}
+              {...form.getInputProps("type")}
+            />
+          ) : (
+            meta && (
+              <Group gap="sm" wrap="nowrap" p="sm" style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: "var(--mantine-radius-md)" }}>
+                <meta.icon size={22} aria-hidden="true" />
+                <Stack gap={0}>
+                  <Text size="sm" fw={600}>{meta.label}</Text>
+                  <Text size="xs" c="dimmed">{meta.description}</Text>
+                </Stack>
+              </Group>
+            )
+          )}
+
+          {isTiered ? (
             <Stack gap={4}>
               <HelpFieldLabel
                 htmlFor="ticket-group-title"
@@ -663,144 +774,162 @@ function ProductFormModal({
             <TextInput label="Ticket title" withAsterisk placeholder="General Admission" {...form.getInputProps("title")} />
           )}
 
-          <TicketDescriptionEditor
-            value={form.values.description}
-            onChange={(html) => form.setFieldValue("description", html)}
-            error={form.errors.description}
-            description={
-              form.values.type === "TIERED"
-                ? "Optional. Shown under every option in this group. An option that has its own description shows that instead of this one."
-                : undefined
-            }
-          />
+          {!isTiered && descriptionEditor}
 
-          {form.values.type === "REGISTRATION" && (
-            <Group gap="xs">
-              <Text size="sm" fw={500}>
-                Requires registration:
-              </Text>
-              <Badge color="teal" variant="light">
-                Yes
-              </Badge>
-            </Group>
-          )}
-
-          {form.values.type === "PAID" && (
+          <SimpleGrid cols={{ base: 1, sm: form.values.type === "PAID" ? 2 : 1 }} spacing="md">
+            {form.values.type === "PAID" && (
+              <NumberInput
+                label="Price"
+                withAsterisk
+                prefix={currencySymbol(eventCurrency)}
+                min={0}
+                decimalScale={currencyExponent(eventCurrency)}
+                inputWrapperOrder={["label", "input", "description", "error"]}
+                {...form.getInputProps("price")}
+              />
+            )}
             <NumberInput
-              label="Price"
-              withAsterisk
-              prefix={currencySymbol(eventCurrency)}
+              label="Total quantity available"
+              withAsterisk={isTiered}
+              description={isTiered ? "Required — the cap across all ticket options in this group." : "Leave blank for unlimited."}
+              inputWrapperOrder={["label", "input", "description", "error"]}
               min={0}
-              decimalScale={currencyExponent(eventCurrency)}
-              {...form.getInputProps("price")}
+              clampBehavior="blur"
+              {...form.getInputProps("quantity_available")}
             />
-          )}
-
-          <NumberInput
-            label="Total quantity available"
-            withAsterisk={form.values.type === "TIERED"}
-            description={form.values.type === "TIERED" ? "Required — the cap across all ticket options in this group." : "Leave blank for unlimited"}
-            min={0}
-            clampBehavior="blur"
-            {...form.getInputProps("quantity_available")}
-          />
-          {form.values.type === "TIERED" && enabledTierQuantitySum(tiers) !== null && (
-            <Text size="xs" c="dimmed">
+          </SimpleGrid>
+          {isTiered && enabledTierQuantitySum(tiers) !== null && (
+            <Text size="xs" c="dimmed" mt={-8}>
               Enabled ticket options currently add up to {enabledTierQuantitySum(tiers)} tickets.
             </Text>
           )}
 
-          {form.values.type !== "TIERED" && (
-            <NumberInput
-              label="Max attendees per registration"
-              description="Leave blank for unlimited"
-              min={1}
-              {...form.getInputProps("max_attendees_per_registration")}
-            />
+          {!isTiered && (
+            <Switch label="Enabled" description="Turn off to hide this ticket from buyers." {...form.getInputProps("is_enabled", { type: "checkbox" })} />
           )}
 
-          <Divider label="Sale window & availability" labelPosition="left" mt="sm" />
-          <Text size="xs" c="dimmed">
-            Times are in {eventTimezone}, this event&apos;s timezone.
-            {form.values.type === "TIERED" && " Applies on top of each ticket option's own window below."}
-          </Text>
-          <Group grow align="flex-start">
-            <TextInput type="date" label="Starts (optional)" {...form.getInputProps("starts_at_date")} onChange={(event) => setProductStartPart("starts_at_date", event.currentTarget.value)} />
-            <TextInput type="time" label="At" {...form.getInputProps("starts_at_time")} onChange={(event) => setProductStartPart("starts_at_time", event.currentTarget.value)} />
-          </Group>
-          <Group grow align="flex-start">
-            <TextInput type="date" label="Ends (optional)" min={form.values.starts_at_date || undefined} {...form.getInputProps("ends_at_date")} />
-            <TextInput type="time" label="At" min={minimumEndTime(form.values.starts_at_date, form.values.starts_at_time, form.values.ends_at_date)} disabled={form.values.starts_at_date === form.values.ends_at_date && form.values.starts_at_time === "23:59"} {...form.getInputProps("ends_at_time")} />
-          </Group>
-          <Switch label="Enabled" {...form.getInputProps("is_enabled", { type: "checkbox" })} />
-          {bundlesEnabled && form.values.type !== "TIERED" && (
-            <Switch
-              label="Only sold in bundles"
-              description="Hidden from the ticket list. Buyers get it only as part of a bundle (e.g. Child tickets in a Family Pass)."
-              {...form.getInputProps("bundle_only", { type: "checkbox" })}
+          <MoreSettings
+            label={isTiered ? "More group settings" : "More settings"}
+            opened={moreOpen}
+            onToggle={() => setMoreOpen((open) => !open)}
+            customised={productCustomised(form.values)}
+            summary={isTiered ? summarizeGroup(form.values) : summarize(form.values.max_attendees_per_registration, productWindow(form.values), form.values.bundle_only, true)}
+          >
+            {isTiered && descriptionEditor}
+            {!isTiered && (
+              <NumberInput
+                label="Max attendees per registration"
+                description="The most tickets one buyer can add to a single order. Leave blank for no limit."
+                inputWrapperOrder={["label", "input", "description", "error"]}
+                min={1}
+                allowDecimal={false}
+                {...form.getInputProps("max_attendees_per_registration")}
+              />
+            )}
+            <SaleWindowFields
+              idPrefix="product"
+              timezone={eventTimezone}
+              value={productWindow(form.values)}
+              onChange={(next) => form.setValues(next)}
+              startError={form.errors.starts_at_time ?? form.errors.starts_at_date}
+              endError={form.errors.ends_at_time ?? form.errors.ends_at_date}
+              note={isTiered ? "Applies on top of each ticket option's own window." : undefined}
             />
-          )}
+            {isTiered && (
+              <Switch
+                label="Enabled"
+                description={
+                  form.values.is_enabled
+                    ? "Turn off to hide the whole group from buyers. Each option keeps its own Enabled setting, so turning the group back on restores what was on sale."
+                    : "Hidden from buyers. Turn on to put the group back on sale (only its enabled options are shown)."
+                }
+                {...form.getInputProps("is_enabled", { type: "checkbox" })}
+              />
+            )}
+            {bundlesEnabled && !isTiered && (
+              <Switch
+                label="Only sold in bundles"
+                description="Hidden from the ticket list. Buyers get it only as part of a bundle (e.g. Child tickets in a Family Pass)."
+                {...form.getInputProps("bundle_only", { type: "checkbox" })}
+              />
+            )}
+          </MoreSettings>
 
-          {form.values.type === "TIERED" && (
-            <>
-              <Divider label="Ticket options" labelPosition="left" mt="sm" />
+          {isTiered && (
+            <Stack gap="md">
+              <Divider label="Ticket options" labelPosition="left" />
               {tiers.map((tier, index) => (
-                <Card key={index} withBorder radius="md" p="sm">
-                  <Stack gap="xs">
-                    <Group justify="space-between">
+                <Card key={tier.uid} withBorder radius="md" p="md">
+                  <Stack gap="sm">
+                    <Group justify="space-between" wrap="nowrap">
                       <Text size="sm" fw={600}>
                         Ticket option {index + 1}
                       </Text>
-                      <Group gap={4}>
-                        <ActionIcon
-                          variant="subtle"
-                          size="sm"
-                          disabled={index === 0}
-                          onClick={() => form.reorderListItem("tiers", { from: index, to: index - 1 })}
-                        >
+                      <Group gap={4} wrap="nowrap">
+                        <ActionIcon variant="subtle" size="sm" aria-label="Move option up" disabled={index === 0} onClick={() => form.reorderListItem("tiers", { from: index, to: index - 1 })}>
                           <IconChevronUp size={14} />
                         </ActionIcon>
-                        <ActionIcon
-                          variant="subtle"
-                          size="sm"
-                          disabled={index === tiers.length - 1}
-                          onClick={() => form.reorderListItem("tiers", { from: index, to: index + 1 })}
-                        >
+                        <ActionIcon variant="subtle" size="sm" aria-label="Move option down" disabled={index === tiers.length - 1} onClick={() => form.reorderListItem("tiers", { from: index, to: index + 1 })}>
                           <IconChevronDown size={14} />
                         </ActionIcon>
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          size="sm"
-                          disabled={tiers.length === 1}
-                          onClick={() => form.removeListItem("tiers", index)}
-                        >
+                        <Tooltip label="Duplicate option">
+                          <ActionIcon
+                            variant="subtle"
+                            size="sm"
+                            aria-label="Duplicate option"
+                            onClick={() => {
+                              // A copy is a brand-new option: no id (so it isn't treated as the sold original), no sales.
+                              const copy: TierFormValue = { ...tier, uid: crypto.randomUUID(), id: null, name: tier.name ? `${tier.name} (copy)` : "" };
+                              form.insertListItem("tiers", copy, index + 1);
+                            }}
+                          >
+                            <IconCopy size={14} />
+                          </ActionIcon>
+                        </Tooltip>
+                        <ActionIcon variant="subtle" color="red" size="sm" aria-label="Remove option" disabled={tiers.length === 1} onClick={() => form.removeListItem("tiers", index)}>
                           <IconTrash size={14} />
                         </ActionIcon>
                       </Group>
                     </Group>
-                    <Stack gap={4}>
-                      <HelpFieldLabel
-                        htmlFor={`ticket-option-name-${index}`}
-                        required
-                        help="The option describes what the buyer receives within this ticket group. Examples include General Admission, Standard, Standard+, VIP, Student, and Balcony."
-                      >
-                        Ticket option name
-                      </HelpFieldLabel>
-                      <TextInput
-                        id={`ticket-option-name-${index}`}
-                        placeholder="Enter ticket option name"
-                        {...form.getInputProps(`tiers.${index}.name`)}
-                      />
-                    </Stack>
-                    <NumberInput
-                      label="Price"
-                      withAsterisk
-                      prefix={currencySymbol(eventCurrency)}
-                      min={0}
-                      decimalScale={currencyExponent(eventCurrency)}
-                      {...form.getInputProps(`tiers.${index}.price`)}
-                    />
+
+                    <Grid gutter="sm">
+                      <Grid.Col span={{ base: 12, sm: 6 }}>
+                        <Stack gap={4}>
+                          <HelpFieldLabel
+                            htmlFor={`ticket-option-name-${index}`}
+                            required
+                            help="The option describes what the buyer receives within this ticket group. Examples include General Admission, Standard, Standard+, VIP, Student, and Balcony."
+                          >
+                            Ticket option name
+                          </HelpFieldLabel>
+                          <TextInput
+                            id={`ticket-option-name-${index}`}
+                            placeholder="Enter ticket option name"
+                            {...form.getInputProps(`tiers.${index}.name`)}
+                          />
+                        </Stack>
+                      </Grid.Col>
+                      <Grid.Col span={{ base: 6, sm: 3 }}>
+                        <NumberInput
+                          label="Price"
+                          withAsterisk
+                          prefix={currencySymbol(eventCurrency)}
+                          min={0}
+                          decimalScale={currencyExponent(eventCurrency)}
+                          {...form.getInputProps(`tiers.${index}.price`)}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={{ base: 6, sm: 3 }}>
+                        <NumberInput
+                          label="Capacity"
+                          withAsterisk
+                          min={0}
+                          clampBehavior="blur"
+                          {...form.getInputProps(`tiers.${index}.quantity_available`)}
+                        />
+                      </Grid.Col>
+                    </Grid>
+
                     <TicketDescriptionEditor
                       label="Option description"
                       description="Optional. If filled in, buyers see this instead of the ticket group description for this option. Leave empty to use the group description."
@@ -808,69 +937,60 @@ function ProductFormModal({
                       onChange={(html) => form.setFieldValue(`tiers.${index}.description`, html)}
                       error={form.errors[`tiers.${index}.description`]}
                     />
-                    <Text size="xs" c="dimmed">
-                      Sale window times are in {eventTimezone}, this event&apos;s timezone.
-                    </Text>
-                    <Group grow align="flex-start">
-                      <TextInput
-                        type="date"
-                        label="Starts (optional)"
-                        {...form.getInputProps(`tiers.${index}.starts_at_date`)}
-                        onChange={(event) => setTierStartPart(index, "starts_at_date", event.currentTarget.value)}
+
+                    <Switch label="Enabled" {...form.getInputProps(`tiers.${index}.is_enabled`, { type: "checkbox" })} />
+
+                    <MoreSettings
+                      label="More settings"
+                      opened={!!openOptions[tier.uid]}
+                      onToggle={() => setOpenOptions((current) => ({ ...current, [tier.uid]: !current[tier.uid] }))}
+                      customised={tierCustomised(tier)}
+                      summary={summarize(tier.max_attendees_per_registration, tier, tier.bundle_only, true)}
+                    >
+                      <NumberInput
+                        label="Max attendees per registration"
+                        description="The most of this option one buyer can add to an order. Leave blank for no limit."
+                        inputWrapperOrder={["label", "input", "description", "error"]}
+                        min={1}
+                        allowDecimal={false}
+                        {...form.getInputProps(`tiers.${index}.max_attendees_per_registration`)}
                       />
-                      <TextInput type="time" label="At" {...form.getInputProps(`tiers.${index}.starts_at_time`)} onChange={(event) => setTierStartPart(index, "starts_at_time", event.currentTarget.value)} />
-                    </Group>
-                    <Group grow align="flex-start">
-                      <TextInput
-                        type="date"
-                        label="Ends (optional)"
-                        min={tier.starts_at_date || undefined}
-                        {...form.getInputProps(`tiers.${index}.ends_at_date`)}
+                      <SaleWindowFields
+                        idPrefix={`option-${tier.uid}`}
+                        timezone={eventTimezone}
+                        value={tier}
+                        onChange={(next) => form.setFieldValue(`tiers.${index}`, { ...tier, ...next })}
+                        startError={form.errors[`tiers.${index}.starts_at_time`] ?? form.errors[`tiers.${index}.starts_at_date`]}
+                        endError={form.errors[`tiers.${index}.ends_at_time`] ?? form.errors[`tiers.${index}.ends_at_date`]}
                       />
-                      <TextInput type="time" label="At" min={minimumEndTime(tier.starts_at_date, tier.starts_at_time, tier.ends_at_date)} disabled={tier.starts_at_date === tier.ends_at_date && tier.starts_at_time === "23:59"} {...form.getInputProps(`tiers.${index}.ends_at_time`)} />
-                    </Group>
-                    <NumberInput
-                      label="Option capacity"
-                      withAsterisk
-                      description="Required. You can increase it later within the ticket group capacity."
-                      min={0}
-                      clampBehavior="blur"
-                      {...form.getInputProps(`tiers.${index}.quantity_available`)}
-                    />
-                    <NumberInput
-                      label="Max attendees per registration"
-                      description="Leave blank for unlimited — each ticket option can have its own per-order limit."
-                      min={1}
-                      {...form.getInputProps(`tiers.${index}.max_attendees_per_registration`)}
-                    />
-                    <Switch
-                      label="Enabled"
-                      {...form.getInputProps(`tiers.${index}.is_enabled`, { type: "checkbox" })}
-                    />
-                    {bundlesEnabled && (
-                      <Switch
-                        label="Only sold in bundles"
-                        description="Hidden from buyers; sold only inside bundles."
-                        {...form.getInputProps(`tiers.${index}.bundle_only`, { type: "checkbox" })}
-                      />
-                    )}
+                      {bundlesEnabled && (
+                        <Switch
+                          label="Only sold in bundles"
+                          description="Hidden from buyers; sold only inside bundles."
+                          {...form.getInputProps(`tiers.${index}.bundle_only`, { type: "checkbox" })}
+                        />
+                      )}
+                    </MoreSettings>
                   </Stack>
                 </Card>
               ))}
+              {allOptionsOff && form.values.is_enabled && (
+                <Text size="xs" c="orange.8" role="status">
+                  Every option is turned off, so buyers won&apos;t see this group. Enable at least one option, or turn the group off in More group settings.
+                </Text>
+              )}
               <Button
                 variant="light"
-                size="xs"
-                leftSection={<IconPlus size={14} />}
+                leftSection={<IconPlus size={16} />}
                 onClick={() => form.insertListItem("tiers", emptyTier())}
-                style={{ alignSelf: "flex-start" }}
               >
                 Add ticket option
               </Button>
-            </>
+            </Stack>
           )}
 
-          <Group justify="flex-end" mt="md">
-            <Button variant="subtle" onClick={onClose}>
+          <Group justify="flex-end" gap="sm">
+            <Button variant="default" onClick={onClose}>
               Cancel
             </Button>
             <Button type="submit" loading={saveMutation.isPending}>

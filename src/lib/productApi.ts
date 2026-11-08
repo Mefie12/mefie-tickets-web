@@ -182,6 +182,8 @@ export type Bundle = {
   list_total: string;
   /** null = unlimited. */
   buyable: number | null;
+  /** Why it can't be bought right now (paused, a component is off sale, sold out…); null when it can. */
+  unavailable_reason: string | null;
   components: BundleComponent[];
 };
 

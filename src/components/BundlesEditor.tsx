@@ -29,6 +29,8 @@ import { IconPackages, IconPlayerPause, IconPlayerPlay, IconPlus, IconTrash } fr
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/components/TicketDescriptionEditor";
+import { describeSaleWindow, hasSaleWindow, MoreSettings, SaleWindowFields, type WindowParts } from "@/components/TicketFormParts";
+import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import {
@@ -52,7 +54,7 @@ type BundleFormValues = {
   quantity_available: number | "";
   max_per_order: number | "";
   is_enabled: boolean;
-};
+} & WindowParts;
 
 /** "p:12" = whole ticket 12; "t:12:34" = option 34 of ticket group 12. */
 function componentKey(productId: number, optionId: number | null): string {
@@ -86,11 +88,13 @@ function componentChoices(products: Product[]): { value: string; label: string; 
 export function BundlesEditor({
   eventId,
   eventCurrency,
+  eventTimezone,
   products,
   disabled,
 }: {
   eventId: number;
   eventCurrency: string;
+  eventTimezone: string;
   products: Product[];
   disabled: boolean;
 }) {
@@ -153,8 +157,15 @@ export function BundlesEditor({
                 <Group gap="xs">
                   <Text fw={600}>{bundle.title}</Text>
                   {!bundle.is_enabled && <Badge size="sm" color="gray" variant="light">Paused</Badge>}
-                  {bundle.is_enabled && bundle.buyable === 0 && <Badge size="sm" color="red" variant="light">Sold out</Badge>}
+                  {bundle.is_enabled && bundle.unavailable_reason && (
+                    <Badge size="sm" color={bundle.unavailable_reason === "Sold out" ? "red" : "orange"} variant="light">
+                      {bundle.unavailable_reason === "Sold out" ? "Sold out" : "Not on sale"}
+                    </Badge>
+                  )}
                 </Group>
+                {bundle.is_enabled && bundle.unavailable_reason && bundle.unavailable_reason !== "Sold out" && (
+                  <Text size="xs" c="orange.8">{bundle.unavailable_reason}</Text>
+                )}
                 <Text size="sm" c="dimmed">
                   {bundle.components.map((c) => `${c.quantity} × ${c.label}`).join(" + ")}
                 </Text>
@@ -210,6 +221,7 @@ export function BundlesEditor({
         <BundleFormModal
           eventId={eventId}
           eventCurrency={eventCurrency}
+          eventTimezone={eventTimezone}
           products={products}
           bundle={modalBundle === "new" ? undefined : modalBundle}
           onClose={() => setModalBundle(null)}
@@ -226,6 +238,7 @@ export function BundlesEditor({
 function BundleFormModal({
   eventId,
   eventCurrency,
+  eventTimezone,
   products,
   bundle,
   onClose,
@@ -233,6 +246,7 @@ function BundleFormModal({
 }: {
   eventId: number;
   eventCurrency: string;
+  eventTimezone: string;
   products: Product[];
   bundle?: Bundle;
   onClose: () => void;
@@ -243,6 +257,9 @@ function BundleFormModal({
   const locked = bundle?.is_locked ?? false;
   const choices = useMemo(() => componentChoices(products), [products]);
   const isMobile = useMediaQuery("(max-width: 36em)");
+  const windowOf = (v: WindowParts): WindowParts => ({
+    starts_at_date: v.starts_at_date, starts_at_time: v.starts_at_time, ends_at_date: v.ends_at_date, ends_at_time: v.ends_at_time,
+  });
 
   const form = useForm<BundleFormValues>({
     initialValues: {
@@ -255,17 +272,39 @@ function BundleFormModal({
       quantity_available: bundle?.quantity_available ?? "",
       max_per_order: bundle?.max_per_order ?? "",
       is_enabled: bundle?.is_enabled ?? true,
+      ...(() => {
+        const starts = utcIsoToZonedPartsOrEmpty(bundle?.starts_at, eventTimezone);
+        const ends = utcIsoToZonedPartsOrEmpty(bundle?.ends_at, eventTimezone);
+        return { starts_at_date: starts.date, starts_at_time: starts.time, ends_at_date: ends.date, ends_at_time: ends.time };
+      })(),
     },
     validate: {
       title: (v) => (v.trim() === "" ? "Name the bundle" : null),
       price: (v) => (v === "" || v <= 0 ? "Enter the bundle price" : null),
       description: (v) => (v.length > TICKET_DESCRIPTION_MAX_LENGTH ? "Description is too long." : null),
+      ends_at_time: (v, values) =>
+        values.starts_at_date && values.ends_at_date && `${values.ends_at_date} ${v}` <= `${values.starts_at_date} ${values.starts_at_time}`
+          ? "Must end after it starts"
+          : null,
       components: {
         key: (v) => (v === "" ? "Choose a ticket" : null),
         quantity: (v) => (v === "" || v < 1 ? "At least 1" : null),
       },
     },
   });
+
+  // Limits and the sale window live in "More settings": closed by default, open when editing a
+  // customised bundle or when an error lands inside.
+  const bundleCustomised = (v: BundleFormValues) => v.quantity_available !== "" || v.max_per_order !== "" || hasSaleWindow(v);
+  const [moreOpen, setMoreOpen] = useState(() => isEdit && bundleCustomised(form.values));
+  const revealErrors = (errors: Record<string, unknown>) => {
+    if (Object.keys(errors).some((key) => /^(quantity_available|max_per_order|starts_at_(date|time)|ends_at_(date|time))$/.test(key))) setMoreOpen(true);
+  };
+  const moreSummary = [
+    form.values.quantity_available === "" ? "No limit on bundles sold" : `Up to ${form.values.quantity_available} bundles`,
+    form.values.max_per_order === "" ? "no per-order limit" : `up to ${form.values.max_per_order} per order`,
+    describeSaleWindow(windowOf(form.values)),
+  ].join(" · ");
 
   const priceOf = (key: string) => choices.find((c) => c.value === key)?.price ?? 0;
   const packageSize = form.values.components.reduce((sum, c) => sum + (c.quantity === "" ? 0 : c.quantity), 0);
@@ -279,6 +318,10 @@ function BundleFormModal({
         quantity_available: values.quantity_available === "" ? null : values.quantity_available,
         max_per_order: values.max_per_order === "" ? null : values.max_per_order,
         is_enabled: values.is_enabled,
+        starts_at_date: values.starts_at_date || null,
+        starts_at_time: values.starts_at_time || null,
+        ends_at_date: values.ends_at_date || null,
+        ends_at_time: values.ends_at_time || null,
         ...(locked
           ? {}
           : {
@@ -296,7 +339,9 @@ function BundleFormModal({
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
       if (error instanceof ApiError && error.errors) {
-        form.setErrors(Object.fromEntries(Object.entries(error.errors).map(([field, messages]) => [field, messages[0]])));
+        const flat = Object.fromEntries(Object.entries(error.errors).map(([field, messages]) => [field, messages[0]]));
+        form.setErrors(flat);
+        revealErrors(flat);
         if (error.errors.components) notifications.show({ color: "red", message: error.errors.components[0] });
         return;
       }
@@ -322,7 +367,7 @@ function BundleFormModal({
       size="lg"
       fullScreen={isMobile}
     >
-      <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
+      <form onSubmit={form.onSubmit((values) => mutation.mutate(values), revealErrors)}>
         <Stack gap="xl">
           {locked && (
             <Alert color="gray" variant="light">
@@ -407,27 +452,38 @@ function BundleFormModal({
               description={pricePreview}
               {...form.getInputProps("price")}
             />
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
-              <NumberInput
-                label="Limit"
-                placeholder="No limit"
-                min={1}
-                allowDecimal={false}
-                inputWrapperOrder={["label", "input", "description", "error"]}
-                description="Most bundles you'll sell. Leave blank to sell as many as the tickets allow."
-                {...form.getInputProps("quantity_available")}
-              />
-              <NumberInput
-                label="Max per order"
-                placeholder="No limit"
-                min={1}
-                allowDecimal={false}
-                inputWrapperOrder={["label", "input", "description", "error"]}
-                description="Most bundles one buyer can add to a single order."
-                {...form.getInputProps("max_per_order")}
-              />
-            </SimpleGrid>
             <Switch label="Enabled" description="Turn off to hide this bundle from buyers." {...form.getInputProps("is_enabled", { type: "checkbox" })} />
+            <MoreSettings opened={moreOpen} onToggle={() => setMoreOpen((open) => !open)} customised={bundleCustomised(form.values)} summary={moreSummary}>
+              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <NumberInput
+                  label="Limit"
+                  placeholder="No limit"
+                  min={1}
+                  allowDecimal={false}
+                  inputWrapperOrder={["label", "input", "description", "error"]}
+                  description="Most bundles you'll sell. Leave blank to sell as many as the tickets allow."
+                  {...form.getInputProps("quantity_available")}
+                />
+                <NumberInput
+                  label="Max per order"
+                  placeholder="No limit"
+                  min={1}
+                  allowDecimal={false}
+                  inputWrapperOrder={["label", "input", "description", "error"]}
+                  description="Most bundles one buyer can add to a single order."
+                  {...form.getInputProps("max_per_order")}
+                />
+              </SimpleGrid>
+              <SaleWindowFields
+                idPrefix="bundle"
+                timezone={eventTimezone}
+                value={windowOf(form.values)}
+                onChange={(next) => form.setValues(next)}
+                startError={form.errors.starts_at_time ?? form.errors.starts_at_date}
+                endError={form.errors.ends_at_time ?? form.errors.ends_at_date}
+                note="A bundle also follows the sale window of each ticket inside it."
+              />
+            </MoreSettings>
           </Stack>
 
           <Group justify="flex-end" gap="sm">
