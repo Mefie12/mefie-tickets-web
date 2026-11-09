@@ -54,6 +54,8 @@ import {
 } from "@/lib/eventApi";
 import type { Product } from "@/lib/productApi";
 import type { Question } from "@/lib/questionApi";
+import type { TicketLayoutResponse } from "@/lib/ticketLayoutApi";
+import type { Bundle } from "@/lib/productApi";
 import { ProductsEditor } from "@/components/ProductsEditor";
 import { EventSharingDialog } from "@/components/EventSharingDialog";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
@@ -134,6 +136,8 @@ export function EventManager({
   initialComplimentaryProgram,
   organizationSlug,
   bundlesEnabled = false,
+  initialTicketLayout = null,
+  initialBundles,
 }: {
   initialEvent: Event;
   initialProducts: Product[];
@@ -141,6 +145,8 @@ export function EventManager({
   initialComplimentaryProgram: ComplimentaryProgram;
   organizationSlug: string;
   bundlesEnabled?: boolean;
+  initialTicketLayout?: TicketLayoutResponse | null;
+  initialBundles?: Bundle[];
 }) {
   const [event, setEvent] = useState(initialEvent);
   const sellsPaidTickets = initialProducts.some((product) => ["PAID", "TIERED", "DONATION"].includes(product.type));
@@ -398,6 +404,8 @@ export function EventManager({
             initialProducts={initialProducts}
             disabled={archived}
             bundlesEnabled={bundlesEnabled}
+            initialTicketLayout={initialTicketLayout}
+            initialBundles={initialBundles}
           />
         </Tabs.Panel>
         <Tabs.Panel value="complimentary" pt="lg">

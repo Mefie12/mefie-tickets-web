@@ -40,6 +40,8 @@ import {
   toRecurrenceRuleInput,
   type RecurrenceFormValues,
 } from "@/components/RecurrenceRuleEditor";
+import type { TicketLayoutResponse } from "@/lib/ticketLayoutApi";
+import type { Bundle } from "@/lib/productApi";
 import { ProductsEditor } from "@/components/ProductsEditor";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
@@ -121,6 +123,8 @@ export function EventSeriesManager({
   initialQuestions,
   organizationSlug,
   bundlesEnabled = false,
+  initialTicketLayout = null,
+  initialBundles,
 }: {
   initialSeries: EventSeries;
   initialTemplateEvent: Event;
@@ -128,6 +132,8 @@ export function EventSeriesManager({
   initialQuestions: Question[];
   organizationSlug: string;
   bundlesEnabled?: boolean;
+  initialTicketLayout?: TicketLayoutResponse | null;
+  initialBundles?: Bundle[];
 }) {
   const [series, setSeries] = useState(initialSeries);
   const router = useRouter();
@@ -247,6 +253,8 @@ export function EventSeriesManager({
             bundlesEnabled={bundlesEnabled}
             seriesId={series.id}
             layoutDisabled={series.status === "ARCHIVED"}
+            initialTicketLayout={initialTicketLayout}
+            initialBundles={initialBundles}
           />
         </Tabs.Panel>
         <Tabs.Panel value="questions" pt="lg">

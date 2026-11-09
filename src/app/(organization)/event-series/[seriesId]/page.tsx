@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { Stack } from "@mantine/core";
 import { backendRequest } from "@/lib/backend";
 import type { Event } from "@/lib/eventApi";
-import type { Product } from "@/lib/productApi";
+import type { Bundle, Product } from "@/lib/productApi";
+import type { TicketLayoutResponse } from "@/lib/ticketLayoutApi";
 import type { Question } from "@/lib/questionApi";
 import type { EventSeries } from "@/lib/eventSeriesApi";
 import { EventSeriesManager } from "@/components/EventSeriesManager";
@@ -17,9 +18,11 @@ export default async function EventSeriesSettingsPage({ params }: { params: Prom
   if (seriesResult.status !== 200) notFound();
 
   const templateEventId = seriesResult.data.event_series.template_event.id;
-  const [productsResult, questionsResult] = await Promise.all([
+  const [productsResult, questionsResult, layoutResult, bundlesResult] = await Promise.all([
     backendRequest<{ products: Product[]; bundles_enabled?: boolean }>(`/api/events/${templateEventId}/products`),
     backendRequest<{ questions: Question[] }>(`/api/events/${templateEventId}/questions`),
+    backendRequest<TicketLayoutResponse>(`/api/events/${templateEventId}/ticket-layout`),
+    backendRequest<{ bundles: Bundle[] }>(`/api/events/${templateEventId}/bundles`),
   ]);
 
   return (
@@ -31,6 +34,8 @@ export default async function EventSeriesSettingsPage({ params }: { params: Prom
         initialQuestions={questionsResult.status === 200 ? questionsResult.data.questions : []}
         organizationSlug={organization?.slug ?? ""}
         bundlesEnabled={productsResult.status === 200 ? Boolean(productsResult.data.bundles_enabled) : false}
+        initialTicketLayout={layoutResult.status === 200 ? layoutResult.data : null}
+        initialBundles={bundlesResult.status === 200 ? bundlesResult.data.bundles : undefined}
       />
     </Stack>
   );

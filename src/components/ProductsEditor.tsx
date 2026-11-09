@@ -61,8 +61,10 @@ import {
   type Product,
   type TicketOptionInput,
   updateProduct,
+  type Bundle,
 } from "@/lib/productApi";
 import { currencySymbol, formatMoney, currencyExponent } from "@/lib/money";
+import type { TicketLayoutResponse } from "@/lib/ticketLayoutApi";
 
 /** Mantine gives nested-list validators a path like "tiers.2.ends_at_time". */
 function tierIndexFromPath(path: string): number {
@@ -289,6 +291,8 @@ export function ProductsEditor({
   bundlesEnabled = false,
   seriesId,
   layoutDisabled,
+  initialTicketLayout,
+  initialBundles,
 }: {
   eventId: number;
   eventTimezone: string;
@@ -300,13 +304,16 @@ export function ProductsEditor({
   seriesId?: number;
   /** Arranging is display-only, so it can stay open when ticket editing is locked (a published series). Defaults to `disabled`. */
   layoutDisabled?: boolean;
+  /** The layout and bundles fetched with the page, so nothing waits on a second request. */
+  initialTicketLayout?: TicketLayoutResponse | null;
+  initialBundles?: Bundle[];
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [products, setProducts] = useState(initialProducts);
   // Tickets and bundles share one arrangeable list, so any add/remove must refresh the order too.
   const refreshLayout = () => queryClient.invalidateQueries({ queryKey: ["ticket-layout", eventId] });
-  const bundleManager = useBundleManager({ eventId, eventCurrency, eventTimezone, products, disabled, enabled: bundlesEnabled });
+  const bundleManager = useBundleManager({ eventId, eventCurrency, eventTimezone, products, disabled, enabled: bundlesEnabled, initialBundles });
   // A product being edited, or { newType } when adding one (the type is chosen from the menu first).
   const [modalProduct, setModalProduct] = useState<Product | { newType: PricingType } | null>(null);
 
@@ -499,6 +506,7 @@ export function ProductsEditor({
           renderProduct={renderProductCard}
           renderBundle={bundleManager.renderCard}
           seriesId={seriesId}
+          initialLayout={initialTicketLayout}
         />
       )}
 
