@@ -18,7 +18,7 @@ export default async function EventSeriesSettingsPage({ params }: { params: Prom
 
   const templateEventId = seriesResult.data.event_series.template_event.id;
   const [productsResult, questionsResult] = await Promise.all([
-    backendRequest<{ products: Product[] }>(`/api/events/${templateEventId}/products`),
+    backendRequest<{ products: Product[]; bundles_enabled?: boolean }>(`/api/events/${templateEventId}/products`),
     backendRequest<{ questions: Question[] }>(`/api/events/${templateEventId}/questions`),
   ]);
 
@@ -30,6 +30,7 @@ export default async function EventSeriesSettingsPage({ params }: { params: Prom
         initialProducts={productsResult.status === 200 ? productsResult.data.products : []}
         initialQuestions={questionsResult.status === 200 ? questionsResult.data.questions : []}
         organizationSlug={organization?.slug ?? ""}
+        bundlesEnabled={productsResult.status === 200 ? Boolean(productsResult.data.bundles_enabled) : false}
       />
     </Stack>
   );

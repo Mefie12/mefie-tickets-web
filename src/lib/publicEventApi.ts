@@ -1,3 +1,4 @@
+import type { LayoutNode } from "@/lib/ticketLayout";
 import type { PublicOffer } from "@/lib/offersApi";
 /**
  * Types matching the backend's app/Http/Resources/Public/* Resource
@@ -286,6 +287,8 @@ export type PublicEvent = {
   products: PublicProduct[];
   /** Present only while bundles are enabled. */
   bundles?: PublicBundle[];
+  /** The organizer's arrangement of products and bundles (already filtered to what's visible). Older payloads lack it. */
+  ticket_layout?: LayoutNode[];
   questions: PublicQuestion[];
   /** null when the organizer hasn't enabled a published version — no acceptance is required at checkout. */
   terms: PublicEventTerms | null;

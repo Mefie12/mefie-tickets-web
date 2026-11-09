@@ -120,12 +120,14 @@ export function EventSeriesManager({
   initialProducts,
   initialQuestions,
   organizationSlug,
+  bundlesEnabled = false,
 }: {
   initialSeries: EventSeries;
   initialTemplateEvent: Event;
   initialProducts: Product[];
   initialQuestions: Question[];
   organizationSlug: string;
+  bundlesEnabled?: boolean;
 }) {
   const [series, setSeries] = useState(initialSeries);
   const router = useRouter();
@@ -242,6 +244,9 @@ export function EventSeriesManager({
             eventCurrency={series.currency_code}
             initialProducts={initialProducts}
             disabled={disabled}
+            bundlesEnabled={bundlesEnabled}
+            seriesId={series.id}
+            layoutDisabled={series.status === "ARCHIVED"}
           />
         </Tabs.Panel>
         <Tabs.Panel value="questions" pt="lg">

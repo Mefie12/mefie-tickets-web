@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { useMediaQuery } from "@mantine/hooks";
 import {
@@ -31,6 +31,7 @@ import {
   IconCopy,
   IconInfoCircle,
   IconPlayerPause,
+  IconPackages,
   IconPlayerPlay,
   IconPlus,
   IconStack2,
@@ -41,7 +42,8 @@ import {
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/components/TicketDescriptionEditor";
-import { BundlesEditor } from "@/components/BundlesEditor";
+import { useBundleManager } from "@/components/BundlesEditor";
+import { TicketArranger } from "@/components/TicketArranger";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
@@ -117,16 +119,17 @@ type ProductFormValues = {
 
 /** What each creatable ticket type means, for the "Add ticket type" menu and the form header. */
 const TYPE_META: Record<"PAID" | "REGISTRATION" | "TIERED", { label: string; description: string; icon: typeof IconTicket }> = {
-  PAID: { label: "Paid ticket", description: "One price for everyone", icon: IconTicket },
-  REGISTRATION: { label: "Free ticket", description: "No payment — attendees register", icon: IconUserCheck },
-  TIERED: { label: "Ticket group with options", description: "Early bird, VIP, student… each with its own price", icon: IconStack2 },
+  PAID: { label: "Single-price ticket", description: "One price for everyone, e.g. General Admission", icon: IconTicket },
+  REGISTRATION: { label: "Free ticket", description: "No payment. Attendees just register", icon: IconUserCheck },
+  TIERED: { label: "Ticket group", description: "Early bird, VIP, student… each option with its own price", icon: IconStack2 },
 };
-const CREATABLE_TYPES = ["PAID", "REGISTRATION", "TIERED"] as const;
+// Free first, then the everyday single-price ticket, then groups.
+const CREATABLE_TYPES = ["REGISTRATION", "PAID", "TIERED"] as const;
 
 const PRICING_OPTIONS: { value: PricingType; label: string }[] = [
-  { value: "REGISTRATION", label: "Free (requires registration)" },
-  { value: "PAID", label: "Paid (single price)" },
-  { value: "TIERED", label: "Ticket group with options" },
+  { value: "REGISTRATION", label: "Free ticket (requires registration)" },
+  { value: "PAID", label: "Single-price ticket" },
+  { value: "TIERED", label: "Ticket group" },
 ];
 
 /** REGISTRATION is the only creatable $0 ticket type — every free ticket requires registration. */
@@ -284,6 +287,8 @@ export function ProductsEditor({
   initialProducts,
   disabled,
   bundlesEnabled = false,
+  seriesId,
+  layoutDisabled,
 }: {
   eventId: number;
   eventTimezone: string;
@@ -291,9 +296,17 @@ export function ProductsEditor({
   initialProducts: Product[];
   disabled: boolean;
   bundlesEnabled?: boolean;
+  /** Set when editing a series template: the arranger can then apply its order to upcoming occurrences. */
+  seriesId?: number;
+  /** Arranging is display-only, so it can stay open when ticket editing is locked (a published series). Defaults to `disabled`. */
+  layoutDisabled?: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [products, setProducts] = useState(initialProducts);
+  // Tickets and bundles share one arrangeable list, so any add/remove must refresh the order too.
+  const refreshLayout = () => queryClient.invalidateQueries({ queryKey: ["ticket-layout", eventId] });
+  const bundleManager = useBundleManager({ eventId, eventCurrency, eventTimezone, products, disabled, enabled: bundlesEnabled });
   // A product being edited, or { newType } when adding one (the type is chosen from the menu first).
   const [modalProduct, setModalProduct] = useState<Product | { newType: PricingType } | null>(null);
 
@@ -301,6 +314,7 @@ export function ProductsEditor({
     mutationFn: (productId: number) => deleteProduct(eventId, productId),
     onSuccess: (_data, productId) => {
       setProducts((prev) => prev.filter((p) => p.id !== productId));
+      refreshLayout();
       notifications.show({ color: "teal", message: "Ticket type deleted." });
     },
     onError: (error: Error, productId) => {
@@ -309,6 +323,7 @@ export function ProductsEditor({
         // Already deleted elsewhere (e.g. a stale second tab) — the
         // outcome is the same as a successful delete from here.
         setProducts((prev) => prev.filter((p) => p.id !== productId));
+        refreshLayout();
         notifications.show({ color: "yellow", message: "This ticket type was already deleted." });
         return;
       }
@@ -335,6 +350,7 @@ export function ProductsEditor({
       updateProduct(eventId, product.id, { is_enabled: product.disabled_at !== null }),
     onSuccess: (data: { product: Product }) => {
       setProducts((prev) => prev.map((p) => (p.id === data.product.id ? data.product : p)));
+      refreshLayout();
       notifications.show({
         color: "teal",
         message: data.product.disabled_at ? "Ticket type paused." : "Ticket type resumed.",
@@ -360,6 +376,73 @@ export function ProductsEditor({
     return product.quantity_sold + product.quantity_reserved + product.quantity_complimentary_held > 0;
   }
 
+  const renderProductCard = (product: Product) => (
+    <Card key={product.id} withBorder radius="lg" p="md">
+      <Group justify="space-between">
+        <Stack gap={2}>
+          <Group gap="xs">
+            <Text fw={600}>{product.title}</Text>
+            <Badge size="sm" variant="light">
+              {product.type}
+            </Badge>
+            {(product.bundle_only || (product.type === "TIERED" && product.price_tiers.length > 0 && product.price_tiers.every((t) => t.bundle_only))) && (
+              <Badge size="sm" color="grape" variant="light">
+                Bundles only
+              </Badge>
+            )}
+            {product.is_sold_out && (
+              <Badge size="sm" color="red" variant="light">
+                Sold out
+              </Badge>
+            )}
+            {!product.is_on_sale && !product.is_sold_out && (
+              <Badge size="sm" color="gray" variant="light">
+                {product.disabled_at ? "Paused" : "Not on sale"}
+              </Badge>
+            )}
+          </Group>
+          <Text size="sm" c="dimmed">
+            {productSummary(product, eventCurrency)}
+          </Text>
+        </Stack>
+        {!disabled && (
+          <Group gap="xs">
+            <Button size="xs" variant="light" onClick={() => setModalProduct(product)}>
+              Edit
+            </Button>
+            <Tooltip label={product.disabled_at ? "Resume sales" : "Pause sales"}>
+              <ActionIcon
+                size="lg"
+                variant="light"
+                color="gray"
+                aria-label={product.disabled_at ? "Resume ticket type" : "Pause ticket type"}
+                loading={toggleEnabledMutation.isPending && toggleEnabledMutation.variables?.id === product.id}
+                onClick={() => toggleEnabledMutation.mutate(product)}
+              >
+                {product.disabled_at ? <IconPlayerPlay size={16} /> : <IconPlayerPause size={16} />}
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip
+              label="This ticket type has existing activity. Disable it instead."
+              disabled={!hasUsageHint(product)}
+            >
+              <ActionIcon
+                size="lg"
+                variant="light"
+                color="red"
+                aria-label="Delete ticket type"
+                disabled={hasUsageHint(product)}
+                onClick={() => openDeleteModal(product)}
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        )}
+      </Group>
+    </Card>
+  );
+
   return (
     <Stack gap="md">
       <Group justify="space-between">
@@ -383,12 +466,21 @@ export function ProductsEditor({
                   </Menu.Item>
                 );
               })}
+              {bundlesEnabled && (
+                <>
+                  <Menu.Divider />
+                  <Menu.Item leftSection={<IconPackages size={18} />} py={8} disabled={products.length === 0} onClick={bundleManager.openNew}>
+                    <Text size="sm" fw={600}>Package</Text>
+                    <Text size="xs" c="dimmed">{products.length === 0 ? "Add a ticket type first" : "One price for several tickets, e.g. a 5-person crew"}</Text>
+                  </Menu.Item>
+                </>
+              )}
             </Menu.Dropdown>
           </Menu>
         )}
       </Group>
 
-      {products.length === 0 ? (
+      {products.length === 0 && bundleManager.bundles.length === 0 ? (
         <Card withBorder radius="lg" p="xl">
           <Stack align="center" gap="xs" py="lg">
             <IconTicket size={32} opacity={0.5} />
@@ -398,74 +490,16 @@ export function ProductsEditor({
           </Stack>
         </Card>
       ) : (
-        <Stack gap="sm">
-          {products.map((product) => (
-            <Card key={product.id} withBorder radius="lg" p="md">
-              <Group justify="space-between">
-                <Stack gap={2}>
-                  <Group gap="xs">
-                    <Text fw={600}>{product.title}</Text>
-                    <Badge size="sm" variant="light">
-                      {product.type}
-                    </Badge>
-                    {(product.bundle_only || (product.type === "TIERED" && product.price_tiers.length > 0 && product.price_tiers.every((t) => t.bundle_only))) && (
-                      <Badge size="sm" color="grape" variant="light">
-                        Bundles only
-                      </Badge>
-                    )}
-                    {product.is_sold_out && (
-                      <Badge size="sm" color="red" variant="light">
-                        Sold out
-                      </Badge>
-                    )}
-                    {!product.is_on_sale && !product.is_sold_out && (
-                      <Badge size="sm" color="gray" variant="light">
-                        {product.disabled_at ? "Paused" : "Not on sale"}
-                      </Badge>
-                    )}
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {productSummary(product, eventCurrency)}
-                  </Text>
-                </Stack>
-                {!disabled && (
-                  <Group gap="xs">
-                    <Button size="xs" variant="light" onClick={() => setModalProduct(product)}>
-                      Edit
-                    </Button>
-                    <Tooltip label={product.disabled_at ? "Resume sales" : "Pause sales"}>
-                      <ActionIcon
-                        size="lg"
-                        variant="light"
-                        color="gray"
-                        aria-label={product.disabled_at ? "Resume ticket type" : "Pause ticket type"}
-                        loading={toggleEnabledMutation.isPending && toggleEnabledMutation.variables?.id === product.id}
-                        onClick={() => toggleEnabledMutation.mutate(product)}
-                      >
-                        {product.disabled_at ? <IconPlayerPlay size={16} /> : <IconPlayerPause size={16} />}
-                      </ActionIcon>
-                    </Tooltip>
-                    <Tooltip
-                      label="This ticket type has existing activity. Disable it instead."
-                      disabled={!hasUsageHint(product)}
-                    >
-                      <ActionIcon
-                        size="lg"
-                        variant="light"
-                        color="red"
-                        aria-label="Delete ticket type"
-                        disabled={hasUsageHint(product)}
-                        onClick={() => openDeleteModal(product)}
-                      >
-                        <IconTrash size={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  </Group>
-                )}
-              </Group>
-            </Card>
-          ))}
-        </Stack>
+        <TicketArranger
+          eventId={eventId}
+          currencyCode={eventCurrency}
+          disabled={layoutDisabled ?? disabled}
+          products={products}
+          bundles={bundleManager.bundles}
+          renderProduct={renderProductCard}
+          renderBundle={bundleManager.renderCard}
+          seriesId={seriesId}
+        />
       )}
 
       {modalProduct !== null && (
@@ -482,14 +516,13 @@ export function ProductsEditor({
               const exists = prev.some((p) => p.id === saved.id);
               return exists ? prev.map((p) => (p.id === saved.id ? saved : p)) : [...prev, saved];
             });
+            refreshLayout();
             setModalProduct(null);
           }}
         />
       )}
 
-      {bundlesEnabled && (
-        <BundlesEditor eventId={eventId} eventCurrency={eventCurrency} eventTimezone={eventTimezone} products={products} disabled={disabled} />
-      )}
+      {bundleManager.modal}
     </Stack>
   );
 }
