@@ -11,6 +11,8 @@ import {
   type EventGate, type GateConfiguration, type GateLane, type RoutingChangePublication,
 } from "@/lib/gateRoutingApi";
 import { GateConfigStatus } from "@/components/GateConfigStatus";
+import { SaveBar } from "@/components/forms/SaveBar";
+import { useSaveBarValues } from "@/lib/useSaveBar";
 import { nextLaneCode } from "@/lib/laneSlug";
 import { gateStatusHint, routingBlockReasons, routingErrorMessages } from "@/lib/gateStatusHint";
 
@@ -30,6 +32,8 @@ export function GateRoutingManager({
   const [renameLaneTarget, setRenameLaneTarget] = useState<{ gate: EventGate; lane: GateLane } | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [busy, setBusy] = useState(false);
+  // Separate from `busy` (entrance/lane edits) so the routing Save only shows "Saving…" for its own save.
+  const [savingRoutes, setSavingRoutes] = useState(false);
   const [confirmChange, setConfirmChange] = useState(false);
   const [publication, setPublication] = useState<RoutingChangePublication | null>(initial.publication ?? null);
   const structureEditable = eventStatus === "DRAFT" && initial.generation.status === "DRAFT";
@@ -48,6 +52,17 @@ export function GateRoutingManager({
   // The server remains authoritative (and is the only guard against races or names/codes not yet loaded client-side).
   const gateNameTaken = gates.some((gate) => gate.name.trim().toLowerCase() === name.trim().toLowerCase());
   const laneCodeTaken = (laneGate?.lanes ?? []).some((lane) => lane.code.trim().toLowerCase() === code.trim().toLowerCase());
+
+  const routingSaveBlocked = productLoadError || stagedChangeOpen || products.length === 0 || (routingBlockers.length === 0 && !routingEditable);
+  const bar = useSaveBarValues({
+    id: "gate-routing",
+    label: "Ticket routing",
+    values: routes,
+    setValues: setRoutes,
+    saving: savingRoutes,
+    disabled: routingSaveBlocked,
+    onSave: () => (structureEditable ? saveRouting() : prepareRoutingClicked()),
+  });
 
   useEffect(() => {
     if (!publication || publication.status !== "PREPARING") return;
@@ -184,6 +199,8 @@ export function GateRoutingManager({
 
   async function saveRouting() {
     setBusy(true);
+    setSavingRoutes(true);
+    const sent = routes;
     try {
       const payload = products.map((product) => ({
         product_id: product.id,
@@ -194,18 +211,22 @@ export function GateRoutingManager({
         const result = await prepareRoutingChange(eventId, payload.map((route) => ({ ...route, gate_lane_id: route.gate_lane_id! })));
         setPublication(result.publication);
         setConfirmChange(false);
+        bar.markSaved(sent);
         notifications.show({ color: "blue", message: "Replacement credentials are being prepared. Current routing remains active." });
         return;
       }
       const result = await replaceGateRoutes(eventId, payload);
-      setRoutes(Object.fromEntries(result.generation.routes.map((route) => [
+      const saved = Object.fromEntries(result.generation.routes.map((route) => [
         route.product_id,
         { gateId: route.event_gate_id, laneId: route.gate_lane_id },
-      ])));
+      ]));
+      setRoutes(saved);
+      bar.markSaved(saved);
       notifications.show({ color: "teal", message: "Gate routing saved." });
     } catch (error) {
+      bar.markFailed(error instanceof Error ? error.message : "Could not save routing.");
       showRoutingErrors(error, "Could not save routing.");
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setSavingRoutes(false); }
   }
 
   async function publishPreparedChange() {
@@ -335,10 +356,8 @@ export function GateRoutingManager({
             }))}/>
         </SimpleGrid>;
       })}
-      {products.length > 0 && <Group justify="flex-end"><Button disabled={productLoadError || stagedChangeOpen || (routingBlockers.length === 0 && !routingEditable)} loading={busy}
-        onClick={() => structureEditable ? saveRouting() : prepareRoutingClicked()}>{structureEditable ? "Save routing" : "Prepare routing change"}</Button></Group>
-      }
     </Stack></Card>
+    {products.length > 0 && <SaveBar {...bar.barProps} saveLabel={structureEditable ? "Save routing" : "Prepare routing change"} />}
     <Modal opened={gateModal} onClose={() => setGateModal(false)} title="New entrance" centered>
       <Stack><TextInput label="Entrance name" value={name} onChange={(e) => setName(e.currentTarget.value)} autoFocus
           error={gateNameTaken ? "An entrance with this name already exists." : undefined}/>

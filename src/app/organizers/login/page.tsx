@@ -6,7 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Alert, Anchor, Button, Checkbox, Group, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { safeNext } from "@/lib/safeNext";
+import { organizerDestination } from "@/lib/postAuthDestination";
 import { AuthLayout } from "@/components/AuthLayout";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, type CurrentUser, login } from "@/lib/authApi";
@@ -34,8 +34,7 @@ function LoginForm() {
   // them a bare "create your first event" prompt that isn't meant for
   // them (confirmed live: that's exactly what happened before this).
   function destinationFor(user: CurrentUser): string {
-    if (next) return safeNext(next, "organizer", user.current_organization_id === null ? "/distributor" : "/dashboard");
-    return user.current_organization_id === null ? "/distributor" : "/dashboard";
+    return organizerDestination(user, next);
   }
 
   const form = useForm({
@@ -50,7 +49,8 @@ function LoginForm() {
     mutationFn: login,
     onSuccess: (data: { user: CurrentUser }) => {
       if (data.user.email_verified_at) {
-        router.push(destinationFor(data.user));
+        // replace, not push: the login page must not stay in history, or Back returns a signed-in user to it.
+        router.replace(destinationFor(data.user));
       } else {
         setUnverifiedUser(data.user);
       }
@@ -73,7 +73,7 @@ function LoginForm() {
         subtitle={`Enter the 6-digit code we sent to ${unverifiedUser.email} to continue.`}
       >
         <VerifyEmailPanel
-          onVerified={() => router.push(destinationFor(unverifiedUser))}
+          onVerified={() => router.replace(destinationFor(unverifiedUser))}
           expiresAt={unverifiedUser.email_verification_code_expires_at}
         />
       </AuthLayout>

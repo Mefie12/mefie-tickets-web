@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { RichTextEditor } from "@mantine/tiptap";
 import { useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -31,6 +32,14 @@ export function RichTextDescription({
     immediatelyRender: false,
     onUpdate: ({ editor: current }) => onChange(current.getHTML()),
   });
+
+  // The editor only reads `content` once. When the value changes from outside (Discard, a reset),
+  // show it, without emitting an update (that would echo straight back as an edit). Typing makes
+  // value and editor equal, so this is a no-op then.
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || value === editor.getHTML()) return;
+    editor.commands.setContent(value, { emitUpdate: false });
+  }, [editor, value]);
 
   return (
     <Stack gap={5}>

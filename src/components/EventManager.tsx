@@ -65,6 +65,10 @@ import { EventTermsEditor } from "@/components/EventTermsEditor";
 import { ComplimentarySettings } from "@/components/ComplimentarySettings";
 import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
 import { ScrollableTabsBar } from "@/components/ScrollableTabsBar";
+import { SaveBar } from "@/components/forms/SaveBar";
+import { useSaveBar } from "@/lib/useSaveBar";
+import { useUnsaved } from "@/lib/useUnsaved";
+import { unsavedRegistry } from "@/lib/unsavedChangesRegistry";
 import type { ComplimentaryProgram } from "@/lib/complimentaryApi";
 
 const TAB_DEFS = [
@@ -86,6 +90,9 @@ const VALID_TABS = TAB_DEFS.map((t) => t.value);
 // questions, content) or a multi-step/no-single-save workflow (terms,
 // which auto-saves per field) never fires this, since there's no way to
 // know the organizer is actually finished with it.
+/** Which tab each unsaved-changes form lives on, for the tab dots and for not auto-advancing past a dirty tab. */
+const TAB_FORM_IDS: Record<string, string> = { details: "event-details", "date-time": "event-datetime", location: "event-location", complimentary: "complimentary", terms: "event-terms" };
+
 function nextTab(current: string): string | null {
   const index = VALID_TABS.indexOf(current);
   return index >= 0 && index < VALID_TABS.length - 1 ? VALID_TABS[index + 1] : null;
@@ -256,7 +263,13 @@ export function EventManager({
     onError: handleStatusChangeError,
   });
 
+  const unsaved = useUnsaved();
+  const dirtyTabs = Object.entries(TAB_FORM_IDS).filter(([, id]) => unsaved.dirtyIds.includes(id)).map(([value]) => value);
+
   const advanceTab = (fromTab: string) => {
+    // Don't whisk the organizer past a different tab that still has unsaved edits.
+    const own = TAB_FORM_IDS[fromTab];
+    if (unsavedRegistry.getSnapshot().dirtyIds.some((id) => id !== own)) return;
     const next = nextTab(fromTab);
     if (next) handleTabChange(next);
   };
@@ -382,7 +395,7 @@ export function EventManager({
       </Modal>
 
       <Tabs value={tab} onChange={handleTabChange}>
-        <ScrollableTabsBar tabs={TAB_DEFS} value={tab} onChange={handleTabChange} />
+        <ScrollableTabsBar tabs={TAB_DEFS} value={tab} onChange={handleTabChange} dirtyTabs={dirtyTabs} />
 
         <Tabs.Panel value="details" pt="lg">
           <EventDetailsForm event={event} onUpdated={setEvent} disabled={archived} onSaved={() => advanceTab("details")} />
@@ -473,13 +486,15 @@ function EventDetailsForm({
       attribute_ids: values.attribute_ids.map(Number),
       currency_code: values.currency_code,
     }),
-    onSuccess: (data: { event: Event }) => { onUpdated(data.event); notifications.show({ color: "teal", message: "Event details updated." }); onSaved?.(); },
-    onError: (error: Error) => handleFormError(error, form.setErrors, router),
+    onSuccess: (data: { event: Event }, sent) => { bar.markSaved(sent); onUpdated(data.event); notifications.show({ color: "teal", message: "Event details updated." }); onSaved?.(); },
+    onError: (error: Error) => { bar.markFailed(saveFailureReason(error)); handleFormError(error, form.setErrors, router); },
   });
+  const bar = useSaveBar({ id: "event-details", label: "Event details", form, saving: updateMutation.isPending, disabled });
 
   return (
+    <>
     <Card withBorder radius="lg" p="xl">
-      <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
+      <form id={bar.formId} onSubmit={form.onSubmit((values) => updateMutation.mutate(values), bar.onInvalid)}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <EventDetailsFields
@@ -524,13 +539,19 @@ function EventDetailsForm({
               data={(taxonomies.data?.audiences ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))} {...form.getInputProps("audience_ids")} />
             <MultiSelect searchable clearable label="Accessibility & event attributes (optional)" description="Highlight accessibility, facilities, format, and special access."
               data={(taxonomies.data?.attributes ?? []).map((item: EventTaxonomyItem) => ({ value: String(item.id), label: item.name }))} {...form.getInputProps("attribute_ids")} />
-            {!disabled ? <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>Save details</Button>
-              : <Text size="xs" c="dimmed">This event is archived and can no longer be edited.</Text>}
+            {disabled && <Text size="xs" c="dimmed">This event is archived and can no longer be edited.</Text>}
           </Stack>
         </fieldset>
       </form>
     </Card>
+    {!disabled && <SaveBar {...bar.barProps} saveLabel="Save details" />}
+    </>
   );
+}
+
+/** A short, human reason for the save bar: field errors are already on the fields, so point at them. */
+function saveFailureReason(error: Error): string {
+  return error instanceof ApiError && error.errors ? "check the highlighted fields" : error.message;
 }
 
 function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Event; onUpdated: (event: Event) => void; disabled: boolean; onSaved?: () => void }) {
@@ -563,11 +584,6 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
         !v ? "End date and time is required" : v <= values.start_at ? "End must be after start" : null,
     },
   });
-  useEffect(() => {
-    if (!event.start_date) form.setFieldValue("timezone", browserTimezone());
-    // Initial suggestion only; do not overwrite the organizer's selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const onStartChange = (value: string) => {
     form.setFieldValue("start_at", value);
@@ -594,8 +610,9 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
         ...(reschedule ? { reschedule } : {}),
       });
     },
-    onSuccess: (data: { event: Event; scanner_notice?: ScannerNotice }) => {
+    onSuccess: (data: { event: Event; scanner_notice?: ScannerNotice }, sent: SaveVars) => {
       setReview(null);
+      bar.markSaved(sent.values);
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Date and time updated." });
       const toast = scannerNoticeToast(data.scanner_notice);
@@ -604,6 +621,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
     },
     onError: (error: Error, vars: SaveVars) => {
       if (redirectOnAuthError(error, router)) return;
+      if (!(error instanceof ApiError && error.code === "RESCHEDULE_ACKNOWLEDGEMENT_REQUIRED")) bar.markFailed(saveFailureReason(error));
       if (error instanceof ApiError && error.code === "RESCHEDULE_ACKNOWLEDGEMENT_REQUIRED") {
         // Orders appeared after the form was opened: show the confirmation instead of a bare error.
         openReview(vars, true);
@@ -622,6 +640,17 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
   const impactMutation = useMutation({
     mutationFn: () => getRescheduleImpact(event.id),
   });
+  const bar = useSaveBar({ id: "event-datetime", label: "Date and time", form, saving: updateMutation.isPending || impactMutation.isPending, disabled });
+  useEffect(() => {
+    if (!event.start_date) {
+      const timezone = browserTimezone();
+      form.setFieldValue("timezone", timezone);
+      // The suggestion is the starting point, not an edit: it must not make the form look unsaved.
+      bar.rebase({ ...form.getValues(), timezone });
+    }
+    // Initial suggestion only; do not overwrite the organizer's selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Loads what the change affects and opens the confirmation; saves straight away when nobody has ordered. */
   function openReview(vars: SaveVars, alreadyRejected: boolean) {
@@ -653,6 +682,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
   }
 
   return (
+    <>
     <Card withBorder radius="lg" p="xl">
       <RescheduleConfirmDialog
         opened={review !== null}
@@ -669,7 +699,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
           review && updateMutation.mutate({ ...review.vars, reschedule: { acknowledged: true, notify_attendees: notifyAttendees } })
         }
       />
-      <form onSubmit={form.onSubmit(handleSubmit)}>
+      <form id={bar.formId} onSubmit={form.onSubmit(handleSubmit, bar.onInvalid)}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -706,11 +736,7 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
               </Alert>
             )}
 
-            {!disabled ? (
-              <Button type="submit" loading={updateMutation.isPending || impactMutation.isPending} style={{ alignSelf: "flex-start" }}>
-                Save changes
-              </Button>
-            ) : (
+            {disabled && (
               <Text size="xs" c="dimmed">
                 This event is archived and can no longer be edited.
               </Text>
@@ -719,6 +745,8 @@ function EventDateTimeForm({ event, onUpdated, disabled, onSaved }: { event: Eve
         </fieldset>
       </form>
     </Card>
+    {!disabled && <SaveBar {...bar.barProps} saveLabel="Save changes" />}
+    </>
   );
 }
 
@@ -764,13 +792,15 @@ function EventLocationForm({
   const updateMutation = useMutation({
     mutationFn: (values: typeof form.values) =>
       updateEvent(event.id, { location: values as EventLocationInput }),
-    onSuccess: (data: { event: Event }) => {
+    onSuccess: (data: { event: Event }, sent) => {
+      bar.markSaved(sent);
       onUpdated(data.event);
       notifications.show({ color: "teal", message: "Location updated." });
       onSaved?.();
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
+      bar.markFailed(saveFailureReason(error));
       if (error instanceof ApiError && error.errors) {
         // Backend errors for this DTO come back dotted ("location.country")
         // since `location` is nested server-side, but this form's own
@@ -787,6 +817,8 @@ function EventLocationForm({
     },
   });
 
+  const bar = useSaveBar({ id: "event-location", label: "Location", form, saving: updateMutation.isPending, disabled });
+
   const handleSuggestionSelect = (suggestion: MapboxSuggestion) => {
     if (suggestion.city) form.setFieldValue("city", suggestion.city);
     if (suggestion.state) form.setFieldValue("state", suggestion.state);
@@ -797,8 +829,9 @@ function EventLocationForm({
   };
 
   return (
+    <>
     <Card withBorder radius="lg" p="xl">
-      <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
+      <form id={bar.formId} onSubmit={form.onSubmit((values) => updateMutation.mutate(values), bar.onInvalid)}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <LocationFields
@@ -809,11 +842,7 @@ function EventLocationForm({
               onAddressSelect={handleSuggestionSelect}
             />
 
-            {!disabled ? (
-              <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>
-                Save location
-              </Button>
-            ) : (
+            {disabled && (
               <Text size="xs" c="dimmed">
                 This event is archived and can no longer be edited.
               </Text>
@@ -822,6 +851,8 @@ function EventLocationForm({
         </fieldset>
       </form>
     </Card>
+    {!disabled && <SaveBar {...bar.barProps} saveLabel="Save location" />}
+    </>
   );
 }
 

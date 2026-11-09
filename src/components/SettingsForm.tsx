@@ -25,6 +25,8 @@ import { ApiError, changeEmail, type CurrentUser, updateCurrentUser } from "@/li
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import type { SessionUser } from "@/lib/session";
 import { brandTextColor } from "@/theme";
+import { SaveBar } from "@/components/forms/SaveBar";
+import { useSaveBar } from "@/lib/useSaveBar";
 
 export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
   const [user, setUser] = useState(initialUser);
@@ -41,15 +43,18 @@ export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
 
   const updateMutation = useMutation({
     mutationFn: (values: typeof form.values) => updateCurrentUser({ ...values, phone: values.phone || null }),
-    onSuccess: (data: { user: CurrentUser }) => {
+    onSuccess: (data: { user: CurrentUser }, sent) => {
+      bar.markSaved(sent);
       setUser((prev) => ({ ...data.user, role: prev.role, portal_access: prev.portal_access }));
       notifications.show({ color: "teal", message: "Profile updated." });
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
+      bar.markFailed(error.message);
       notifications.show({ color: "red", message: error.message });
     },
   });
+  const bar = useSaveBar({ id: "account-profile", label: "Profile", form, saving: updateMutation.isPending });
 
   return (
     <Container size="sm" py="xl">
@@ -66,23 +71,22 @@ export function SettingsForm({ initialUser }: { initialUser: SessionUser }) {
           />
         )}
 
-        <Card withBorder radius="lg" shadow="md" p="xl">
+        {/* overflow stays visible so the save bar can pin to the screen while there are edits. */}
+        <Card withBorder radius="lg" shadow="md" p="xl" style={{ overflow: "visible" }}>
           <Stack>
             <Group justify="space-between">
               <Text fw={600}>Profile</Text>
               <Badge variant="light">{user.role}</Badge>
             </Group>
 
-            <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
+            <form id={bar.formId} onSubmit={form.onSubmit((values) => updateMutation.mutate(values), bar.onInvalid)}>
               <Stack>
                 <TextInput label="First name" {...form.getInputProps("first_name")} />
                 <TextInput label="Last name" {...form.getInputProps("last_name")} />
                 <PhoneInput label="Phone (optional)" {...form.getInputProps("phone")} />
-                <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>
-                  Save changes
-                </Button>
               </Stack>
             </form>
+            <SaveBar {...bar.barProps} saveLabel="Save changes" />
 
             {/* Deliberately outside the profile form above: Mantine's Modal
                 portals its content, but the modal's own <form> still sits in

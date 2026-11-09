@@ -70,7 +70,7 @@ export default function RegisterPage() {
   // goes straight to the dashboard): there's no org-level setup for them
   // to do.
   if (step === "verify") {
-    return <VerifyStep onVerified={() => router.push("/onboarding")} expiresAt={codeExpiresAt} />;
+    return <VerifyStep onVerified={() => router.replace("/onboarding")} expiresAt={codeExpiresAt} />;
   }
 
   return (

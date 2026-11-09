@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { usePathname } from "next/navigation";
 import { Avatar, Menu } from "@mantine/core";
 import {
   IconBuildingStore,
@@ -17,11 +16,13 @@ import {
   IconCreditCard,
   IconWorld,
 } from "@tabler/icons-react";
-import { logout } from "@/lib/authApi";
 import type { NavOrganization, SessionUser } from "@/lib/session";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ConsoleNav, ConsoleNavItem, ConsoleNavSection, ConsoleShell } from "@/components/console";
+import { useSignOut } from "@/lib/useSignOut";
+import { useLeaveGuard } from "@/lib/leaveGuard";
+import { useRecheckOnRestore } from "@/lib/useRecheckOnRestore";
 
 /**
  * The organization admin portal shell (nav + auth guard) called for by
@@ -39,13 +40,11 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { openPreferences } = usePrivacyConsent();
 
-  const logoutMutation = useMutation({
-    mutationFn: logout,
-    onSuccess: () => router.push("/organizers/login"),
-  });
+  const { signOut } = useSignOut();
+  useRecheckOnRestore("organizer");
+  useLeaveGuard();
 
   const nav = (
     <ConsoleNav>
@@ -113,7 +112,7 @@ export function AdminShell({
       <Menu.Item component={Link} href="/discover" leftSection={<IconWorld size={16} />}>
         Exit to website
       </Menu.Item>
-      <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => logoutMutation.mutate()}>
+      <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => void signOut("organizer", { redirectTo: "/organizers/login" })}>
         Log out
       </Menu.Item>
     </>

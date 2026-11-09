@@ -39,6 +39,8 @@ import {
 } from "@/lib/organizationApi";
 import { formatBasisPointsAsPercent, formatMinorAmount } from "@/lib/money";
 import { PublicShareCard } from "@/components/PublicShareCard";
+import { SaveBar } from "@/components/forms/SaveBar";
+import { useSaveBar } from "@/lib/useSaveBar";
 
 export function OrganizationSettingsForm({
   initialOrganization,
@@ -86,18 +88,22 @@ export function OrganizationSettingsForm({
           country: values.country || null,
         },
       }),
-    onSuccess: (data: { organization: Organization }) => {
+    onSuccess: (data: { organization: Organization }, sent) => {
+      bar.markSaved(sent);
       setOrganization(data.organization);
       notifications.show({ color: "teal", message: "Organization updated." });
     },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
+      bar.markFailed(error instanceof ApiError ? error.message : "Something went wrong.");
       notifications.show({
         color: "red",
         message: error instanceof ApiError ? error.message : "Something went wrong.",
       });
     },
   });
+
+  const bar = useSaveBar({ id: "organization-profile", label: "Organization profile", form, saving: updateMutation.isPending, disabled: !canEdit });
 
   return (
     <Stack gap="xl" maw={640}>
@@ -117,8 +123,9 @@ export function OrganizationSettingsForm({
 
       <BrandingCard organization={organization} canEdit={canEdit} onUpdated={setOrganization} />
 
+      <div>
       <Card withBorder radius="lg" p="xl">
-        <form onSubmit={form.onSubmit((values) => updateMutation.mutate(values))}>
+        <form id={bar.formId} onSubmit={form.onSubmit((values) => updateMutation.mutate(values), bar.onInvalid)}>
           <fieldset disabled={!canEdit} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <Stack>
               <TextInput label="Organization name" {...form.getInputProps("name")} />
@@ -133,15 +140,12 @@ export function OrganizationSettingsForm({
               <TextInput label="Postal code" {...form.getInputProps("postal_code")} />
               <CountrySelector label="Country" {...form.getInputProps("country")} />
 
-              {canEdit && (
-                <Button type="submit" loading={updateMutation.isPending} style={{ alignSelf: "flex-start" }}>
-                  Save changes
-                </Button>
-              )}
             </Stack>
           </fieldset>
         </form>
       </Card>
+      {canEdit && <SaveBar {...bar.barProps} saveLabel="Save changes" />}
+      </div>
 
       <PaymentSettingsCard organization={organization} canEdit={canEdit} onUpdated={setOrganization} />
 
