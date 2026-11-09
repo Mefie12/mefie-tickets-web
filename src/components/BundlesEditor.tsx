@@ -27,6 +27,8 @@ import {
 import { IconPlayerPause, IconPlayerPlay, IconPlus, IconTrash } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
+import { ModalActions } from "@/components/forms/ModalActions";
+import { useGuardedClose } from "@/lib/useGuardedClose";
 import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/components/TicketDescriptionEditor";
 import { describeSaleWindow, hasSaleWindow, MoreSettings, SaleWindowFields, type WindowParts } from "@/components/TicketFormParts";
 import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
@@ -352,10 +354,12 @@ function BundleFormModal({
       : `${packageSize} tickets · currently free per person · saves ${formatMoney(listTotal, eventCurrency)} vs single tickets`
     : undefined;
 
+  const guard = useGuardedClose(form, onClose, "the bundle form");
+
   return (
     <Modal
       opened
-      onClose={onClose}
+      onClose={guard.requestClose}
       title={<Text fw={600} size="lg">{isEdit ? "Edit bundle" : "Add bundle"}</Text>}
       size="lg"
       fullScreen={isMobile}
@@ -479,10 +483,12 @@ function BundleFormModal({
             </MoreSettings>
           </Stack>
 
-          <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={onClose}>Cancel</Button>
-            <Button type="submit" loading={mutation.isPending}>{isEdit ? "Save bundle" : "Add bundle"}</Button>
-          </Group>
+          <ModalActions>
+            <Group justify="flex-end" gap="sm">
+              <Button variant="default" onClick={guard.requestClose}>Cancel</Button>
+              <Button type="submit" loading={mutation.isPending}>{isEdit ? "Save bundle" : "Add bundle"}</Button>
+            </Group>
+          </ModalActions>
         </Stack>
       </form>
     </Modal>

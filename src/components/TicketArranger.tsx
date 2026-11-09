@@ -518,14 +518,28 @@ function SectionModal({ section, onClose, onSave }: {
   const [description, setDescription] = useState(section?.description ?? "");
   const [collapsed, setCollapsed] = useState(section?.collapsed_by_default ?? false);
   const trimmed = title.trim();
+  // Closing with edits asks first (Escape, outside click, X and Cancel all come through here).
+  const dirty = title !== (section?.title ?? "") || description !== (section?.description ?? "") || collapsed !== (section?.collapsed_by_default ?? false);
+  const requestClose = () => {
+    if (!dirty) return onClose();
+    modals.openConfirmModal({
+      title: "Discard your changes?",
+      centered: true,
+      children: <Text size="sm">You have unsaved changes. If you close this, they will be lost.</Text>,
+      labels: { confirm: "Discard changes", cancel: "Keep editing" },
+      confirmProps: { color: "red", variant: "light" },
+      cancelProps: { variant: "filled" },
+      onConfirm: onClose,
+    });
+  };
   return (
-    <Modal opened onClose={onClose} title={section ? "Edit section" : "Add section"} centered>
+    <Modal opened onClose={requestClose} title={section ? "Edit section" : "Add section"} centered>
       <Stack gap="md">
         <TextInput label="Title" placeholder="e.g. Solo, Duo & Crew, VIP" maxLength={60} value={title} onChange={(e) => setTitle(e.currentTarget.value)} data-autofocus />
         <TextInput label="Short description (optional)" placeholder="e.g. Best for groups of 3 to 5" maxLength={140} value={description} onChange={(e) => setDescription(e.currentTarget.value)} />
         <Switch label="Start collapsed" description="Buyers see just the heading until they open it. It opens by itself if something in it is already selected." checked={collapsed} onChange={(e) => setCollapsed(e.currentTarget.checked)} />
         <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>Cancel</Button>
+          <Button variant="default" onClick={requestClose}>Cancel</Button>
           <Button disabled={trimmed === ""} onClick={() => onSave({ title: trimmed, description: description.trim() === "" ? null : description.trim(), collapsed_by_default: collapsed })}>
             {section ? "Save" : "Add section"}
           </Button>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUnsavedRegistration } from "@/lib/useUnsaved";
+import { modals } from "@mantine/modals";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -58,6 +60,12 @@ export function EventTermsEditor({ eventId, disabled }: { eventId: number; disab
   const latestVersion = versions[0] ?? null;
   const draftVersion = latestVersion?.status === "DRAFT" ? latestVersion : null;
   const currentVersion = terms?.current_version ?? null;
+
+  // Typed terms that haven't been saved as a draft yet count as unsaved (leave guards, tab dot).
+  const termsDirty =
+    (creating === "write" && draftText.trim() !== "") ||
+    (draftVersion?.content_type === "RICH_TEXT" && !!draftText && draftText !== (draftVersion.rich_text_content ?? ""));
+  useUnsavedRegistration("event-terms", "Terms & Conditions", termsDirty, () => setDraftText(""));
 
   function handleError(error: Error) {
     if (redirectOnAuthError(error, router)) return;
@@ -224,7 +232,28 @@ export function EventTermsEditor({ eventId, disabled }: { eventId: number; disab
                     Save draft
                   </Button>
                 )}
-                <Button loading={publishMutation.isPending} onClick={() => publishMutation.mutate(draftVersion.id)}>
+                <Button
+                  loading={publishMutation.isPending}
+                  onClick={() => {
+                    // Publish uses the saved draft, so edits still in the editor would be silently left out.
+                    const hasUnsavedEdits = draftVersion.content_type === "RICH_TEXT" && !!draftText && draftText !== draftVersion.rich_text_content;
+                    if (!hasUnsavedEdits) {
+                      publishMutation.mutate(draftVersion.id);
+                      return;
+                    }
+                    modals.openConfirmModal({
+                      title: "Publish with your latest edits?",
+                      centered: true,
+                      children: <Text size="sm">You have unsaved edits to this draft. Publishing now would use the last saved version without them. Save your edits and publish them together?</Text>,
+                      labels: { confirm: "Save and publish", cancel: "Keep editing" },
+                      cancelProps: { variant: "filled" },
+                      onConfirm: async () => {
+                        await updateVersionMutation.mutateAsync({ versionId: draftVersion.id, content: draftText });
+                        publishMutation.mutate(draftVersion.id);
+                      },
+                    });
+                  }}
+                >
                   Publish
                 </Button>
               </Group>

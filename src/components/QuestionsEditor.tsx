@@ -1,5 +1,6 @@
 "use client";
 
+import { useGuardedClose } from "@/lib/useGuardedClose";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
@@ -378,9 +379,10 @@ function QuestionFormModal({
   });
 
   const showOptions = OPTIONS_TYPES.includes(form.values.type);
+  const guard = useGuardedClose(form, onClose, "the question form");
 
   return (
-    <Modal opened onClose={onClose} title={isEdit ? "Edit question" : "Add question"} size="md">
+    <Modal opened onClose={guard.requestClose} title={isEdit ? "Edit question" : "Add question"} size="md">
       <form onSubmit={form.onSubmit((values) => saveMutation.mutate(values))}>
         <Stack>
           <TextInput label="Question" placeholder="What is your t-shirt size?" {...form.getInputProps("title")} />
@@ -436,7 +438,7 @@ function QuestionFormModal({
           <Switch label="Enabled" {...form.getInputProps("is_enabled", { type: "checkbox" })} />
 
           <Group justify="flex-end" mt="md">
-            <Button variant="subtle" onClick={onClose}>
+            <Button variant="subtle" onClick={guard.requestClose}>
               Cancel
             </Button>
             <Button type="submit" loading={saveMutation.isPending}>

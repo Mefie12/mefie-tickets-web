@@ -44,6 +44,8 @@ import { notifications } from "@mantine/notifications";
 import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/components/TicketDescriptionEditor";
 import { useBundleManager } from "@/components/BundlesEditor";
 import { TicketArranger } from "@/components/TicketArranger";
+import { ModalActions } from "@/components/forms/ModalActions";
+import { useGuardedClose } from "@/lib/useGuardedClose";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { utcIsoToZonedPartsOrEmpty } from "@/lib/eventDateTime";
@@ -760,12 +762,13 @@ function ProductFormModal({
     />
   );
 
+  const guard = useGuardedClose(form, onClose, "the ticket type form");
   const meta = form.values.type === "PAID" || form.values.type === "REGISTRATION" || form.values.type === "TIERED" ? TYPE_META[form.values.type] : null;
 
   return (
     <Modal
       opened
-      onClose={onClose}
+      onClose={guard.requestClose}
       title={<Text fw={600} size="lg">{isEdit ? "Edit ticket type" : "Add ticket type"}</Text>}
       size="lg"
       fullScreen={isMobile}
@@ -1030,14 +1033,16 @@ function ProductFormModal({
             </Stack>
           )}
 
-          <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={saveMutation.isPending}>
-              {isEdit ? "Save changes" : "Add ticket type"}
-            </Button>
-          </Group>
+          <ModalActions>
+            <Group justify="flex-end" gap="sm">
+              <Button variant="default" onClick={guard.requestClose}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={saveMutation.isPending}>
+                {isEdit ? "Save changes" : "Add ticket type"}
+              </Button>
+            </Group>
+          </ModalActions>
         </Stack>
       </form>
     </Modal>

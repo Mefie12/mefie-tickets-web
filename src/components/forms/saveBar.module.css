@@ -1,0 +1,86 @@
+/* Clean: an ordinary row at the end of the form, no chrome. Dirty: the same element pins to the
+   bottom of the viewport so Save is always on screen while there are edits. It keeps its place in
+   the flow either way, so nothing jumps when it switches. */
+.bar {
+  margin-top: var(--mantine-spacing-md);
+  scroll-margin-bottom: 24px;
+  /* Lets the layout below react to the bar's own width (a narrow settings column on a wide screen counts too). */
+  container-type: inline-size;
+}
+
+.bar[data-pinned="true"] {
+  position: sticky;
+  bottom: 12px;
+  z-index: 20;
+  padding: 10px 14px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-lg);
+  box-shadow: var(--mantine-shadow-md);
+}
+
+.status {
+  min-width: 0;
+  min-height: 24px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Back from a long absence: one gentle ring, or a static outline for people who ask for less motion. */
+.bar[data-attention="true"] {
+  animation: saveBarRing 1.4s ease-out 2;
+}
+
+@keyframes saveBarRing {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--mantine-color-yellow-6) 60%, transparent), var(--mantine-shadow-md); }
+  100% { box-shadow: 0 0 0 14px transparent, var(--mantine-shadow-md); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar[data-attention="true"] {
+    animation: none;
+    outline: 2px solid var(--mantine-color-yellow-6);
+  }
+}
+
+/* Narrow bar (a phone, or a narrow column): the status gets its own line so it never wraps beside
+   the buttons; Save takes the width. */
+@media (max-width: 30em) {
+  .bar[data-pinned="true"] {
+    bottom: 8px;
+    padding: 10px;
+  }
+}
+
+@container (max-width: 30rem) {
+  .row {
+    flex-wrap: wrap !important;
+  }
+  .status {
+    flex: 1 1 100%;
+  }
+  .actions {
+    flex: 1 1 100%;
+  }
+  .saveButton {
+    flex: 1;
+  }
+}
+
+/* A modal form's action row: pinned to the bottom of the scrolling modal body. */
+.modalActions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin-inline: calc(var(--mb-padding, var(--mantine-spacing-md)) * -1);
+  margin-bottom: calc(var(--mb-padding, var(--mantine-spacing-md)) * -1);
+  padding: 12px var(--mb-padding, var(--mantine-spacing-md));
+  background: var(--mantine-color-body);
+  border-top: 1px solid var(--mantine-color-default-border);
+}

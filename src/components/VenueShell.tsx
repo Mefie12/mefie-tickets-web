@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
 import { AppShell, Avatar, Group, Menu, Text, UnstyledButton } from "@mantine/core";
 import { IconBuildingStore, IconCalendarEvent, IconChevronDown, IconLogout, IconShieldLock, IconUserCircle } from "@tabler/icons-react";
-import { logout } from "@/lib/authApi";
 import type { SessionUser } from "@/lib/session";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MefieLogo } from "@/components/MefieLogo";
+import { useSignOut } from "@/lib/useSignOut";
+import { useRecheckOnRestore } from "@/lib/useRecheckOnRestore";
+import { useLeaveGuard } from "@/lib/leaveGuard";
 
 /**
  * Minimal shell for venue agents (docs/25): a header only, like the
@@ -17,9 +17,10 @@ import { MefieLogo } from "@/components/MefieLogo";
  * sidebar or organizer navigation to show.
  */
 export function VenueShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
-  const router = useRouter();
   const { openPreferences } = usePrivacyConsent();
-  const logoutMutation = useMutation({ mutationFn: logout, onSuccess: () => router.push("/organizers/login") });
+  const { signOut } = useSignOut();
+  useRecheckOnRestore("organizer");
+  useLeaveGuard();
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -64,7 +65,7 @@ export function VenueShell({ user, children }: { user: SessionUser; children: Re
                 <Menu.Item leftSection={<IconShieldLock size={16} />} onClick={openPreferences}>
                   Privacy choices
                 </Menu.Item>
-                <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => logoutMutation.mutate()}>
+                <Menu.Item color="red" leftSection={<IconLogout size={16} />} onClick={() => void signOut("organizer", { redirectTo: "/organizers/login" })}>
                   Log out
                 </Menu.Item>
               </Menu.Dropdown>

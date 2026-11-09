@@ -43,6 +43,10 @@ import {
 import type { TicketLayoutResponse } from "@/lib/ticketLayoutApi";
 import type { Bundle } from "@/lib/productApi";
 import { ProductsEditor } from "@/components/ProductsEditor";
+import { SaveBar } from "@/components/forms/SaveBar";
+import { useSaveBar, useSaveBarValues } from "@/lib/useSaveBar";
+import { useUnsaved } from "@/lib/useUnsaved";
+import { UnsavedDot } from "@/components/forms/UnsavedDot";
 import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
@@ -141,6 +145,8 @@ export function EventSeriesManager({
   const requestedTab = searchParams.get("tab");
   const activeTab = requestedTab && VALID_TABS.includes(requestedTab) ? requestedTab : "details";
   const disabled = series.status !== "DRAFT";
+  const unsaved = useUnsaved();
+  const dirtyTab = (formId: string) => (unsaved.dirtyIds.includes(formId) ? <UnsavedDot /> : undefined);
   const isGenerating = isGeneratingStatus(series.generation_status);
 
   const advanceTab = (fromTab: string) => {
@@ -219,14 +225,14 @@ export function EventSeriesManager({
 
       <Tabs value={activeTab} onChange={(tab) => router.replace(`?tab=${tab}`, { scroll: false })}>
         <Tabs.List>
-          <Tabs.Tab value="details">Details</Tabs.Tab>
-          <Tabs.Tab value="recurrence">Recurrence</Tabs.Tab>
-          <Tabs.Tab value="location">Location</Tabs.Tab>
+          <Tabs.Tab value="details" rightSection={dirtyTab("series-details")}>Details</Tabs.Tab>
+          <Tabs.Tab value="recurrence" rightSection={dirtyTab("series-schedule")}>Recurrence</Tabs.Tab>
+          <Tabs.Tab value="location" rightSection={dirtyTab("series-location")}>Location</Tabs.Tab>
           <Tabs.Tab value="media">Media</Tabs.Tab>
           <Tabs.Tab value="ticket-setup">Ticket Setup</Tabs.Tab>
           <Tabs.Tab value="questions">Questions</Tabs.Tab>
           <Tabs.Tab value="content">Event page content</Tabs.Tab>
-          <Tabs.Tab value="terms">Terms & Conditions</Tabs.Tab>
+          <Tabs.Tab value="terms" rightSection={dirtyTab("event-terms")}>Terms & Conditions</Tabs.Tab>
           <Tabs.Tab value="advanced">Advanced Settings</Tabs.Tab>
           <Tabs.Tab value="publish">{series.status === "DRAFT" ? "Publish" : "Occurrences"}</Tabs.Tab>
         </Tabs.List>
@@ -303,9 +309,10 @@ function DetailsForm({ series, onUpdated, disabled, onSaved }: { series: EventSe
         event_category_id: values.event_category_id ? Number(values.event_category_id) : null,
         event_subcategory_id: values.event_subcategory_id ? Number(values.event_subcategory_id) : null,
       }),
-    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Series details updated." }); onSaved?.(); },
+    onSuccess: (data: { event_series: EventSeries }, sent) => { bar.markSaved(sent); onUpdated(data.event_series); notifications.show({ color: "teal", message: "Series details updated." }); onSaved?.(); },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
+      bar.markFailed(error instanceof ApiError && error.errors ? "check the highlighted fields" : error.message);
       if (error instanceof ApiError && error.errors) {
         form.setErrors(Object.fromEntries(Object.entries(error.errors).map(([f, m]) => [f, m[0]])));
       } else {
@@ -313,10 +320,12 @@ function DetailsForm({ series, onUpdated, disabled, onSaved }: { series: EventSe
       }
     },
   });
+  const bar = useSaveBar({ id: "series-details", label: "Series details", form, saving: mutation.isPending, disabled });
 
   return (
+    <>
     <Card withBorder radius="lg" p="xl">
-      <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
+      <form id={bar.formId} onSubmit={form.onSubmit((values) => mutation.mutate(values), bar.onInvalid)}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <EventDetailsFields
@@ -357,17 +366,13 @@ function DetailsForm({ series, onUpdated, disabled, onSaved }: { series: EventSe
                 }
               />
             )}
-            {!disabled ? (
-              <Button type="submit" style={{ alignSelf: "flex-start" }} loading={mutation.isPending}>
-                Save changes
-              </Button>
-            ) : (
-              <Text size="xs" c="dimmed">This series is published — template details can no longer be edited this way.</Text>
-            )}
+            {disabled && <Text size="xs" c="dimmed">This series is published — template details can no longer be edited this way.</Text>}
           </Stack>
         </fieldset>
       </form>
     </Card>
+    {!disabled && <SaveBar {...bar.barProps} saveLabel="Save changes" />}
+    </>
   );
 }
 
@@ -380,29 +385,43 @@ function RecurrenceForm({ series, onUpdated, disabled, onSaved }: { series: Even
   const doorsMinutes = doorsMinutesFromChoice(doors);
 
   const mutation = useMutation({
-    mutationFn: () => updateEventSeries(series.id, { starts_on: startsOn, recurrence: toRecurrenceRuleInput(values), doors_open_minutes_before_start: doorsMinutes }),
-    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Schedule updated." }); onSaved?.(); },
+    mutationFn: (sent: { startsOn: string; values: RecurrenceFormValues; doors: typeof doors }) =>
+      updateEventSeries(series.id, { starts_on: sent.startsOn, recurrence: toRecurrenceRuleInput(sent.values), doors_open_minutes_before_start: doorsMinutesFromChoice(sent.doors) }),
+    onSuccess: (data: { event_series: EventSeries }, sent) => { bar.markSaved(sent); onUpdated(data.event_series); notifications.show({ color: "teal", message: "Schedule updated." }); onSaved?.(); },
     onError: (err: Error) => {
       if (redirectOnAuthError(err, router)) return;
+      bar.markFailed(err.message);
       setError(err.message);
+    },
+  });
+  const bar = useSaveBarValues({
+    id: "series-schedule",
+    label: "Series schedule",
+    values: { startsOn, values, doors },
+    setValues: (v) => { setStartsOn(v.startsOn); setValues(v.values); setDoors(v.doors); },
+    saving: mutation.isPending,
+    disabled,
+    hasErrors: doorsMinutesInvalid(doorsMinutes),
+    onSave: () => {
+      if (doorsMinutesInvalid(doorsMinutes)) { bar.flagInvalid(1); return; }
+      mutation.mutate({ startsOn, values, doors });
     },
   });
 
   return (
+    <>
     <Card withBorder radius="lg" p="xl">
       {error && <Alert color="red" mb="md">{error}</Alert>}
       <RecurrenceRuleEditor values={values} onChange={setValues} startsOn={startsOn} onStartsOnChange={setStartsOn} disabled={disabled} />
       <Box mt="md" maw={360}>
         <DoorsOpenField value={doors} onChange={setDoors} startAt={startsOn && values.start_time ? `${startsOn}T${values.start_time}` : ""} disabled={disabled} />
       </Box>
-      {!disabled ? (
-        <Button mt="md" loading={mutation.isPending} disabled={doorsMinutesInvalid(doorsMinutes)} onClick={() => mutation.mutate()}>
-          Save schedule
-        </Button>
-      ) : (
+      {disabled && (
         <Text size="xs" c="dimmed" mt="md">This series is published — the recurrence pattern can no longer be edited this way (see the roadmap&apos;s per-occurrence editing work).</Text>
       )}
     </Card>
+    {!disabled && <SaveBar {...bar.barProps} saveLabel="Save schedule" />}
+    </>
   );
 }
 
@@ -437,9 +456,10 @@ function LocationForm({ series, onUpdated, disabled, onSaved }: { series: EventS
 
   const mutation = useMutation({
     mutationFn: (values: typeof form.values) => updateEventSeries(series.id, { location: values as EventLocationInput }),
-    onSuccess: (data: { event_series: EventSeries }) => { onUpdated(data.event_series); notifications.show({ color: "teal", message: "Location updated." }); onSaved?.(); },
+    onSuccess: (data: { event_series: EventSeries }, sent) => { bar.markSaved(sent); onUpdated(data.event_series); notifications.show({ color: "teal", message: "Location updated." }); onSaved?.(); },
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
+      bar.markFailed(error instanceof ApiError && error.errors ? "check the highlighted fields" : error.message);
       if (error instanceof ApiError && error.errors) {
         form.setErrors(Object.fromEntries(Object.entries(error.errors).map(([f, m]) => [f.replace(/^location\./, ""), m[0]])));
       } else {
@@ -447,6 +467,8 @@ function LocationForm({ series, onUpdated, disabled, onSaved }: { series: EventS
       }
     },
   });
+
+  const bar = useSaveBar({ id: "series-location", label: "Series location", form, saving: mutation.isPending, disabled });
 
   const handleSuggestionSelect = (s: MapboxSuggestion) => {
     if (s.city) form.setFieldValue("city", s.city);
@@ -458,8 +480,9 @@ function LocationForm({ series, onUpdated, disabled, onSaved }: { series: EventS
   };
 
   return (
+    <>
     <Card withBorder radius="lg" p="xl">
-      <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
+      <form id={bar.formId} onSubmit={form.onSubmit((values) => mutation.mutate(values), bar.onInvalid)}>
         <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Stack>
             <LocationFields
@@ -469,17 +492,13 @@ function LocationForm({ series, onUpdated, disabled, onSaved }: { series: EventS
               disabled={disabled}
               onAddressSelect={handleSuggestionSelect}
             />
-            {!disabled ? (
-              <Button type="submit" style={{ alignSelf: "flex-start" }} loading={mutation.isPending}>
-                Save changes
-              </Button>
-            ) : (
-              <Text size="xs" c="dimmed">This series is published — location can no longer be edited this way.</Text>
-            )}
+            {disabled && <Text size="xs" c="dimmed">This series is published — location can no longer be edited this way.</Text>}
           </Stack>
         </fieldset>
       </form>
     </Card>
+    {!disabled && <SaveBar {...bar.barProps} saveLabel="Save changes" />}
+    </>
   );
 }
 
