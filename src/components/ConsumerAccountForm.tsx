@@ -46,7 +46,7 @@ function AccountForm({ signup }: { signup: boolean }) {
       const res = await fetch(`/api/public/consumer/account/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) { form.setErrors(Object.fromEntries(Object.entries(data.errors ?? {}).map(([key, value]) => [key, (value as string[])[0]]))); throw buildApiError(res, data); }
-      if (data.status === "authenticated") { window.location.assign(safeNext(params.get("next"), "consumer", "/tickets")); return; }
+      if (data.status === "authenticated") { window.location.replace(safeNext(params.get("next"), "consumer", "/tickets")); return; }
       if (data.status === "completion_required") { setStep("complete"); return; }
       setMasked(data.masked_email); setCode(""); setStep("code"); timers.noteSent(data);
       if (proof) router.replace("/login");

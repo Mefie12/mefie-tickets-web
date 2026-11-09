@@ -81,6 +81,7 @@ export function handleSessionExpiry(error: unknown): boolean {
   // TanStack Query cache built under the dead session and re-runs the
   // server-side layout guards. A soft router.push() would keep the stale
   // cache around and isn't reachable from the QueryClient factory anyway.
-  window.location.assign(target);
+  // `replace`, so Back from the sign-in screen doesn't land on the page that just 401'd and bounce again.
+  window.location.replace(target);
   return true;
 }
