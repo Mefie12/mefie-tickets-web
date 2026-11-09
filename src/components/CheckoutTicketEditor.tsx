@@ -119,6 +119,7 @@ export function CheckoutTicketEditor({
               setQuantities((current) => ({ ...current, [ticketLineKey(productId, optionId)]: quantity }))
             }
             bundles={event.bundles ?? []}
+            ticketLayout={event.ticket_layout}
             onBundleQuantityChange={(bundleId, quantity) => setQuantities((current) => ({ ...current, [bundleLineKey(bundleId)]: quantity }))}
             currencyCode={event.currency_code}
           />

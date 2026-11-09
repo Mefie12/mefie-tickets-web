@@ -227,6 +227,7 @@ export function EventTicketPanel({ event, checkoutUrl }: { event: PublicEvent; c
         quantities={quantities}
         onQuantityChange={(productId, optionId, qty) => setQuantities((prev) => ({ ...prev, [ticketLineKey(productId, optionId)]: qty }))}
         bundles={event.bundles ?? []}
+        ticketLayout={event.ticket_layout}
         onBundleQuantityChange={(bundleId, qty) => setQuantities((prev) => ({ ...prev, [bundleLineKey(bundleId)]: qty }))}
         currencyCode={event.currency_code}
       />

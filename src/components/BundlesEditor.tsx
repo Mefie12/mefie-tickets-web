@@ -22,10 +22,9 @@ import {
   Switch,
   Text,
   TextInput,
-  Title,
   Tooltip,
 } from "@mantine/core";
-import { IconPackages, IconPlayerPause, IconPlayerPlay, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPlayerPause, IconPlayerPlay, IconPlus, IconTrash } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import { TicketDescriptionEditor, TICKET_DESCRIPTION_MAX_LENGTH } from "@/components/TicketDescriptionEditor";
@@ -84,27 +83,36 @@ function componentChoices(products: Product[]): { value: string; label: string; 
  * tickets of existing ticket types (Rave Crew = 5 × General Access,
  * Family Pass = 2 Adult + 2 Child). Shown only when the bundles feature
  * is enabled for the platform.
+ *
+ * A hook rather than a section: bundles live in the same arrangeable list
+ * as tickets (TicketArranger), so this hands back the data, one card per
+ * bundle, the "new bundle" opener and the form modal for the list to place.
  */
-export function BundlesEditor({
+export function useBundleManager({
   eventId,
   eventCurrency,
   eventTimezone,
   products,
   disabled,
+  enabled,
 }: {
   eventId: number;
   eventCurrency: string;
   eventTimezone: string;
   products: Product[];
   disabled: boolean;
+  enabled: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [modalBundle, setModalBundle] = useState<Bundle | "new" | null>(null);
   const queryKey = ["bundles", eventId];
-  const { data } = useQuery({ queryKey, queryFn: () => listBundles(eventId) });
+  const { data } = useQuery({ queryKey, queryFn: () => listBundles(eventId), enabled });
   const bundles = data?.bundles ?? [];
-  const refresh = () => queryClient.invalidateQueries({ queryKey });
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey });
+    queryClient.invalidateQueries({ queryKey: ["ticket-layout", eventId] });
+  };
 
   const toggleMutation = useMutation({
     mutationFn: (bundle: Bundle) => updateBundle(eventId, bundle.id, { is_enabled: !bundle.is_enabled }),
@@ -126,113 +134,90 @@ export function BundlesEditor({
     },
   });
 
-  return (
-    <Stack gap="sm" mt="lg">
-      <Group justify="space-between">
-        <Stack gap={0}>
-          <Title order={4}>Bundles</Title>
+  const renderCard = (bundle: Bundle) => (
+    <Card key={bundle.id} withBorder radius="lg" p="md">
+      <Group justify="space-between" align="flex-start">
+        <Stack gap={2} style={{ minWidth: 0, flex: "1 1 220px" }}>
+          <Group gap="xs">
+            <Text fw={600}>{bundle.title}</Text>
+            <Badge size="sm" color="grape" variant="light" style={{ flexShrink: 0 }}>Package</Badge>
+            {!bundle.is_enabled && <Badge size="sm" color="gray" variant="light">Paused</Badge>}
+            {bundle.is_enabled && bundle.unavailable_reason && (
+              <Badge size="sm" color={bundle.unavailable_reason === "Sold out" ? "red" : "orange"} variant="light">
+                {bundle.unavailable_reason === "Sold out" ? "Sold out" : "Not on sale"}
+              </Badge>
+            )}
+          </Group>
+          {bundle.is_enabled && bundle.unavailable_reason && bundle.unavailable_reason !== "Sold out" && (
+            <Text size="xs" c="orange.8">{bundle.unavailable_reason}</Text>
+          )}
           <Text size="sm" c="dimmed">
-            One price for several tickets — e.g. Rave Crew = 5 × General Access, or Family Pass = 2 Adult + 2 Child. Each person still gets their own ticket.
+            {bundle.components.map((c) => `${c.quantity} × ${c.label}`).join(" + ")}
+          </Text>
+          <Text size="sm" c="dimmed">
+            {formatMoney(bundle.price, eventCurrency)} · {bundle.package_size} tickets ·{" "}
+            {formatMoney(Number(bundle.price) / Math.max(1, bundle.package_size), eventCurrency)} per person ·{" "}
+            {bundle.quantity_sold} sold{bundle.quantity_available !== null ? ` of ${bundle.quantity_available}` : ""}
           </Text>
         </Stack>
         {!disabled && (
-          <Button size="xs" leftSection={<IconPlus size={14} />} onClick={() => setModalBundle("new")} disabled={products.length === 0}>
-            Add bundle
-          </Button>
+          <Group gap="xs" wrap="nowrap" style={{ flex: "0 0 auto" }}>
+            <Button size="xs" variant="light" onClick={() => setModalBundle(bundle)}>Edit</Button>
+            <Tooltip label={bundle.is_enabled ? "Pause sales" : "Resume sales"}>
+              <ActionIcon
+                size="lg"
+                variant="light"
+                color="gray"
+                aria-label={bundle.is_enabled ? "Pause bundle" : "Resume bundle"}
+                loading={toggleMutation.isPending && toggleMutation.variables?.id === bundle.id}
+                onClick={() => toggleMutation.mutate(bundle)}
+              >
+                {bundle.is_enabled ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="This bundle has sold. Pause it instead." disabled={!bundle.is_locked}>
+              <ActionIcon
+                size="lg"
+                variant="light"
+                color="red"
+                aria-label="Delete bundle"
+                disabled={bundle.is_locked}
+                onClick={() =>
+                  modals.openConfirmModal({
+                    title: "Delete bundle?",
+                    children: <Text size="sm">“{bundle.title}” will be removed. Tickets already sold are not affected.</Text>,
+                    labels: { confirm: "Delete", cancel: "Cancel" },
+                    confirmProps: { color: "red" },
+                    onConfirm: () => deleteMutation.mutate(bundle.id),
+                  })
+                }
+              >
+                <IconTrash size={16} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         )}
       </Group>
-
-      {bundles.length === 0 ? (
-        <Card withBorder radius="lg" p="lg">
-          <Group gap="sm" justify="center">
-            <IconPackages size={24} opacity={0.5} />
-            <Text c="dimmed" size="sm">No bundles yet.</Text>
-          </Group>
-        </Card>
-      ) : (
-        bundles.map((bundle) => (
-          <Card key={bundle.id} withBorder radius="lg" p="md">
-            <Group justify="space-between" wrap="nowrap" align="flex-start">
-              <Stack gap={2} style={{ minWidth: 0 }}>
-                <Group gap="xs">
-                  <Text fw={600}>{bundle.title}</Text>
-                  {!bundle.is_enabled && <Badge size="sm" color="gray" variant="light">Paused</Badge>}
-                  {bundle.is_enabled && bundle.unavailable_reason && (
-                    <Badge size="sm" color={bundle.unavailable_reason === "Sold out" ? "red" : "orange"} variant="light">
-                      {bundle.unavailable_reason === "Sold out" ? "Sold out" : "Not on sale"}
-                    </Badge>
-                  )}
-                </Group>
-                {bundle.is_enabled && bundle.unavailable_reason && bundle.unavailable_reason !== "Sold out" && (
-                  <Text size="xs" c="orange.8">{bundle.unavailable_reason}</Text>
-                )}
-                <Text size="sm" c="dimmed">
-                  {bundle.components.map((c) => `${c.quantity} × ${c.label}`).join(" + ")}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {formatMoney(bundle.price, eventCurrency)} · {bundle.package_size} tickets ·{" "}
-                  {formatMoney(Number(bundle.price) / Math.max(1, bundle.package_size), eventCurrency)} per person ·{" "}
-                  {bundle.quantity_sold} sold{bundle.quantity_available !== null ? ` of ${bundle.quantity_available}` : ""}
-                </Text>
-              </Stack>
-              {!disabled && (
-                <Group gap="xs" wrap="nowrap">
-                  <Button size="xs" variant="light" onClick={() => setModalBundle(bundle)}>Edit</Button>
-                  <Tooltip label={bundle.is_enabled ? "Pause sales" : "Resume sales"}>
-                    <ActionIcon
-                      size="lg"
-                      variant="light"
-                      color="gray"
-                      aria-label={bundle.is_enabled ? "Pause bundle" : "Resume bundle"}
-                      loading={toggleMutation.isPending && toggleMutation.variables?.id === bundle.id}
-                      onClick={() => toggleMutation.mutate(bundle)}
-                    >
-                      {bundle.is_enabled ? <IconPlayerPause size={16} /> : <IconPlayerPlay size={16} />}
-                    </ActionIcon>
-                  </Tooltip>
-                  <Tooltip label="This bundle has sold. Pause it instead." disabled={!bundle.is_locked}>
-                    <ActionIcon
-                      size="lg"
-                      variant="light"
-                      color="red"
-                      aria-label="Delete bundle"
-                      disabled={bundle.is_locked}
-                      onClick={() =>
-                        modals.openConfirmModal({
-                          title: "Delete bundle?",
-                          children: <Text size="sm">“{bundle.title}” will be removed. Tickets already sold are not affected.</Text>,
-                          labels: { confirm: "Delete", cancel: "Cancel" },
-                          confirmProps: { color: "red" },
-                          onConfirm: () => deleteMutation.mutate(bundle.id),
-                        })
-                      }
-                    >
-                      <IconTrash size={16} />
-                    </ActionIcon>
-                  </Tooltip>
-                </Group>
-              )}
-            </Group>
-          </Card>
-        ))
-      )}
-
-      {modalBundle !== null && (
-        <BundleFormModal
-          eventId={eventId}
-          eventCurrency={eventCurrency}
-          eventTimezone={eventTimezone}
-          products={products}
-          bundle={modalBundle === "new" ? undefined : modalBundle}
-          onClose={() => setModalBundle(null)}
-          onSaved={() => {
-            refresh();
-            setModalBundle(null);
-          }}
-        />
-      )}
-    </Stack>
+    </Card>
   );
+
+  const modal =
+    modalBundle !== null ? (
+      <BundleFormModal
+        eventId={eventId}
+        eventCurrency={eventCurrency}
+        eventTimezone={eventTimezone}
+        products={products}
+        bundle={modalBundle === "new" ? undefined : modalBundle}
+        onClose={() => setModalBundle(null)}
+        onSaved={() => {
+          refresh();
+          setModalBundle(null);
+        }}
+      />
+    ) : null;
+
+  return { bundles, renderCard, openNew: () => setModalBundle("new"), modal };
 }
 
 function BundleFormModal({
