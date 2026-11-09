@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useElementSize } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
-  ActionIcon, Badge, Box, Button, Card, Drawer, Group, Menu, Modal, Paper, Stack, Switch, Text, TextInput, Tooltip,
+  ActionIcon, Alert, Badge, Box, Button, Card, Drawer, Group, Menu, Modal, Paper, Skeleton, Stack, Switch, Text, TextInput, Tooltip,
 } from "@mantine/core";
 import {
   IconArrowDown, IconArrowUp, IconArrowsMove, IconEye, IconFolderPlus, IconGripVertical, IconPencil, IconTrash,
@@ -37,6 +37,8 @@ type Props = {
   renderBundle: (bundle: Bundle) => ReactNode;
   /** Set on a series template: shows "Apply to upcoming occurrences". */
   seriesId?: number;
+  /** Fetched on the server with the page, so the list and preview are there on first paint. */
+  initialLayout?: TicketLayoutResponse | null;
 };
 
 const sameKeys = (a: LayoutNode[], b: LayoutNode[]) => {
@@ -50,7 +52,7 @@ const sameKeys = (a: LayoutNode[], b: LayoutNode[]) => {
  * (optimistic, one request in flight, latest wins) with an Undo; if the list changed elsewhere
  * the server says so (409) and the editor reloads the fresh order instead of overwriting it.
  */
-export function TicketArranger({ eventId, currencyCode, disabled, products, bundles, renderProduct, renderBundle, seriesId }: Props) {
+export function TicketArranger({ eventId, currencyCode, disabled, products, bundles, renderProduct, renderBundle, seriesId, initialLayout }: Props) {
   const router = useRouter();
   const queryClient = useQueryClient();
   // Side-by-side only when the editor itself is wide: the page has sidebars, so the window width is no guide.
@@ -60,14 +62,24 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
   const compact = containerWidth > 0 && containerWidth < 600;
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const queryKey = ["ticket-layout", eventId];
-  const layoutQuery = useQuery({ queryKey, queryFn: () => getTicketLayout(eventId) });
+  // One quick retry, not three with growing waits: a failure should surface (with a way to retry) in
+  // about a second, and the tickets below are listed meanwhile so the page is never empty.
+  const layoutQuery = useQuery({
+    queryKey,
+    queryFn: () => getTicketLayout(eventId),
+    initialData: initialLayout ?? undefined,
+    retry: 1,
+    retryDelay: 800,
+  });
 
-  const [nodes, setNodes] = useState<LayoutNode[]>([]);
-  const [buyerView, setBuyerView] = useState<BuyerView | null>(null);
+  const [nodes, setNodes] = useState<LayoutNode[]>(initialLayout?.nodes ?? []);
+  const [buyerView, setBuyerView] = useState<BuyerView | null>(initialLayout?.buyer_view ?? null);
+  // False until a layout (server-rendered or fetched) has been adopted: arranging needs its revision.
+  const [ready, setReady] = useState(Boolean(initialLayout));
   const [sectionModal, setSectionModal] = useState<LayoutSectionNode | "new" | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const revision = useRef("");
-  const baseline = useRef<LayoutNode[]>([]); // last order the server confirmed
+  const revision = useRef(initialLayout?.revision ?? "");
+  const baseline = useRef<LayoutNode[]>(initialLayout?.nodes ?? []); // last order the server confirmed
   const burstStart = useRef<LayoutNode[]>([]); // order before the current run of moves (for Undo)
   const pending = useRef<LayoutNode[] | null>(null);
   const inflight = useRef(false);
@@ -76,6 +88,7 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
     revision.current = res.revision;
     baseline.current = res.nodes;
     setNodes(res.nodes);
+    setReady(true);
     if (res.buyer_view) setBuyerView(res.buyer_view);
   };
 
@@ -84,6 +97,11 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
     const data = layoutQuery.data;
     if (data && !inflight.current && !pending.current) adopt(data);
   }, [layoutQuery.data]);
+
+  // A session that ended while the page was open should send the organizer to sign in, not show a dead list.
+  useEffect(() => {
+    if (layoutQuery.error) redirectOnAuthError(layoutQuery.error as Error, router);
+  }, [layoutQuery.error, router]);
 
   const onFailure = (error: unknown) => {
     pending.current = null;
@@ -186,6 +204,17 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
     );
   }
 
+  // Tickets the loaded layout doesn't list yet (just created, or created elsewhere): shown below the list
+  // instead of vanishing, and a refetch is asked for so they join the arrangement.
+  const listedKeys = new Set(nodes.flatMap((n) => (n.type === "section" ? n.items.map((i) => `${i.kind}:${i.id}`) : [`${n.kind}:${n.id}`])));
+  const missingProducts = products.filter((p) => !listedKeys.has(`product:${p.id}`));
+  const missingBundles = bundles.filter((b) => !listedKeys.has(`bundle:${b.id}`));
+  const missingKey = ready ? [...missingProducts.map((p) => `p${p.id}`), ...missingBundles.map((b) => `b${b.id}`)].join(",") : "";
+  useEffect(() => {
+    if (missingKey) queryClient.invalidateQueries({ queryKey: ["ticket-layout", eventId] });
+  }, [missingKey, queryClient, eventId]);
+
+  const measured = containerWidth > 0;
   const sectionsList = nodes.filter((n): n is LayoutSectionNode => n.type === "section");
 
   // WordPress-menu style: slide a ticket right to nest it under the section directly above, left to pull it out.
@@ -242,7 +271,7 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
     <Stack gap="sm">
       <Group justify="space-between" gap="xs">
         <Text size="sm" c="dimmed">Drag to set the order buyers see; drag a ticket right under a section to put it inside, left to take it out. Sections are just headings.</Text>
-        {!wide && (
+        {measured && !wide && (
           <Button size="xs" variant="light" leftSection={<IconEye size={14} />} onClick={() => setPreviewOpen(true)}>Preview</Button>
         )}
         {!disabled && (
@@ -252,7 +281,7 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
           </Group>
         )}
       </Group>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <DndContext id={`ticket-arranger-${eventId}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={nodes.map(nodeKey)} strategy={verticalListSortingStrategy}>
           <Stack gap="sm">
             {nodes.map((node, index) => {
@@ -292,7 +321,7 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
                         <Text size="sm" c="dimmed" ta="center" py="sm">Empty. Use the move button on a ticket to put it here. Empty sections are hidden from buyers.</Text>
                       ) : (
                         <Box pl={compact ? 8 : "md"} ml={compact ? 2 : "xs"} style={{ borderLeft: "2px solid var(--mantine-color-default-border)" }}>
-                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+                        <DndContext id={`ticket-arranger-${eventId}-section-${node.id}`} sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
                           <SortableContext items={node.items.map((i) => `${i.kind}:${i.id}`)} strategy={verticalListSortingStrategy}>
                             <Stack gap="sm">
                               {node.items.map((item, itemIndex) => {
@@ -320,6 +349,12 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
           </Stack>
         </SortableContext>
       </DndContext>
+      {(missingProducts.length > 0 || missingBundles.length > 0) && (
+        <Stack gap="sm">
+          {missingProducts.map((p) => <Fragment key={`p${p.id}`}>{renderProduct(p)}</Fragment>)}
+          {missingBundles.map((b) => <Fragment key={`b${b.id}`}>{renderBundle(b)}</Fragment>)}
+        </Stack>
+      )}
     </Stack>
   );
 
@@ -335,7 +370,7 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
       readOnly
     />
   ) : (
-    <Text size="sm" c="dimmed">Loading…</Text>
+    <Stack gap="sm" aria-busy="true" aria-label="Loading preview"><Skeleton height={72} radius="lg" /><Skeleton height={72} radius="lg" /><Skeleton height={72} radius="lg" /></Stack>
   );
 
   // What the sheet's title says: how much buyers see, and how much is held back.
@@ -357,8 +392,22 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
 
   return (
     <div ref={containerRef}>
-      {layoutQuery.isError && nodes.length === 0 ? (
-        <Text c="red" size="sm">Could not load the ticket order. Refresh to try again.</Text>
+      {!ready ? (
+        // No layout yet (loading, or it failed): list the tickets plainly so the page is never empty.
+        <Stack gap="sm">
+          {layoutQuery.isError ? (
+            <Alert color="red" variant="light" title="Couldn't load the ticket order">
+              <Group justify="space-between" gap="xs">
+                <Text size="sm">Your tickets are listed below, but they can&apos;t be arranged or previewed right now.</Text>
+                <Button size="xs" variant="light" loading={layoutQuery.isFetching} onClick={() => layoutQuery.refetch()}>Try again</Button>
+              </Group>
+            </Alert>
+          ) : (
+            <Skeleton height={14} width={180} radius="sm" />
+          )}
+          {products.map((p) => <Fragment key={`p${p.id}`}>{renderProduct(p)}</Fragment>)}
+          {bundles.map((b) => <Fragment key={`b${b.id}`}>{renderBundle(b)}</Fragment>)}
+        </Stack>
       ) : wide ? (
         <Group align="flex-start" wrap="nowrap" gap="lg">
           <Box style={{ flex: "1 1 58%", minWidth: 0 }}>{list}</Box>
@@ -368,11 +417,11 @@ export function TicketArranger({ eventId, currencyCode, disabled, products, bund
         <Box>
           {list}
           {/* Stays in reach at the bottom of the screen while the list is scrolled. */}
-          <Box style={{ position: "sticky", bottom: 12, zIndex: 5, display: "flex", justifyContent: "center", marginTop: 12, pointerEvents: "none" }}>
+          {measured && <Box style={{ position: "sticky", bottom: 12, zIndex: 5, display: "flex", justifyContent: "center", marginTop: 12, pointerEvents: "none" }}>
             <Button radius="xl" size="sm" leftSection={<IconEye size={16} />} onClick={() => setPreviewOpen(true)} style={{ pointerEvents: "auto", boxShadow: "var(--mantine-shadow-md)" }}>
               Preview
             </Button>
-          </Box>
+          </Box>}
         </Box>
       )}
 

@@ -95,6 +95,7 @@ export function useBundleManager({
   products,
   disabled,
   enabled,
+  initialBundles,
 }: {
   eventId: number;
   eventCurrency: string;
@@ -102,12 +103,19 @@ export function useBundleManager({
   products: Product[];
   disabled: boolean;
   enabled: boolean;
+  /** Fetched with the page so bundle rows are there on first paint. */
+  initialBundles?: Bundle[];
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [modalBundle, setModalBundle] = useState<Bundle | "new" | null>(null);
   const queryKey = ["bundles", eventId];
-  const { data } = useQuery({ queryKey, queryFn: () => listBundles(eventId), enabled });
+  const { data } = useQuery({
+    queryKey,
+    queryFn: () => listBundles(eventId),
+    enabled,
+    initialData: initialBundles ? { bundles: initialBundles } : undefined,
+  });
   const bundles = data?.bundles ?? [];
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey });
