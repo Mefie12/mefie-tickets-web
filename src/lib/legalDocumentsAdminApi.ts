@@ -7,6 +7,9 @@ export type LegalDocumentVersion = {
   id: number;
   platform_legal_document_id: number;
   version_number: number;
+  is_material?: boolean;
+  effective_at?: string | null;
+  change_summary?: string | null;
   content_type: TermsContentType;
   rich_text_content: string | null;
   status: TermsVersionStatus;
@@ -21,10 +24,19 @@ export type LegalDocumentPlacement = {
   platform_legal_document_id: number;
   placement: LegalDocumentPlacementSlugUpper;
   sort_order: number;
+  acceptance_mode: LegalAcceptanceMode;
 };
 
 /** The enum's own casing, as stored/returned by the API — distinct from the URL-safe slug used in public routes. */
-export type LegalDocumentPlacementSlugUpper = "ACCOUNT_REGISTRATION" | "TICKET_CHECKOUT" | "PRIVACY_CENTER";
+export type LegalDocumentPlacementSlugUpper =
+  | "ACCOUNT_REGISTRATION"
+  | "TICKET_CHECKOUT"
+  | "PRIVACY_CENTER"
+  | "ORGANIZER_ONBOARDING"
+  | "PAYOUT_SETUP"
+  | "PUBLIC_FOOTER";
+
+export type LegalAcceptanceMode = "REQUIRED_CHECKBOX" | "CONTINUE_IMPLIES" | "INFORMATIONAL";
 
 export type LegalDocument = {
   id: number;
@@ -78,6 +90,10 @@ export function createLegalDocument(input: { name: string; description?: string 
   return request<{ document: LegalDocument }>("/api/admin/platform-documents", { method: "POST", body: input });
 }
 
+export function updateLegalDocumentDetails(slug: string, input: { name: string; description: string | null }) {
+  return request<{ document: LegalDocument }>(`/api/admin/platform-documents/${slug}`, { method: "PATCH", body: input });
+}
+
 export function getLegalDocument(slug: string) {
   return request<{ document: LegalDocument }>(`/api/admin/platform-documents/${slug}`);
 }
@@ -102,13 +118,23 @@ export function updateLegalDocumentVersion(slug: string, versionId: number, rich
   });
 }
 
-export function publishLegalDocumentVersion(slug: string, versionId: number) {
+export type PublishOptions = {
+  /** A change organizers should be told about (emails every organization admin). */
+  is_material?: boolean;
+  /** ISO date the change applies from; defaults to now. */
+  effective_at?: string | null;
+  /** Plain-language "what changed", shown in the notice email and banner. */
+  change_summary?: string | null;
+};
+
+export function publishLegalDocumentVersion(slug: string, versionId: number, options: PublishOptions = {}) {
   return request<{ version: LegalDocumentVersion }>(`/api/admin/platform-documents/${slug}/versions/${versionId}/publish`, {
     method: "PATCH",
+    body: options,
   });
 }
 
-export function updateLegalDocumentPlacements(slug: string, placements: { placement: LegalDocumentPlacementSlugUpper; sort_order: number }[]) {
+export function updateLegalDocumentPlacements(slug: string, placements: { placement: LegalDocumentPlacementSlugUpper; sort_order: number; acceptance_mode: LegalAcceptanceMode }[]) {
   return request<{ placements: LegalDocumentPlacement[] }>(`/api/admin/platform-documents/${slug}/placements`, {
     method: "PUT",
     body: { placements },

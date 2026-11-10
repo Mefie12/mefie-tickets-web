@@ -1,0 +1,45 @@
+/* Fixed to the bottom of the window. With a dashboard sidebar (Mantine exposes its width as
+   --app-shell-navbar-offset, unset on pages without one) the bar starts after the sidebar,
+   so the sidebar and its account menu stay visible and clickable; otherwise it runs edge to edge. */
+.banner {
+  left: 0;
+  padding: var(--mantine-spacing-md);
+}
+
+/* Matches the sidebar breakpoint in ConsoleShell. The 12px is the sidebar's own inset from the window edge. */
+@media (min-width: 48em) {
+  .banner {
+    left: calc(var(--app-shell-navbar-offset, -12px) + 12px);
+  }
+}
+
+/* Phones: a compact bar (smaller text, one row of buttons) instead of a third of the screen.
+   "Only what's necessary" and "Accept all" keep equal size and weight. */
+@media (max-width: 47.99em) {
+  .banner {
+    padding: 12px;
+  }
+
+  .title {
+    font-size: var(--mantine-font-size-sm);
+  }
+
+  .text {
+    font-size: var(--mantine-font-size-xs);
+    line-height: 1.45;
+  }
+
+  .actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .actions > button {
+    --button-height: 34px;
+    --button-fz: 12px;
+    --button-padding-x: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}

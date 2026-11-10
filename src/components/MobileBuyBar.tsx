@@ -40,11 +40,11 @@ export function MobileBuyBar({
     <Box
       hiddenFrom="md"
       pos="fixed"
-      bottom={0}
       left={0}
       right={0}
       p="sm"
       style={{
+        bottom: "var(--privacy-banner-height, 0px)",
         zIndex: 100,
         backgroundColor: "var(--mantine-color-body)",
         borderTop: "1px solid var(--mantine-color-default-border)",

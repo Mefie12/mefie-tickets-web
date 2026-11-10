@@ -89,7 +89,7 @@ async function request<T>(
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+    throw Object.assign(new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code), { data });
   }
 
   return data as T;

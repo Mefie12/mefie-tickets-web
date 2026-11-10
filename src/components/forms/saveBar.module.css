@@ -10,7 +10,7 @@
 
 .bar[data-pinned="true"] {
   position: sticky;
-  bottom: 12px;
+  bottom: calc(12px + var(--privacy-banner-height, 0px));
   z-index: 20;
   padding: 10px 14px;
   padding-bottom: max(10px, env(safe-area-inset-bottom));

@@ -44,6 +44,8 @@ export type EventTaxonomies = {
 
 export type Event = {
   id: number;
+  marketing_opt_in_enabled?: boolean;
+  marketing_opt_in_label?: string | null;
   organization_id: string;
   title: string;
   description: string;
@@ -116,7 +118,7 @@ async function request<T>(
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+    throw Object.assign(new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code), { data });
   }
 
   return data as T;

@@ -5,12 +5,13 @@ import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 
 /** Persistent "change your choice" affordance (spec §8). Opens the same
  *  preference panel as the banner's "See details". */
-export function PrivacyChoicesLink({ style }: { style?: React.CSSProperties }) {
+export function PrivacyChoicesLink({ style, color }: { style?: React.CSSProperties; /** Text colour, when it must match neighbouring links (Anchor otherwise applies its own). */ color?: string }) {
   const { openPreferences } = usePrivacyConsent();
 
   return (
     <Anchor
       component="button"
+      c={color}
       type="button"
       onClick={openPreferences}
       // A native <button> carries user-agent padding/border a plain <a>

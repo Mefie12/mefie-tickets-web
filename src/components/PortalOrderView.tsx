@@ -6,7 +6,7 @@ import { Alert, Anchor, Badge, Button, Card, Checkbox, Group, Paper, Stack, Text
 import { IconArrowLeft, IconLink } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import Link from "next/link";
-import { confirmUpdatedTerms, getOrder, type EntitlementRow, type OrderDetailPayload } from "@/lib/portalApi";
+import { confirmUpdatedTerms, getOrder, withdrawMarketingOptIn, type EntitlementRow, type OrderDetailPayload } from "@/lib/portalApi";
 import { resolveApiErrorMessage } from "@/lib/apiErrorMessages";
 import { TicketDescription } from "@/components/TicketDescription";
 import { assignmentStatusMeta, ticketLabel } from "@/lib/portalStatus";
@@ -53,6 +53,14 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
     setDangerSeq((n) => n + 1);
     setDangerOpen(true);
   };
+  const withdrawMarketing = useMutation({
+    mutationFn: () => withdrawMarketingOptIn(shortId),
+    onSuccess: () => {
+      void invalidate();
+      notifications.show({ color: "teal", message: "Your marketing permission has been withdrawn." });
+    },
+    onError: (error) => notifications.show({ color: "red", message: resolveApiErrorMessage(error) }),
+  });
   const [correctTarget, setCorrectTarget] = useState<EntitlementRow | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -152,6 +160,24 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
 
       <DeliveriesPanel orderShortId={shortId} />
 
+      {data.marketing_opt_in && (
+        <Paper withBorder radius="md" p="md">
+          <Stack gap="xs">
+            <Text fw={600} size="sm">Marketing permission</Text>
+            <Text size="sm" c="dimmed">
+              {data.marketing_opt_in.withdrawn_at
+                ? `You withdrew your permission on ${new Date(data.marketing_opt_in.withdrawn_at).toLocaleDateString()}. The organizer should no longer email or text you about future events.`
+                : `You agreed: "${data.marketing_opt_in.label ?? "the organizer may email and text me about future events"}"`}
+            </Text>
+            {!data.marketing_opt_in.withdrawn_at && (
+              <Button size="xs" variant="light" color="gray" style={{ alignSelf: "flex-start" }} loading={withdrawMarketing.isPending} onClick={() => withdrawMarketing.mutate()}>
+                Withdraw permission
+              </Button>
+            )}
+          </Stack>
+        </Paper>
+      )}
+
       {!pastCutoff && selected.size > 0 && (
         <Paper
           withBorder
@@ -159,12 +185,11 @@ export function PortalOrderView({ shortId, initialData }: { shortId: string; ini
           radius="lg"
           p="sm"
           pos="fixed"
-          bottom={16}
           left="50%"
           // Mantine's own scale is app:100 < modal:200 (@mantine/core/styles.css)
           // — this used to tie with Modal's z-index, which let this bar render
           // over the AssignEntitlementModal/batch-links modal its own buttons open.
-          style={{ transform: "translateX(-50%)", zIndex: 100, maxWidth: "min(560px, 92vw)", width: "100%" }}
+          style={{ bottom: "calc(16px + var(--privacy-banner-height, 0px))", transform: "translateX(-50%)", zIndex: 100, maxWidth: "min(560px, 92vw)", width: "100%" }}
         >
           <Group justify="space-between" wrap="nowrap">
             <Text size="sm" fw={500}>

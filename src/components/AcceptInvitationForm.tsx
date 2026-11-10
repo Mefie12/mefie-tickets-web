@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
 import { Alert, Button, Center, Loader, PasswordInput, SimpleGrid, Stack, Text, TextInput } from "@mantine/core";
 import { AuthLayout } from "@/components/AuthLayout";
+import { LegalAgreement, useLegalDocuments } from "@/components/LegalDocumentLinks";
+import type { LegalDocumentPlacementSlug } from "@/lib/legalDocumentsApi";
 import {
   acceptInvitation,
   acceptInvitationAsCurrentUser,
@@ -147,9 +150,18 @@ function ConfirmAcceptStep({
   invitation: InvitationPreview;
   onAccepted: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const legal = useLegalDocuments(ORGANIZER_PLACEMENT);
+  const [agreed, setAgreed] = useState(false);
   const acceptMutation = useMutation({
-    mutationFn: () => acceptInvitationAsCurrentUser(token),
+    mutationFn: () => acceptInvitationAsCurrentUser(token, legal.versionIds),
     onSuccess: onAccepted,
+    onError: (error: Error) => {
+      if (error instanceof ApiError && error.code === "DOCUMENTS_CHANGED") {
+        setAgreed(false);
+        void queryClient.invalidateQueries({ queryKey: ["legal-documents"] });
+      }
+    },
   });
 
   return (
@@ -162,7 +174,8 @@ function ConfirmAcceptStep({
             {acceptMutation.error instanceof ApiError ? acceptMutation.error.message : "Something went wrong."}
           </Alert>
         )}
-        <Button fullWidth loading={acceptMutation.isPending} onClick={() => acceptMutation.mutate()}>
+        <LegalAgreement documents={legal} action="accepting this invitation" checked={agreed} onChange={setAgreed} />
+        <Button fullWidth loading={acceptMutation.isPending} disabled={legal.required.length > 0 && !agreed} onClick={() => acceptMutation.mutate()}>
           Accept invitation
         </Button>
       </Stack>
@@ -173,22 +186,30 @@ function ConfirmAcceptStep({
 function CreatePasswordStep({ token, invitation }: { token: string; invitation: InvitationPreview }) {
   const router = useRouter();
 
+  const queryClient = useQueryClient();
+  const legal = useLegalDocuments(ORGANIZER_PLACEMENT);
+
   const form = useForm({
-    initialValues: { password: "", password_confirmation: "" },
+    initialValues: { password: "", password_confirmation: "", agreed: false },
     validate: {
       password: (v) => (v.length < 8 ? "Must be at least 8 characters" : null),
       password_confirmation: (v, values) => (v !== values.password ? "Passwords do not match" : null),
+      agreed: (v) => (legal.required.length > 0 && !v ? "You must accept the documents to continue" : null),
     },
   });
 
   const acceptMutation = useMutation({
-    mutationFn: (values: typeof form.values) => acceptInvitation(token, values),
+    mutationFn: ({ password, password_confirmation }: typeof form.values) =>
+      acceptInvitation(token, { password, password_confirmation, document_versions: legal.versionIds }),
     // No org-level setup for an invited teammate to do — /settings is
     // just the user's own profile, and the dashboard is the natural
     // landing spot once they're in.
     onSuccess: () => router.push("/dashboard"),
     onError: (error: Error) => {
-      if (error instanceof ApiError && error.errors) {
+      if (error instanceof ApiError && error.code === "DOCUMENTS_CHANGED") {
+        form.setFieldValue("agreed", false);
+        void queryClient.invalidateQueries({ queryKey: ["legal-documents"] });
+      } else if (error instanceof ApiError && error.errors) {
         form.setErrors(
           Object.fromEntries(Object.entries(error.errors).map(([field, messages]) => [field, messages[0]])),
         );
@@ -210,6 +231,13 @@ function CreatePasswordStep({ token, invitation }: { token: string; invitation: 
             {...form.getInputProps("password")}
           />
           <PasswordInput label="Confirm password" {...form.getInputProps("password_confirmation")} />
+          <LegalAgreement
+            documents={legal}
+            action="accepting this invitation"
+            checked={form.values.agreed}
+            onChange={(checked) => form.setFieldValue("agreed", checked)}
+            error={form.errors.agreed}
+          />
           <Button type="submit" fullWidth loading={acceptMutation.isPending} mt="sm">
             Accept invitation
           </Button>
@@ -233,3 +261,5 @@ function InvitationDetails({ invitation }: { invitation: InvitationPreview }) {
     </SimpleGrid>
   );
 }
+
+const ORGANIZER_PLACEMENT: LegalDocumentPlacementSlug[] = ["organizer-onboarding"];

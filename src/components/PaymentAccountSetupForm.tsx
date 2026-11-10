@@ -1,5 +1,6 @@
 "use client";
 
+import { useLegalGate } from "@/lib/useLegalGate";
 import { useState } from "react";
 import { Alert, Button, Checkbox, Stack, Text, Title } from "@mantine/core";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -46,8 +47,9 @@ export function PaymentAccountSetupForm({
   );
   const [countryConfirmed, setCountryConfirmed] = useState(false);
 
+  const legalGate = useLegalGate();
   const setup = useMutation({
-    mutationFn: () => provisionPaymentAccount(country.trim().toUpperCase(), currency.trim().toUpperCase()),
+    mutationFn: () => legalGate.guard(() => provisionPaymentAccount(country.trim().toUpperCase(), currency.trim().toUpperCase())),
     onSuccess: ({ payment_account }) => onProvisioned(payment_account),
   });
 
@@ -62,6 +64,7 @@ export function PaymentAccountSetupForm({
 
   return (
     <Stack>
+      {legalGate.dialog}
       {!hideHeading && <Title order={2}>Payments &amp; Payouts</Title>}
       <Text c="dimmed">
         Add your legal payment country and settlement currency to start selling tickets right away — you can

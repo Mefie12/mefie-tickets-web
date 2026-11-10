@@ -90,6 +90,8 @@ export type EntitlementRow = {
 export type OrderDetailPayload = {
   order: OrderCard & { admission_closes_at: string | null; acceptance_policy: string | null };
   entitlements: EntitlementRow[];
+  /** The organizer's optional marketing permission the buyer gave with this order; null if they never did. */
+  marketing_opt_in: { label: string | null; opted_in_at: string; withdrawn_at: string | null } | null;
   refund_request: {
     id: number;
     status: "PENDING" | "APPROVED" | "DENIED" | "WITHDRAWN";
@@ -303,6 +305,9 @@ export const withdrawRefundRequest = (orderShortId: string, refundRequestId: num
   request(`/api/portal/orders/${encodeURIComponent(orderShortId)}/refund-requests/${refundRequestId}`, {
     method: "DELETE",
   });
+
+export const withdrawMarketingOptIn = (orderShortId: string) =>
+  request(`/api/portal/orders/${encodeURIComponent(orderShortId)}/marketing-opt-in`, { method: "DELETE" });
 
 // --- step-up + session --------------------------------------------
 

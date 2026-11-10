@@ -47,6 +47,8 @@ export type CheckoutDraft = {
   orderAnswers: Record<number, AnswerValue>;
   notifyAttendees: boolean;
   termsAccepted: boolean;
+  /** The organizer's separate, optional permission to email this buyer; never required and never implied by the terms. */
+  marketingOptIn?: boolean;
   assignmentMode: AssignmentMode;
   assignmentInteracted: boolean;
   slots: AttendeeSlot[];
@@ -108,6 +110,7 @@ export function createCheckoutDraft(
     orderAnswers: {},
     notifyAttendees: true,
     termsAccepted: false,
+    marketingOptIn: false,
     assignmentMode: deferred
       ? inlineAssignmentOffered && total < DEFERRED_ASSIGNMENT_SUGGESTION_THRESHOLD
         ? "now"
@@ -321,6 +324,7 @@ export function serializeCheckoutOrder(
           expected_discount_minor: context.offer.expected_discount_minor,
         }
       : {}),
+    ...(draft.marketingOptIn ? { marketing_opt_in: true } : {}),
     ...(context.termsRequired && context.termsVersionId !== null
       ? { terms_accepted: draft.termsAccepted, terms_version_id: context.termsVersionId }
       : {}),

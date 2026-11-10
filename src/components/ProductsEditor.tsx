@@ -1,5 +1,6 @@
 "use client";
 
+import { useLegalGate } from "@/lib/useLegalGate";
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -354,9 +355,11 @@ export function ProductsEditor({
     });
   }
 
+  const legalGate = useLegalGate();
+
   const toggleEnabledMutation = useMutation({
     mutationFn: (product: Product) =>
-      updateProduct(eventId, product.id, { is_enabled: product.disabled_at !== null }),
+      legalGate.guard(() => updateProduct(eventId, product.id, { is_enabled: product.disabled_at !== null })),
     onSuccess: (data: { product: Product }) => {
       setProducts((prev) => prev.map((p) => (p.id === data.product.id ? data.product : p)));
       refreshLayout();
@@ -454,6 +457,7 @@ export function ProductsEditor({
 
   return (
     <Stack gap="md">
+      {legalGate.dialog}
       <Group justify="space-between">
         <Text size="sm" c="dimmed">
           Ticket types buyers can choose from at checkout.
@@ -723,7 +727,7 @@ function ProductFormModal({
               )
             : undefined,
       };
-      return isEdit ? updateProduct(eventId, product.id, input) : createProduct(eventId, input);
+      return legalGate.guard(() => (isEdit ? updateProduct(eventId, product.id, input) : createProduct(eventId, input)));
     },
     onSuccess: (data: { product: Product }) => {
       onSaved(data.product);
@@ -763,9 +767,12 @@ function ProductFormModal({
   );
 
   const guard = useGuardedClose(form, onClose, "the ticket type form");
+  const legalGate = useLegalGate();
   const meta = form.values.type === "PAID" || form.values.type === "REGISTRATION" || form.values.type === "TIERED" ? TYPE_META[form.values.type] : null;
 
   return (
+    <>
+    {legalGate.dialog}
     <Modal
       opened
       onClose={guard.requestClose}
@@ -1046,5 +1053,6 @@ function ProductFormModal({
         </Stack>
       </form>
     </Modal>
+    </>
   );
 }

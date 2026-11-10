@@ -7,3 +7,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const result = await backendRequest(`/api/admin/platform-legal-documents/${encodeURIComponent(slug)}`);
   return relayResponse(result);
 }
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const body = await request.json();
+  const result = await backendRequest(`/api/admin/platform-legal-documents/${encodeURIComponent(slug)}`, { method: "PATCH", body });
+  return relayResponse(result);
+}

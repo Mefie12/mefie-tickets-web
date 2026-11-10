@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Box, Container, Group, Paper, Stack, Text } from "@mantine/core";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MefieLogo } from "@/components/MefieLogo";
+import { LegalFooterLinks } from "@/components/LegalFooterLinks";
 import { brandTextColor } from "@/theme";
 
 export function AuthLayout({
@@ -38,6 +39,7 @@ export function AuthLayout({
         <Paper withBorder radius="lg" shadow="md" p="xl">
           {children}
         </Paper>
+        <LegalFooterLinks />
       </Stack>
     </Container>
     </Box>

@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Dropzone, PDF_MIME_TYPE } from "@mantine/dropzone";
-import { Alert, Badge, Box, Button, Card, Center, Checkbox, Group, Loader, Modal, NumberInput, Stack, Text, Title } from "@mantine/core";
-import { IconFileText, IconUpload, IconX } from "@tabler/icons-react";
+import { Alert, Badge, Button, Card, Center, Checkbox, Group, Loader, Modal, NumberInput, Select, Stack, Switch, Text, Textarea, TextInput, Title } from "@mantine/core";
+import { IconFileText, IconPencil, IconUpload, IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { ApiError } from "@/lib/authApi";
 import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { RichTextDescription } from "@/components/RichTextDescription";
+import { LegalDocumentView } from "@/components/LegalDocumentView";
 import {
   createPdfLegalDocumentVersion,
   createLegalDocumentVersion,
@@ -17,6 +18,9 @@ import {
   publishLegalDocumentVersion,
   updateLegalDocumentPlacements,
   updateLegalDocumentVersion,
+  type LegalAcceptanceMode,
+  updateLegalDocumentDetails,
+  type PublishOptions,
   type LegalDocumentPlacementSlugUpper,
   type LegalDocumentVersion,
 } from "@/lib/legalDocumentsAdminApi";
@@ -25,20 +29,41 @@ const MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024;
 
 const STATUS_COLOR: Record<string, string> = { DRAFT: "gray", PUBLISHED: "teal" };
 
-const PLACEMENT_OPTIONS: { value: LegalDocumentPlacementSlugUpper; label: string }[] = [
-  { value: "ACCOUNT_REGISTRATION", label: "Account registration" },
-  { value: "TICKET_CHECKOUT", label: "Ticket checkout" },
-  { value: "PRIVACY_CENTER", label: "Privacy centre (cookie banner)" },
+const PLACEMENT_OPTIONS: { value: LegalDocumentPlacementSlugUpper; label: string; defaultMode: LegalAcceptanceMode }[] = [
+  { value: "PUBLIC_FOOTER", label: "Public footer (Legal links, readable by anyone)", defaultMode: "INFORMATIONAL" },
+  { value: "ACCOUNT_REGISTRATION", label: "Account registration", defaultMode: "REQUIRED_CHECKBOX" },
+  { value: "ORGANIZER_ONBOARDING", label: "Organizer onboarding (signup and team invitations)", defaultMode: "REQUIRED_CHECKBOX" },
+  { value: "PAYOUT_SETUP", label: "Payouts and paid events (organizer)", defaultMode: "REQUIRED_CHECKBOX" },
+  { value: "TICKET_CHECKOUT", label: "Ticket checkout", defaultMode: "INFORMATIONAL" },
+  { value: "PRIVACY_CENTER", label: "Privacy centre (cookie banner)", defaultMode: "INFORMATIONAL" },
 ];
 
-type PlacementRow = { checked: boolean; sortOrder: number };
+/** Plain-language result of each agreement mode, shown under the choice so an admin knows what people will see. */
+function modeEffect(mode: LegalAcceptanceMode, name: string): string {
+  switch (mode) {
+    case "REQUIRED_CHECKBOX":
+      return `People must tick a checkbox, "I accept ${name}", before they can continue.`;
+    case "CONTINUE_IMPLIES":
+      return `The screen says "By creating an account you agree to Mefie Tickets' ${name}" (the wording fits the screen). Continuing counts as agreeing, and it is recorded.`;
+    default:
+      return "Shown as a link to read. Nobody is asked to agree and nothing is recorded.";
+  }
+}
+
+/** Where a document may be merely linked. Elsewhere (signup, invitations, payouts) whatever is attached binds people. */
+const LINK_ONLY_PLACEMENTS: LegalDocumentPlacementSlugUpper[] = ["PUBLIC_FOOTER", "TICKET_CHECKOUT", "PRIVACY_CENTER"];
+
+const MODE_OPTIONS: { value: LegalAcceptanceMode; label: string }[] = [
+  { value: "REQUIRED_CHECKBOX", label: "Required checkbox" },
+  { value: "CONTINUE_IMPLIES", label: "Continuing implies agreement" },
+  { value: "INFORMATIONAL", label: "Link only (no agreement)" },
+];
+
+type PlacementRow = { checked: boolean; sortOrder: number; mode: LegalAcceptanceMode };
 type PlacementState = Record<LegalDocumentPlacementSlugUpper, PlacementRow>;
 
-const emptyPlacementState = (): PlacementState => ({
-  ACCOUNT_REGISTRATION: { checked: false, sortOrder: 0 },
-  TICKET_CHECKOUT: { checked: false, sortOrder: 0 },
-  PRIVACY_CENTER: { checked: false, sortOrder: 0 },
-});
+const emptyPlacementState = (): PlacementState =>
+  Object.fromEntries(PLACEMENT_OPTIONS.map((option) => [option.value, { checked: false, sortOrder: 0, mode: option.defaultMode }])) as PlacementState;
 
 /**
  * One legal document's editor: draft/publish/version-history (mirrors
@@ -55,6 +80,13 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
   const [viewingVersion, setViewingVersion] = useState<LegalDocumentVersion | null>(null);
   const [placements, setPlacements] = useState<PlacementState>(emptyPlacementState());
   const [placementsLoadedForId, setPlacementsLoadedForId] = useState<number | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [material, setMaterial] = useState(false);
+  const [effectiveDate, setEffectiveDate] = useState("");
+  const [changeSummary, setChangeSummary] = useState("");
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailsName, setDetailsName] = useState("");
+  const [detailsDescription, setDetailsDescription] = useState("");
 
   const document = query.data?.document ?? null;
   const versions = document?.versions ?? [];
@@ -71,8 +103,11 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
     setPlacementsLoadedForId(document.id);
     const next = emptyPlacementState();
     for (const row of document.placements ?? []) {
-      next[row.placement] = { checked: true, sortOrder: row.sort_order };
+      const stored = row.acceptance_mode ?? next[row.placement].mode;
+      next[row.placement] = { checked: true, sortOrder: row.sort_order, mode: stored === "INFORMATIONAL" && !LINK_ONLY_PLACEMENTS.includes(row.placement) ? "CONTINUE_IMPLIES" : stored };
     }
+    // A brand-new document is listed in the public footer unless the admin unticks it.
+    if ((document.placements ?? []).length === 0 && !document.current_version) next.PUBLIC_FOOTER.checked = true;
     setPlacements(next);
   }
 
@@ -117,10 +152,21 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
   });
 
   const publishMutation = useMutation({
-    mutationFn: (versionId: number) => publishLegalDocumentVersion(slug, versionId),
+    mutationFn: ({ versionId, options }: { versionId: number; options: PublishOptions }) => publishLegalDocumentVersion(slug, versionId, options),
     onSuccess: () => {
+      setPublishing(false);
       query.refetch();
       notifications.show({ color: "teal", message: `${document?.name} published.` });
+    },
+    onError: handleError,
+  });
+
+  const detailsMutation = useMutation({
+    mutationFn: () => updateLegalDocumentDetails(slug, { name: detailsName.trim(), description: detailsDescription.trim() || null }),
+    onSuccess: () => {
+      setEditingDetails(false);
+      query.refetch();
+      notifications.show({ color: "teal", message: "Document details saved." });
     },
     onError: handleError,
   });
@@ -132,6 +178,7 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
         PLACEMENT_OPTIONS.filter((option) => placements[option.value].checked).map((option) => ({
           placement: option.value,
           sort_order: placements[option.value].sortOrder,
+          acceptance_mode: placements[option.value].mode,
         })),
       ),
     onSuccess: () => {
@@ -155,12 +202,59 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
 
   return (
     <Stack gap="md">
-      <Title order={4}>{document.name}</Title>
-      {document.description && (
-        <Text size="sm" c="dimmed">
-          {document.description}
-        </Text>
-      )}
+      <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <Stack gap={4}>
+          <Title order={4}>{document.name}</Title>
+          <Text size="sm" c="dimmed">
+            {document.description || "No internal description. Add one so other admins know what this document is for."}
+          </Text>
+        </Stack>
+        <Button
+          variant="default"
+          size="xs"
+          leftSection={<IconPencil size={14} />}
+          onClick={() => {
+            setDetailsName(document.name);
+            setDetailsDescription(document.description ?? "");
+            setEditingDetails(true);
+          }}
+        >
+          Edit details
+        </Button>
+      </Group>
+
+      <Modal opened={editingDetails} onClose={() => setEditingDetails(false)} title="Edit document details">
+        <Stack>
+          <TextInput
+            label="Name"
+            description="Shown to the public wherever this document is linked (footer, signup, checkout). Past acceptances are not affected."
+            required
+            maxLength={150}
+            value={detailsName}
+            onChange={(event) => setDetailsName(event.currentTarget.value)}
+          />
+          <Textarea
+            label="Internal description"
+            description="Only admins see this. Say what the document is for, for example who accepts it."
+            autosize
+            minRows={2}
+            maxLength={1000}
+            value={detailsDescription}
+            onChange={(event) => setDetailsDescription(event.currentTarget.value)}
+          />
+          <Text size="xs" c="dimmed">
+            The web address (/legal/{document.slug}) does not change, so links that are already out there keep working.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setEditingDetails(false)}>
+              Cancel
+            </Button>
+            <Button loading={detailsMutation.isPending} disabled={!detailsName.trim()} onClick={() => detailsMutation.mutate()}>
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       {currentVersion && (
         <Card withBorder radius="lg" p="lg">
@@ -236,7 +330,7 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
                   Save draft
                 </Button>
               )}
-              <Button loading={publishMutation.isPending} onClick={() => publishMutation.mutate(draftVersion.id)}>
+              <Button onClick={() => setPublishing(true)}>
                 Publish
               </Button>
             </Group>
@@ -381,6 +475,19 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
                   }}
                 />
                 {placements[option.value].checked && (
+                  <Select
+                    label="Agreement"
+                    size="xs"
+                    w={220}
+                    allowDeselect={false}
+                    data={LINK_ONLY_PLACEMENTS.includes(option.value) ? MODE_OPTIONS : MODE_OPTIONS.filter((mode) => mode.value !== "INFORMATIONAL")}
+                    value={placements[option.value].mode}
+                    onChange={(value) =>
+                      value && setPlacements((prev) => ({ ...prev, [option.value]: { ...prev[option.value], mode: value as LegalAcceptanceMode } }))
+                    }
+                  />
+                )}
+                {placements[option.value].checked && (
                   <NumberInput
                     label="Order"
                     size="xs"
@@ -396,6 +503,11 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
                   />
                 )}
               </Group>
+              {placements[option.value].checked && (
+                <Text size="xs" c="dimmed">
+                  {option.value === "PUBLIC_FOOTER" || option.value === "PRIVACY_CENTER" ? "Listed as a link to read." : modeEffect(placements[option.value].mode, document.name)}
+                </Text>
+              )}
               {placements[option.value].checked && !hasPublishedVersion && (
                 <Alert color="yellow" py={4} px="sm">
                   This document is assigned to {option.label.toLowerCase()} but has no published version. It will not
@@ -415,8 +527,49 @@ export function LegalDocumentEditor({ slug }: { slug: string }) {
         </Stack>
       </Card>
 
+      <Modal opened={publishing} onClose={() => setPublishing(false)} title={`Publish ${document.name}`} size="md">
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Publishing makes this the version everyone sees. It can&apos;t be edited afterwards; you&apos;d publish a new version instead.
+          </Text>
+          <Switch
+            checked={material}
+            onChange={(event) => setMaterial(event.currentTarget.checked)}
+            label="This is a material change"
+            description="Turn on for changes that affect fees, payouts, liability or what organizers agree to. Every organization admin is emailed. Leave off for typos and formatting."
+          />
+          {material && (
+            <>
+              <TextInput type="date" label="Applies from" description="Leave empty to apply from today. Use at least 30 days ahead for changes to fees or payouts." value={effectiveDate} onChange={(event) => setEffectiveDate(event.currentTarget.value)} />
+              <Textarea label="What changed" description="Plain language, shown in the email and on the dashboard." maxLength={2000} autosize minRows={3} value={changeSummary} onChange={(event) => setChangeSummary(event.currentTarget.value)} />
+              <Alert color="yellow" py={6}>Organization admins are emailed as soon as you publish. You can&apos;t unsend it.</Alert>
+            </>
+          )}
+          <Group justify="flex-end">
+            <Button variant="subtle" color="gray" onClick={() => setPublishing(false)}>Cancel</Button>
+            <Button
+              loading={publishMutation.isPending}
+              disabled={material && changeSummary.trim().length === 0}
+              onClick={() =>
+                draftVersion &&
+                publishMutation.mutate({
+                  versionId: draftVersion.id,
+                  options: material
+                    ? { is_material: true, effective_at: effectiveDate ? new Date(`${effectiveDate}T00:00:00`).toISOString() : null, change_summary: changeSummary.trim() }
+                    : {},
+                })
+              }
+            >
+              Publish
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
       <Modal opened={viewingVersion !== null} onClose={() => setViewingVersion(null)} title={`Version ${viewingVersion?.version_number ?? ""}`} size="lg">
-        {viewingVersion && <Box dangerouslySetInnerHTML={{ __html: viewingVersion.rich_text_content ?? "" }} />}
+        {viewingVersion && (
+          <LegalDocumentView title={document.name} hideTitle versionNumber={viewingVersion.version_number} publishedAt={viewingVersion.published_at} html={viewingVersion.rich_text_content ?? ""} />
+        )}
       </Modal>
     </Stack>
   );

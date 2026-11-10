@@ -6,7 +6,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { slug, version } = await params;
   const result = await backendRequest(
     `/api/admin/platform-legal-documents/${encodeURIComponent(slug)}/versions/${encodeURIComponent(version)}/publish`,
-    { method: "PATCH" },
+    { method: "PATCH", body: await request.json().catch(() => ({})) },
   );
   return relayResponse(result);
 }
