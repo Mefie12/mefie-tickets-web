@@ -292,6 +292,8 @@ export type PublicEvent = {
   questions: PublicQuestion[];
   /** null when the organizer hasn't enabled a published version — no acceptance is required at checkout. */
   terms: PublicEventTerms | null;
+  /** The organizer's optional, always-unticked marketing checkbox; null when they don't offer one. */
+  marketing_opt_in?: { label: string } | null;
   /** Hidden sections are already filtered out server-side — see PublicContentSectionResource. */
   content_sections: PublicContentSection[];
   /** Effective buy-now-assign-later gate (per-event flag AND the platform feature flag). When true, checkout may offer "assign later" and send an attendee-less order. */

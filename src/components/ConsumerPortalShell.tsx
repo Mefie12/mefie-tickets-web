@@ -1,5 +1,6 @@
 "use client";
 
+import { LegalFooterLinks } from "@/components/LegalFooterLinks";
 import { AppShell, Avatar, Container, Group, Menu, Text, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconLogout, IconLogout2, IconShieldLock } from "@tabler/icons-react";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
@@ -82,6 +83,7 @@ export function ConsumerPortalShell({
       <AppShell.Main>
         <Container size="sm" px={0}>
           {children}
+          <LegalFooterLinks />
         </Container>
       </AppShell.Main>
     </AppShell>

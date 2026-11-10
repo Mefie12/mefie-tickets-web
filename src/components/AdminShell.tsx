@@ -17,6 +17,8 @@ import {
   IconWorld,
 } from "@tabler/icons-react";
 import type { NavOrganization, SessionUser } from "@/lib/session";
+import { LegalFooterLinks } from "@/components/LegalFooterLinks";
+import { OrganizationLegalPanel } from "@/components/OrganizationLegalPanel";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ConsoleNav, ConsoleNavItem, ConsoleNavSection, ConsoleShell } from "@/components/console";
@@ -140,7 +142,9 @@ export function AdminShell({
       headerEnd={<ThemeToggle />}
       nav={nav}
     >
+      <OrganizationLegalPanel banner />
       {children}
+      <LegalFooterLinks justify="flex-start" />
     </ConsoleShell>
   );
 }

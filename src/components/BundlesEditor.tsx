@@ -1,5 +1,6 @@
 "use client";
 
+import { useLegalGate } from "@/lib/useLegalGate";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -124,8 +125,10 @@ export function useBundleManager({
     queryClient.invalidateQueries({ queryKey: ["ticket-layout", eventId] });
   };
 
+  const legalGate = useLegalGate();
+
   const toggleMutation = useMutation({
-    mutationFn: (bundle: Bundle) => updateBundle(eventId, bundle.id, { is_enabled: !bundle.is_enabled }),
+    mutationFn: (bundle: Bundle) => legalGate.guard(() => updateBundle(eventId, bundle.id, { is_enabled: !bundle.is_enabled })),
     onSuccess: refresh,
     onError: (error: Error) => {
       if (redirectOnAuthError(error, router)) return;
@@ -227,7 +230,17 @@ export function useBundleManager({
       />
     ) : null;
 
-  return { bundles, renderCard, openNew: () => setModalBundle("new"), modal };
+  return {
+    bundles,
+    renderCard,
+    openNew: () => setModalBundle("new"),
+    modal: (
+      <>
+        {legalGate.dialog}
+        {modal}
+      </>
+    ),
+  };
 }
 
 function BundleFormModal({
@@ -324,7 +337,7 @@ function BundleFormModal({
               components: values.components.map((c) => ({ ...parseKey(c.key), quantity: c.quantity === "" ? 1 : c.quantity })),
             }),
       };
-      return isEdit ? updateBundle(eventId, bundle.id, input) : createBundle(eventId, input);
+      return legalGate.guard(() => (isEdit ? updateBundle(eventId, bundle.id, input) : createBundle(eventId, input)));
     },
     onSuccess: (result) => {
       result.warnings.forEach((message) => notifications.show({ color: "yellow", title: "Check this bundle", message, autoClose: 10000 }));
@@ -355,8 +368,11 @@ function BundleFormModal({
     : undefined;
 
   const guard = useGuardedClose(form, onClose, "the bundle form");
+  const legalGate = useLegalGate();
 
   return (
+    <>
+    {legalGate.dialog}
     <Modal
       opened
       onClose={guard.requestClose}
@@ -492,5 +508,6 @@ function BundleFormModal({
         </Stack>
       </form>
     </Modal>
+    </>
   );
 }

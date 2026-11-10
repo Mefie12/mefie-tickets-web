@@ -49,6 +49,8 @@ export type CreateOrderInput = {
   // Buyer-controlled: whether non-buyer attendees get individually
   // emailed their assigned ticket. Never gates the buyer's own ticket.
   notify_attendees?: boolean;
+  /** Only sent when the buyer ticked the organizer's marketing checkbox. */
+  marketing_opt_in?: boolean;
   // Only required when event.terms is present and the cart triggers it
   // (see OrderService::resolveRequiredTermsVersionId on the backend).
   // terms_version_id must be the version_id the buyer was actually shown

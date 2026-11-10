@@ -16,7 +16,7 @@ import { isStaleOfferCode, offerErrorMessage } from "@/lib/offerErrors";
 import { StaleOfferPanel } from "@/components/StaleOfferPanel";
 import { OfferVerifyModal } from "@/components/OfferVerifyModal";
 import { EditableQuestionField } from "@/components/EditableQuestionField";
-import { LegalDocumentLinksLine } from "@/components/LegalDocumentLinks";
+import { CheckoutAgreementNotice, LegalDocumentLinksLine } from "@/components/LegalDocumentLinks";
 import { OrderCostBreakdown } from "@/components/OrderCostBreakdown";
 import { PhoneInput } from "@/components/PhoneInput";
 import { TermsAndConditionsLink } from "@/components/TermsAndConditionsLink";
@@ -261,10 +261,10 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
       {draft.assignmentMode === "later" && <Text size="sm" c="dimmed">All {draft.slots.length} {draft.slots.length === 1 ? "ticket" : "tickets"} will be held on your account. After checkout, use the link we email you to add attendee details.</Text>}
     </Stack>
 
-    <Stack className={classes.legalDisclosures} gap={8}>
-      {termsRequired && event.terms && <Checkbox classNames={{ root: classes.terms, body: classes.termsBody, input: classes.termsInput, label: classes.termsLabel }} size="md" radius="xs" color="#93C01F" label={<>I have read and accepted this organizer&apos;s <TermsAndConditionsLink document={event.terms} pdfUrl={`/api/public/events/${event.id}/terms/pdf`} label="Terms & Conditions" className={classes.termsLink} /></>} checked={draft.termsAccepted} onChange={(e) => changeDraft({ termsAccepted: e.currentTarget.checked })} />}
-      <LegalDocumentLinksLine placement="ticket-checkout" className={classes.platformLegalNotice} linkClassName={classes.termsLink} />
-    </Stack>
+    {((termsRequired && event.terms) || event.marketing_opt_in) && <Stack className={classes.agreements}>
+      {termsRequired && event.terms && <Checkbox label={<>I have read and accepted this organizer&apos;s <TermsAndConditionsLink document={event.terms} pdfUrl={`/api/public/events/${event.id}/terms/pdf`} label="Terms & Conditions" /></>} checked={draft.termsAccepted} onChange={(e) => changeDraft({ termsAccepted: e.currentTarget.checked })} />}
+      {event.marketing_opt_in && <Checkbox label={event.marketing_opt_in.label} checked={draft.marketingOptIn ?? false} onChange={(e) => changeDraft({ marketingOptIn: e.currentTarget.checked })} />}
+    </Stack>}
     {termsVersionChanged && <Alert color="orange" title="Terms & Conditions updated"><Stack gap="xs"><Text size="sm">The organizer published new Terms &amp; Conditions. Reload to review them before continuing.</Text><Button size="xs" style={{ alignSelf: "flex-start" }} onClick={() => window.location.reload()}>Reload page</Button></Stack></Alert>}
     {(totalDue > 0) && <Card withBorder radius="md" p="md" aria-busy={quoteLoading} style={{ opacity: quoteLoading ? 0.7 : 1, transition: "opacity 120ms" }}><OrderCostBreakdown amounts={{ ...amounts, discountLabel: quote?.offer?.name ?? null }} /></Card>}
     {offerError && <Alert color="red" role="alert" withCloseButton onClose={() => setOfferError(null)} title="Offer not applied"><Group justify="space-between" gap="xs"><Text size="sm">{offerError}</Text>{(offer?.promo_code || offer?.offer_token) && <Button size="compact-xs" variant="default" onClick={() => { setOfferError(null); onRemoveOffer(); }}>Remove code</Button>}</Group></Alert>}
@@ -272,6 +272,10 @@ export function CheckoutDetailsForm({ event, cartItems, totalDue, draft, onDraft
     {needsVerification && <Alert color="blue" role="status" title="Verify your email"><Group justify="space-between" gap="xs"><Text size="sm">This offer is limited per customer. Verify your email to use it.</Text><Group gap="xs"><Button size="compact-xs" onClick={() => setVerifyOpen(true)}>Verify email</Button><Button size="compact-xs" variant="default" onClick={onRemoveOffer}>Remove code</Button></Group></Group></Alert>}
     {stale && <StaleOfferPanel code={stale.code} currency={event.currency_code} previousTotalMinor={stale.previousTotalMinor} newTotalMinor={quote?.total_minor ?? null} busy={mutation.isPending || quoteLoading} onAccept={() => void acceptNewPrice()} onBack={() => { window.location.assign(backUrl); }} />}
     <OfferVerifyModal opened={verifyOpen} onClose={() => setVerifyOpen(false)} onVerified={onVerified} returnPath={typeof window === "undefined" ? backUrl : window.location.pathname} defaultEmail={draft.email} />
+    <Stack className={classes.legalNotes}>
+      <LegalDocumentLinksLine placement="ticket-checkout" mode="INFORMATIONAL" className={classes.legalNote} />
+      <CheckoutAgreementNotice organizerName={event.organization?.name ?? null} className={classes.legalNote} />
+    </Stack>
     <Group justify="space-between" wrap="wrap-reverse" gap="sm"><Button variant="subtle" color="gray" onClick={onEditTickets} disabled={mutation.isPending}>Edit tickets</Button><Button size="md" onClick={submit} loading={mutation.isPending} disabled={termsVersionChanged || !!needsVerification || !!stale} style={{ flex: "1 1 auto" }}>{payableMinor === 0 ? (totalDue === 0 ? "Register for free" : "Complete registration") : "Continue to payment"}</Button></Group>
   </Stack>;
 }

@@ -1,11 +1,20 @@
 import { ApiError } from "@/lib/authApi";
 
-export type LegalDocumentPlacementSlug = "account-registration" | "ticket-checkout" | "privacy-center";
+export type LegalDocumentPlacementSlug =
+  | "account-registration"
+  | "ticket-checkout"
+  | "privacy-center"
+  | "organizer-onboarding"
+  | "payout-setup"
+  | "public-footer";
 
 export type PublicLegalDocument = {
   version_id: number;
+  version_number: number;
   name: string;
   slug: string;
+  /** Only present on placement listings. */
+  acceptance_mode?: "REQUIRED_CHECKBOX" | "CONTINUE_IMPLIES" | "INFORMATIONAL";
   content_type: "RICH_TEXT" | "PDF";
   rich_text_content: string | null;
   published_at: string | null;

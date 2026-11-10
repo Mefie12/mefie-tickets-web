@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@mantine/form";
-import { Anchor, Button, Checkbox, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Button, PasswordInput, Stack, Text, TextInput } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { AuthLayout } from "@/components/AuthLayout";
-import { LegalDocumentLinks } from "@/components/LegalDocumentLinks";
+import { LegalAgreement, useLegalDocuments } from "@/components/LegalDocumentLinks";
 import { VerifyEmailPanel } from "@/components/VerifyEmailPanel";
 import { ApiError, type CurrentUser, registerOrganization } from "@/lib/authApi";
+import type { LegalDocumentPlacementSlug } from "@/lib/legalDocumentsApi";
 
 type RegisterValues = {
   organization_name: string;
@@ -21,10 +22,14 @@ type RegisterValues = {
   accepted_terms: boolean;
 };
 
+const REGISTRATION_PLACEMENTS: LegalDocumentPlacementSlug[] = ["account-registration", "organizer-onboarding"];
+
 export default function RegisterPage() {
   const [step, setStep] = useState<"register" | "verify">("register");
   const [codeExpiresAt, setCodeExpiresAt] = useState<string | null>(null);
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const legal = useLegalDocuments(REGISTRATION_PLACEMENTS);
 
   const form = useForm<RegisterValues>({
     initialValues: {
@@ -43,7 +48,7 @@ export default function RegisterPage() {
       email: (v) => (/^\S+@\S+\.\S+$/.test(v) ? null : "Enter a valid email"),
       password: (v) => (v.length < 8 ? "Must be at least 8 characters" : null),
       password_confirmation: (v, values) => (v !== values.password ? "Passwords do not match" : null),
-      accepted_terms: (v) => (v ? null : "You must accept the Terms of Use and Privacy Policy to continue"),
+      accepted_terms: (v) => (legal.required.length > 0 && !v ? "You must accept the documents above to continue" : null),
     },
   });
 
@@ -54,7 +59,12 @@ export default function RegisterPage() {
       setStep("verify");
     },
     onError: (error: Error) => {
-      if (error instanceof ApiError && error.errors) {
+      if (error instanceof ApiError && error.code === "DOCUMENTS_CHANGED") {
+        // The documents changed while the form was open: show the new ones and make them agree again.
+        form.setFieldValue("accepted_terms", false);
+        void queryClient.invalidateQueries({ queryKey: ["legal-documents"] });
+        notifications.show({ color: "orange", message: "Our legal documents were just updated. Please review them and accept again." });
+      } else if (error instanceof ApiError && error.errors) {
         form.setErrors(
           Object.fromEntries(Object.entries(error.errors).map(([field, messages]) => [field, messages[0]])),
         );
@@ -78,7 +88,7 @@ export default function RegisterPage() {
       title="Create an organization"
       subtitle="Set up your Organization to start selling tickets."
     >
-      <form onSubmit={form.onSubmit((values) => registerMutation.mutate(values))}>
+      <form onSubmit={form.onSubmit((values) => registerMutation.mutate({ ...values, document_versions: legal.versionIds }))}>
         <Stack>
           <TextInput
             label="Organization name"
@@ -96,14 +106,12 @@ export default function RegisterPage() {
             {...form.getInputProps("password")}
           />
           <PasswordInput label="Confirm password" withAsterisk {...form.getInputProps("password_confirmation")} />
-          <Checkbox
-            {...form.getInputProps("accepted_terms", { type: "checkbox" })}
-            label={
-              <>
-                I accept Mefie Tickets&apos;{" "}
-                <LegalDocumentLinks placement="account-registration" fallback="Terms of Use and Privacy Policy" />.
-              </>
-            }
+          <LegalAgreement
+            documents={legal}
+            action="creating an organization"
+            checked={form.values.accepted_terms}
+            onChange={(checked) => form.setFieldValue("accepted_terms", checked)}
+            error={form.errors.accepted_terms}
           />
           <Button type="submit" fullWidth loading={registerMutation.isPending} mt="sm">
             Create organization

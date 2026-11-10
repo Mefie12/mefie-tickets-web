@@ -4,15 +4,13 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Alert, Anchor, Button, Stack, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
-import { useQuery } from "@tanstack/react-query";
 import { AuthLayout } from "@/components/AuthLayout";
 import { PhoneInput } from "@/components/PhoneInput";
-import { LegalDocumentLinks } from "@/components/LegalDocumentLinks";
-import { getLegalDocumentsForPlacement } from "@/lib/legalDocumentsApi";
+import { LegalAgreement, useLegalDocuments } from "@/components/LegalDocumentLinks";
 import { safeNext } from "@/lib/safeNext";
 import { isValidEmail } from "@/lib/emailAddress";
 import { useEmailFieldError } from "@/lib/useEmailFieldError";
-import { buildApiError } from "@/lib/authApi";
+import { ApiError, buildApiError } from "@/lib/authApi";
 import { formatMMSS, resendLabel } from "@/lib/otpTiming";
 import { otpErrorMessage, useOtpTimers } from "@/lib/useOtpTimers";
 import { OtpBlockedNotice, OtpExpiry, OtpPinInput } from "@/components/OtpCodeStatus";
@@ -29,7 +27,8 @@ function AccountForm({ signup }: { signup: boolean }) {
   const [code, setCode] = useState(""); const [masked, setMasked] = useState("");
   const form = useForm({ initialValues: { email: "", first_name: "", last_name: "", phone: "" } });
   const timers = useOtpTimers();
-  const legal = useQuery({ queryKey: ["legal-documents", "placement", "account-registration"], queryFn: () => getLegalDocumentsForPlacement("account-registration") });
+  const [agreed, setAgreed] = useState(false);
+  const legal = useLegalDocuments("account-registration");
   // The email box exists only on the first step of a normal sign-in or sign-up (a ticket-proof link has none),
   // so later steps (code, "send another code", complete your account) are never blocked by it.
   const emailNeeded = step === "details" && !proof;
@@ -37,7 +36,7 @@ function AccountForm({ signup }: { signup: boolean }) {
   const emailError = useEmailFieldError(form.values.email, emailOk);
   const emailProps = form.getInputProps("email");
   const needsDetails = step === "complete" || (signup && step === "details");
-  const documents = (legal.data ?? []).map(document => document.version_id);
+  const documents = legal.versionIds;
   async function submit(action: "request" | "verify" | "complete") {
     if (action !== "verify" && !emailOk) return;
     setBusy(true); setError("");
@@ -51,6 +50,8 @@ function AccountForm({ signup }: { signup: boolean }) {
       setMasked(data.masked_email); setCode(""); setStep("code"); timers.noteSent(data);
       if (proof) router.replace("/login");
     } catch (e) {
+      // The documents changed while the form was open: show the new ones and ask again.
+      if (e instanceof ApiError && e.code === "DOCUMENTS_CHANGED") { setAgreed(false); void legal.refetch(); }
       // A rate-limit rejection shows as a live countdown (below), not as a one-off error message.
       if (!(action === "request" && timers.noteRateLimited(e))) setError(otpErrorMessage(e));
     }
@@ -67,10 +68,10 @@ function AccountForm({ signup }: { signup: boolean }) {
           {step === "details" && proof && <Text size="sm">We’ll email a code to this ticket’s designated recipient.</Text>}
           {needsDetails && <><TextInput label="First name" required autoComplete="given-name" {...form.getInputProps("first_name")}/><TextInput label="Last name" required autoComplete="family-name" {...form.getInputProps("last_name")}/><PhoneInput label="Phone" required {...form.getInputProps("phone")}/>
             <Text size="xs" c="dimmed">If you add a phone number to your account, we may text you about product updates and events — reply STOP at any time to opt out.</Text>
-            <Text size="xs" c="dimmed">By creating an account you agree to our <LegalDocumentLinks placement="account-registration" fallback="Terms of Use and Privacy Policy"/>.</Text>
+            <LegalAgreement documents={legal} action="creating an account" checked={agreed} onChange={setAgreed}/>
             {legal.isError && <Alert color="red">Unable to load account documents. Please reload to try again.</Alert>}
           </>}
-          <Button type="submit" loading={busy} disabled={!emailOk || timers.blocked || (needsDetails && (legal.isPending || legal.isError))}>{timers.blocked && step === "details" ? `Try again in ${formatMMSS(timers.resendSeconds)}` : step === "complete" ? "Create account" : "Continue with email"}</Button>
+          <Button type="submit" loading={busy} disabled={!emailOk || timers.blocked || (needsDetails && (legal.isPending || legal.isError || (legal.required.length > 0 && !agreed)))}>{timers.blocked && step === "details" ? `Try again in ${formatMMSS(timers.resendSeconds)}` : step === "complete" ? "Create account" : "Continue with email"}</Button>
         </>}
         <Text size="sm" ta="center">{signup ? "Already have tickets? " : "New to Mefie? "}<Anchor component={Link} href={signup ? "/login" : "/register"}>{signup ? "Log in" : "Sign up"}</Anchor></Text>
       </Stack>

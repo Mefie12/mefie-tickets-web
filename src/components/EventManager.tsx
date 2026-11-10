@@ -1,5 +1,6 @@
 "use client";
 
+import { useLegalGate } from "@/lib/useLegalGate";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -62,6 +63,7 @@ import { QuestionsEditor } from "@/components/QuestionsEditor";
 import { ContentSectionsEditor } from "@/components/ContentSectionsEditor";
 import { EventMediaEditor } from "@/components/EventMediaEditor";
 import { EventTermsEditor } from "@/components/EventTermsEditor";
+import { MarketingOptInCard } from "@/components/MarketingOptInCard";
 import { ComplimentarySettings } from "@/components/ComplimentarySettings";
 import { DeferredAssignmentCard } from "@/components/DeferredAssignmentCard";
 import { ScrollableTabsBar } from "@/components/ScrollableTabsBar";
@@ -241,8 +243,10 @@ export function EventManager({
     setStatusErrorCode(error instanceof ApiError ? (error.code ?? null) : null);
   }
 
+  const legalGate = useLegalGate();
+
   const statusMutation = useMutation({
-    mutationFn: (status: EventStatus) => updateEventStatus(event.id, status),
+    mutationFn: (status: EventStatus) => legalGate.guard(() => updateEventStatus(event.id, status)),
     onSuccess: handleStatusChangeSuccess,
     onError: handleStatusChangeError,
   });
@@ -257,7 +261,7 @@ export function EventManager({
       if (currency) {
         await updateEvent(event.id, { currency_code: currency });
       }
-      return updateEventStatus(event.id, "LIVE");
+      return legalGate.guard(() => updateEventStatus(event.id, "LIVE"));
     },
     onSuccess: handleStatusChangeSuccess,
     onError: handleStatusChangeError,
@@ -319,6 +323,7 @@ export function EventManager({
 
   return (
     <Stack gap="xl">
+      {legalGate.dialog}
       <Stack gap="xs">
         {returnTo && (
           <Anchor component={Link} href={returnTo} size="sm" style={{ width: "fit-content" }}>
@@ -431,7 +436,15 @@ export function EventManager({
           <ContentSectionsEditor eventId={event.id} disabled={archived} />
         </Tabs.Panel>
         <Tabs.Panel value="terms" pt="lg">
-          <EventTermsEditor eventId={event.id} disabled={archived} />
+          <Stack gap="lg">
+            <EventTermsEditor eventId={event.id} disabled={archived} />
+            <MarketingOptInCard
+              eventId={event.id}
+              initialEnabled={event.marketing_opt_in_enabled ?? false}
+              initialLabel={event.marketing_opt_in_label ?? null}
+              disabled={archived}
+            />
+          </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="advanced" pt="lg">
           <Stack gap="lg">
