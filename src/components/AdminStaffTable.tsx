@@ -36,6 +36,11 @@ const ROLE_LABEL: Record<PlatformRole, string> = {
   PLATFORM_SUPPORT: "Support",
 };
 
+// Mantine's Badge clips its text with an ellipsis (overflow: hidden, on the root and on the
+// inner label); in an auto-layout table the narrow Status column squeezes it to "PEN…".
+// Let it size to its text instead.
+const BADGE_NO_CLIP = { root: { overflow: "visible" }, label: { overflow: "visible" } } as const;
+
 export function AdminStaffTable({ initialRows }: { initialRows: AdminUserRow[] }) {
   const [rows, setRows] = useState(initialRows);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -198,11 +203,13 @@ export function AdminStaffTable({ initialRows }: { initialRows: AdminUserRow[] }
                         onChange={(value) => value && roleMutation.mutate({ membershipId: row.id, role: value as PlatformRole })}
                       />
                     ) : (
-                      <Badge variant="light">{ROLE_LABEL[row.role]}</Badge>
+                      <Badge variant="light" styles={BADGE_NO_CLIP}>
+                        {ROLE_LABEL[row.role]}
+                      </Badge>
                     )}
                   </Table.Td>
-                  <Table.Td>
-                    <Badge color={STATUS_COLOR[row.status] ?? "gray"} variant="light">
+                  <Table.Td style={{ whiteSpace: "nowrap" }}>
+                    <Badge color={STATUS_COLOR[row.status] ?? "gray"} variant="light" styles={BADGE_NO_CLIP}>
                       {row.status}
                     </Badge>
                   </Table.Td>
