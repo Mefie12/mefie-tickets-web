@@ -1,5 +1,6 @@
 "use client";
 
+import { useGuardedClose } from "@/lib/useGuardedClose";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -373,8 +374,10 @@ function AddSectionModal({
     },
   });
 
+  const guard = useGuardedClose(form, onClose);
+
   return (
-    <Modal opened onClose={onClose} title={type === "LINEUP" ? "Add a lineup" : "Add a custom section"}>
+    <Modal opened onClose={guard.requestClose} title={type === "LINEUP" ? "Add a lineup" : "Add a custom section"}>
       <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
         <Stack>
           <TextInput required label="Section title" {...form.getInputProps("title")} />
@@ -413,8 +416,10 @@ function EditSectionModal({ eventId, section, onClose }: { eventId: number; sect
     },
   });
 
+  const guard = useGuardedClose(form, onClose);
+
   return (
-    <Modal opened onClose={onClose} title="Edit section">
+    <Modal opened onClose={guard.requestClose} title="Edit section">
       <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
         <Stack>
           <TextInput required label="Section title" {...form.getInputProps("title")} />
@@ -676,8 +681,10 @@ function LineupItemFormModal({
     },
   });
 
+  const guard = useGuardedClose(form, onClose);
+
   return (
-    <Modal opened onClose={onClose} title={`Edit ${item.talent_profile_version?.display_name ?? "appearance"}`}>
+    <Modal opened onClose={guard.requestClose} title={`Edit ${item.talent_profile_version?.display_name ?? "appearance"}`}>
       <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
         <Stack>
           <TextInput
@@ -1246,8 +1253,10 @@ function CustomCardFormModal({
     },
   });
 
+  const guard = useGuardedClose(form, onClose);
+
   return (
-    <Modal opened onClose={onClose} title={isEdit ? "Edit card" : "Add card"}>
+    <Modal opened onClose={guard.requestClose} title={isEdit ? "Edit card" : "Add card"}>
       <form onSubmit={form.onSubmit((values) => mutation.mutate(values))}>
         <Stack>
           <TextInput required label="Title" {...form.getInputProps("title")} />

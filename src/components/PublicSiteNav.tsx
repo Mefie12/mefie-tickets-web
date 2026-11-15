@@ -16,8 +16,6 @@ import {
   Text,
 } from "@mantine/core";
 import { IconBuildingStore, IconChevronDown, IconInfoCircle, IconLogin } from "@tabler/icons-react";
-import { logout } from "@/lib/authApi";
-import { portalLogout, portalLogoutAll } from "@/lib/portalApi";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MefieLogo } from "@/components/MefieLogo";
 import { DISCOVER_HOME, isDiscoverHome, isPlainLeftClick } from "@/lib/discoverHome";
@@ -29,6 +27,7 @@ import {
   type NavUser,
   type SignOutKind,
 } from "@/components/PublicAccountMenu";
+import { useSignOut } from "@/lib/useSignOut";
 
 const organizerLinks = [
   { label: "Create Organization Account", href: "/organizers/register", icon: <IconBuildingStore size={16} /> },
@@ -41,12 +40,10 @@ export function PublicSiteNav({ user, consumer }: { user: NavUser; consumer: Nav
   const router = useRouter();
   const closeDrawer = () => setMenuOpened(false);
 
+  const { signOut: confirmSignOut } = useSignOut();
   async function signOut(kind: SignOutKind) {
-    if (kind === "organizer") await logout();
-    else if (kind === "consumer") await portalLogout();
-    else await portalLogoutAll();
-    setMenuOpened(false);
-    router.refresh();
+    // Stays on the public page: cache cleared and the page refreshed only once the sign-out is confirmed.
+    await confirmSignOut(kind, { redirectTo: null, onDone: () => { setMenuOpened(false); router.refresh(); } });
   }
 
   const authed = Boolean(user || consumer);

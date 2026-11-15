@@ -13,6 +13,7 @@ import { loadCart, saveCart, clearCart, type StoredCartItem } from "@/lib/cartSt
 import { clearOffer, loadOffer, type StoredOffer } from "@/lib/offerSession";
 import { useOfferQuote } from "@/lib/useOfferQuote";
 import { summaryLinesFromCart } from "@/lib/orderSummaryLines";
+import { bundleSlotLines } from "@/lib/bundleCart";
 import { CheckoutDetailsForm } from "@/components/CheckoutDetailsForm";
 import { CheckoutTicketEditor } from "@/components/CheckoutTicketEditor";
 import { CheckoutPaymentStep } from "@/components/CheckoutPaymentStep";
@@ -139,8 +140,13 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
       .catch(() => sessionStorage.removeItem(checkoutStorageKey(event.id)));
   }, [event.id]);
 
+  // Raw cart lines (a bundle stays one line) — what is sent and summarised.
   const toCartLines = (items: StoredCartItem[]): CheckoutCartLine[] =>
     items.map((item) => {
+      if (typeof item.bundle_id === "number") {
+        const bundle = (event.bundles ?? []).find((b) => b.id === item.bundle_id);
+        return { product_id: 0, ticket_option_id: null, bundle_id: item.bundle_id, product_title: bundle?.title ?? "Bundle", quantity: item.quantity };
+      }
       const product = event.products.find((p) => p.id === item.product_id);
       const option = item.ticket_option_id ? product?.options?.find((o) => o.id === item.ticket_option_id) : null;
       return {
@@ -149,6 +155,13 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
         product_title: option ? `${product?.title ?? ""} — ${option.name}` : (product?.title ?? ""),
         quantity: item.quantity,
       };
+    });
+
+  // Attendee slots are per ticket: a bundle line expands into one line per ticket type inside it.
+  const toSlotLines = (lines: CheckoutCartLine[]): CheckoutCartLine[] =>
+    lines.flatMap((line): CheckoutCartLine[] => {
+      if (typeof line.bundle_id !== "number") return [line];
+      return bundleSlotLines((event.bundles ?? []).find((b) => b.id === line.bundle_id), line.bundle_id, line.quantity);
     });
 
   const cartItems = useMemo(() => {
@@ -164,7 +177,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
     const inlineOffered = deferred && event.acceptance_policy === "PURCHASER_GROUP";
     // Restore what the buyer had typed (this tab, last few hours, never consent),
     // fitted to the cart they are buying now; otherwise start a fresh draft.
-    const lines = toCartLines(cart);
+    const lines = toSlotLines(toCartLines(cart));
     const restored = loadCheckoutDraft(event.id);
     const next = restored
       ? reconcileCheckoutDraft(restored, lines, [], deferred, inlineOffered)
@@ -184,20 +197,24 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
 
   const total = useMemo(() => {
     return cartItems.reduce((sum, item) => {
+      if (typeof item.bundle_id === "number") {
+        const bundle = (event.bundles ?? []).find((b) => b.id === item.bundle_id);
+        return sum + Number(bundle?.price ?? 0) * item.quantity;
+      }
       const product = event.products.find((p) => p.id === item.product_id);
       const option = item.ticket_option_id ? product?.options?.find((o) => o.id === item.ticket_option_id) : null;
       const price = option ? option.price : (product?.current_price ?? 0);
       return sum + Number(price) * item.quantity;
     }, 0);
-  }, [cartItems, event.products]);
+  }, [cartItems, event.products, event.bundles]);
 
-  const summaryLines = useMemo(() => summaryLinesFromCart(cartItems, event.products, event.currency_code), [cartItems, event.products, event.currency_code]);
+  const summaryLines = useMemo(() => summaryLinesFromCart(cartItems, event.products, event.currency_code, event.bundles ?? []), [cartItems, event.products, event.currency_code, event.bundles]);
 
   // Advisory server quote for the cart + the offer carried from the event page.
   // Order creation recalculates under lock; this only drives what is displayed
   // and the discount the order asserts it was shown.
   const cartForQuote = useMemo(
-    () => (cart === "loading" || cart === null ? [] : cart.map(({ product_id, ticket_option_id, quantity }) => ({ product_id, ticket_option_id, quantity }))),
+    () => (cart === "loading" || cart === null ? [] : cart.map(({ product_id, ticket_option_id, quantity, bundle_id }) => (typeof bundle_id === "number" ? { product_id, ticket_option_id, quantity, bundle_id } : { product_id, ticket_option_id, quantity }))),
     [cart],
   );
   const offerInPlay = offer !== null && (!!offer.promo_code || !!offer.offer_token);
@@ -414,7 +431,7 @@ export function CheckoutPage({ event, backUrl }: { event: PublicEvent; backUrl: 
           slots={draft.slots}
           onClose={() => setTicketEditorOpen(false)}
           onSave={(nextCart, removedAuthoredIds) => {
-            const lines = toCartLines(nextCart);
+            const lines = toSlotLines(toCartLines(nextCart));
             const deferred = event.deferred_assignment_enabled;
             const inlineOffered = deferred && event.acceptance_policy === "PURCHASER_GROUP";
             setDraft((current) => current ? reconcileCheckoutDraft(current, lines, removedAuthoredIds, deferred, inlineOffered) : current);

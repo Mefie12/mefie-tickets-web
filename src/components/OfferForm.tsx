@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Alert, Badge, Box, Button, Card, Checkbox, Grid, GridCol, Group, NumberInput, SegmentedControl, SimpleGrid, Stack, Text, TextInput, Textarea, Title } from "@mantine/core";
@@ -17,6 +17,8 @@ import { currencySymbol, formatMinorAmount, currencyExponent, moneyInputProps, t
 import { offerTimezoneLabel } from "@/lib/offerTimezone";
 import { normalizePromoCode, promoCodeFormatError } from "@/lib/offerCodeFormat";
 import { endError, startError } from "@/lib/offerSchedule";
+import { SaveBar } from "@/components/forms/SaveBar";
+import { useSaveBarValues } from "@/lib/useSaveBar";
 
 export type Template = "percent" | "fixed" | "automatic" | "group";
 
@@ -45,19 +47,25 @@ type FormState = {
 const scopeKey = {
   product: (productId: number) => `p:${productId}`,
   option: (productId: number, optionId: number) => `o:${productId}:${optionId}`,
+  bundle: (bundleId: number) => `b:${bundleId}`,
 };
 
 function rowsToScopeState(rows: OfferScopeRow[] | undefined): Record<string, boolean> {
   const state: Record<string, boolean> = {};
   for (const row of rows ?? []) {
-    state[row.ticket_option_id === null ? scopeKey.product(row.product_id) : scopeKey.option(row.product_id, row.ticket_option_id)] = true;
+    if (row.bundle_id != null) state[scopeKey.bundle(row.bundle_id)] = true;
+    else if (row.product_id !== null) state[row.ticket_option_id === null ? scopeKey.product(row.product_id) : scopeKey.option(row.product_id, row.ticket_option_id)] = true;
   }
   return state;
 }
 
-function scopeStateToRows(scope: Record<string, boolean>, inventory: OfferTicketType[]): OfferScopeRow[] {
+function scopeStateToRows(scope: Record<string, boolean>, inventory: OfferTicketType[], bundlesAllowed = true): OfferScopeRow[] {
   const rows: OfferScopeRow[] = [];
   for (const type of inventory) {
+    if (type.bundleId !== undefined) {
+      if (bundlesAllowed && scope[scopeKey.bundle(type.bundleId)]) rows.push({ product_id: null, ticket_option_id: null, bundle_id: type.bundleId });
+      continue;
+    }
     if (scope[scopeKey.product(type.productId)]) {
       rows.push({ product_id: type.productId, ticket_option_id: null });
       continue;
@@ -165,6 +173,8 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
   const router = useRouter();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(() => initialState({ initial, prefill, template, timezone, eventStart }));
+  // What the in-flight save actually sent, so edits made while it runs are not taken as saved.
+  const sentRef = useRef<FormState | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   // Client-side format feedback for the promo code, shown when the field is left (blank = auto-generate).
@@ -175,7 +185,13 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
   const [initialStart] = useState(() => (initial ? initialState({ initial, timezone, eventStart }).starts : undefined));
   const patch = (changes: Partial<FormState>) => setForm((f) => ({ ...f, ...changes }));
 
-  const scopeRows = useMemo(() => scopeStateToRows(form.scope, inventory), [form.scope, inventory]);
+  // Bundles take percentage offers only; an offer targets tickets OR bundles.
+  const bundlesAllowed = form.discountType === "PERCENTAGE";
+  const scopeRows = useMemo(() => scopeStateToRows(form.scope, inventory, bundlesAllowed), [form.scope, inventory, bundlesAllowed]);
+  const ticketInventory = inventory.filter((t) => t.bundleId === undefined);
+  const bundleInventory = inventory.filter((t) => t.bundleId !== undefined);
+  const bundleScoped = scopeRows.some((row) => row.bundle_id != null);
+  const ticketScoped = scopeRows.some((row) => row.bundle_id == null);
   const isBundle = form.discountType === "GROUP_BUNDLE";
   const discountValue = isBundle
     ? 0
@@ -240,6 +256,7 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
       return initial ? updateOffer(eventId, initial.id, input) : createOffer(eventId, input);
     },
     onSuccess: ({ offer }) => {
+      if (sentRef.current) bar.markSaved(sentRef.current);
       setErrors({});
       setFormError(null);
       void queryClient.invalidateQueries({ queryKey: ["offers", eventId] });
@@ -253,6 +270,7 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
       router.refresh();
     },
     onError: (error: Error) => {
+      bar.markFailed(error instanceof ApiError && Object.keys(error.errors ?? {}).length > 0 ? "check the highlighted fields" : error.message);
       if (error instanceof ApiError) {
         const fields: Record<string, string> = {};
         Object.entries(error.errors ?? {}).forEach(([key, value]) => { fields[key] = value[0]; });
@@ -265,18 +283,34 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
   });
 
   const canSubmit = form.name.trim() !== "" && hasDeal && form.starts !== "" && form.ends !== "";
+  const bar = useSaveBarValues({
+    id: initial ? `offer-${initial.id}` : "offer-new",
+    label: initial ? "Offer" : "New offer",
+    values: form,
+    setValues: setForm,
+    saving: mutation.isPending,
+    hasErrors: Object.keys(errors).length > 0 || formError !== null || codeFormatError !== null || scheduleErrors.start !== null || scheduleErrors.end !== null,
+  });
 
   return (
     <Grid gutter="xl" align="flex-start">
       <GridCol span={{ base: 12, md: 7 }}>
-        <form onSubmit={(e) => {
+        <form id={bar.formId} onSubmit={(e) => {
           e.preventDefault();
+          // Save stays enabled; say what is missing instead of silently doing nothing.
+          if (inventory.length === 0 || !canSubmit) {
+            const missing = [form.name.trim() === "", !hasDeal, form.starts === "", form.ends === ""].filter(Boolean).length;
+            setFormError(inventory.length === 0 ? "This event has no tickets to discount yet." : "Add a name, a discount, and a start and end before saving.");
+            bar.flagInvalid(Math.max(missing, 1));
+            return;
+          }
           // Same check on submit, so a code never reaches the server malformed.
           const error = form.activation === "CODE" ? promoCodeFormatError(normalizePromoCode(form.code)) : null;
           const schedule = { start: startError(form.starts, timezone, { unchangedFrom: initialStart }), end: endError(form.starts, form.ends, timezone) };
           setScheduleErrors(schedule);
           if (error) setCodeFormatError(error);
           if (error || schedule.start || schedule.end) return;
+          sentRef.current = form;
           mutation.mutate();
         }}>
           <Stack gap="xl">
@@ -383,9 +417,9 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
             </Section>
 
             <Section title="3. Which tickets">
-              {inventory.length === 0 && <Alert color="blue" icon={<IconInfoCircle size={18} />}>Create a ticket type first, then come back to add an offer.</Alert>}
-              <Stack gap="sm">
-                {inventory.map((type) => {
+              {ticketInventory.length === 0 && <Alert color="blue" icon={<IconInfoCircle size={18} />}>Create a ticket type first, then come back to add an offer.</Alert>}
+              <Stack gap="sm" style={bundleScoped ? { opacity: 0.5, pointerEvents: "none" } : undefined} aria-disabled={bundleScoped}>
+                {ticketInventory.map((type) => {
                   const wholeKey = scopeKey.product(type.productId);
                   const whole = !!form.scope[wholeKey];
                   return (
@@ -409,6 +443,20 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
                   );
                 })}
               </Stack>
+              {bundlesAllowed && bundleInventory.length > 0 && (
+                <Stack gap={6} mt="sm">
+                  <Text fw={600} size="sm">Bundles</Text>
+                  <Text size="xs" c="dimmed">
+                    The percentage comes off the bundle price. An offer applies to tickets or to bundles, not both — and its limits then count bundles bought (a Rave Crew counts as one).
+                  </Text>
+                  {bundleInventory.map((type) => (
+                    <Checkbox key={type.bundleId} label={type.title} description={type.priceMinor !== null ? formatMinorAmount(type.priceMinor, currency) : undefined}
+                      disabled={ticketScoped}
+                      checked={!!form.scope[scopeKey.bundle(type.bundleId as number)]}
+                      onChange={(e) => patch({ scope: { ...form.scope, [scopeKey.bundle(type.bundleId as number)]: e.currentTarget.checked } })} />
+                  ))}
+                </Stack>
+              )}
               {errors.scope && <Text size="sm" c="var(--mantine-color-error)" role="alert">{errors.scope}</Text>}
               <Text size="xs" c="dimmed">
                 {isBundle || minQuantity !== null
@@ -462,12 +510,12 @@ export function OfferForm({ eventId, currency, timezone, eventStart, inventory, 
               </Alert>
             )}
 
-            <Group justify="space-between" wrap="wrap-reverse">
+            <Group justify="flex-start">
               <Button component={Link} href={initial ? `/events/${eventId}/offers/${initial.id}` : `/events/${eventId}/offers`} variant="subtle" color="gray" disabled={mutation.isPending}>Cancel</Button>
-              <Button type="submit" loading={mutation.isPending} disabled={!canSubmit || inventory.length === 0}>{initial ? "Save changes" : "Save as draft"}</Button>
             </Group>
           </Stack>
         </form>
+        <SaveBar {...bar.barProps} saveLabel={initial ? "Save changes" : "Save as draft"} />
       </GridCol>
 
       <GridCol span={{ base: 12, md: 5 }}>

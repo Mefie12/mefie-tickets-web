@@ -4,7 +4,7 @@ import { handleSessionExpiry } from "@/lib/sessionExpiry";
 
 function visit(pathname: string) {
   const assign = vi.fn();
-  vi.stubGlobal("window", { location: { pathname, search: "", assign } });
+  vi.stubGlobal("window", { location: { pathname, search: "", replace: assign } });
 
   return assign;
 }

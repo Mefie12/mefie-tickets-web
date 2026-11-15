@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Box, Modal, Text } from "@mantine/core";
+import { useState, type MouseEvent } from "react";
+import { Modal } from "@mantine/core";
+import { useMediaQuery } from "@mantine/hooks";
+import { LegalDocumentView } from "@/components/LegalDocumentView";
+import classes from "./termsAndConditionsLink.module.css";
 
 export type LinkableDocument = {
   content_type: "RICH_TEXT" | "PDF";
@@ -16,7 +19,7 @@ export type LinkableDocument = {
  * disclosure. Generic over any RICH_TEXT|PDF document (event terms or a
  * platform-wide document) rather than hardcoding the event-terms shape —
  * callers supply the PDF stream URL directly. PDF opens the stream route
- * in a new tab; rich text opens a Modal with the server-sanitized HTML
+ * in a new tab; rich text opens a Modal with the HTML sanitised server-side (LegalDocumentSanitizer, on write and read)
  * (same dangerouslySetInnerHTML pattern as the event description).
  */
 export function TermsAndConditionsLink({
@@ -24,20 +27,30 @@ export function TermsAndConditionsLink({
   pdfUrl,
   label = "View Terms & Conditions",
   className,
+  title,
+  versionNumber,
+  publishedAt,
+  pageHref,
 }: {
   document: LinkableDocument;
   pdfUrl: string;
   label?: string;
   className?: string;
+  /** Modal heading; defaults to "Terms & Conditions" (organizer event terms). Platform documents pass their own name. */
+  title?: string;
+  versionNumber?: number | null;
+  publishedAt?: string | null;
+  /** Stable public page for this document. When set the trigger is a real link: plain click opens the modal, ctrl/middle-click opens the page. */
+  pageHref?: string;
 }) {
   const [opened, setOpened] = useState(false);
+  const isMobile = useMediaQuery("(max-width: 36em)");
+  const linkClass = className ? `${classes.link} ${className}` : classes.link;
 
   if (document.content_type === "PDF") {
     return (
-      <Text
-        size="sm"
-        component="a"
-        className={className}
+      <a
+        className={linkClass}
         href={pdfUrl}
         target="_blank"
         rel="noopener noreferrer"
@@ -46,27 +59,41 @@ export function TermsAndConditionsLink({
         onClick={(e) => e.stopPropagation()}
       >
         {label}
-      </Text>
+      </a>
     );
   }
 
+  const heading = title ?? "Terms & Conditions";
   return (
     <>
-      <Text
-        size="sm"
-        component="button"
-        className={className}
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpened(true);
-        }}
-        style={{ cursor: "pointer" }}
-      >
-        {label}
-      </Text>
-      <Modal opened={opened} onClose={() => setOpened(false)} title="Terms & Conditions" size="lg">
-        <Box dangerouslySetInnerHTML={{ __html: document.rich_text_content ?? "" }} />
+      {pageHref ? (
+        <a
+          className={linkClass}
+          href={pageHref}
+          onClick={(e: MouseEvent<HTMLAnchorElement>) => {
+            e.stopPropagation();
+            // Let the browser handle new-tab gestures; a plain click stays in the flow (checkout, signup).
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            setOpened(true);
+          }}
+        >
+          {label}
+        </a>
+      ) : (
+        <button
+          className={linkClass}
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpened(true);
+          }}
+        >
+          {label}
+        </button>
+      )}
+      <Modal opened={opened} onClose={() => setOpened(false)} title={heading} size="lg" fullScreen={isMobile}>
+        <LegalDocumentView title={heading} hideTitle versionNumber={versionNumber} publishedAt={publishedAt} html={document.rich_text_content ?? ""} />
       </Modal>
     </>
   );

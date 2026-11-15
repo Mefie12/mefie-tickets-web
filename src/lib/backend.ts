@@ -41,8 +41,11 @@ export const PUBLIC_FORM_TIMEOUT_MS = 8000;
 async function proxyHeaders(): Promise<Record<string, string>> {
   const secret = process.env.API_PROXY_SECRET;
   if (!secret) return {};
-  const ip = clientIpFromHeaders(await headers(), Number(process.env.CLIENT_IP_TRUSTED_HOPS ?? 1));
-  return ip ? { "X-Client-IP": ip, "X-Web-Proxy-Secret": secret } : {};
+  const incoming = await headers();
+  const ip = clientIpFromHeaders(incoming, Number(process.env.CLIENT_IP_TRUSTED_HOPS ?? 1));
+  // The visitor's browser, so records that keep it as evidence (legal acceptances) show it, not this server's.
+  const userAgent = (incoming.get("user-agent") ?? "").slice(0, 512);
+  return ip ? { "X-Client-IP": ip, "X-Web-Proxy-Secret": secret, ...(userAgent ? { "X-Visitor-User-Agent": userAgent } : {}) } : {};
 }
 
 function parseCookiePairs(cookieHeaderOrSetCookies: string[]): Map<string, string> {

@@ -32,7 +32,7 @@ export type OfferDeal = {
 /** Non-blocking advice returned when a draft is saved (e.g. buying more would cost less than buying fewer). */
 export type OfferWarning = { code: string; message: string };
 
-export type OfferScopeRow = { product_id: number; ticket_option_id: number | null };
+export type OfferScopeRow = { product_id: number | null; ticket_option_id: number | null; bundle_id?: number | null };
 
 /** The management view (organizer + admin). Never used on public pages. */
 export type Offer = OfferDeal & {
@@ -102,7 +102,9 @@ export type PublicOffer = OfferDeal & {
 export type QuoteStatus = "NONE" | "APPLIED" | "VERIFICATION_REQUIRED" | "REJECTED";
 
 export type QuoteLine = {
-  product_id: number;
+  type?: "ticket" | "bundle";
+  bundle_id?: number | null;
+  product_id: number | null;
   ticket_option_id: number | null;
   quantity: number;
   unit_price_minor: number;
@@ -147,7 +149,7 @@ export type Quote = {
 };
 
 export type QuoteRequest = {
-  items: Array<{ product_id: number; ticket_option_id?: number | null; quantity: number }>;
+  items: import("@/lib/bundleCart").ApiCartItem[];
   promo_code?: string | null;
   offer_token?: string | null;
 };

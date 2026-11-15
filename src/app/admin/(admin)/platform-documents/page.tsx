@@ -12,8 +12,12 @@ import { redirectOnAuthError } from "@/lib/authErrorRedirect";
 import { createLegalDocument, listLegalDocuments, type LegalDocument } from "@/lib/legalDocumentsAdminApi";
 
 const PLACEMENT_LABELS: Record<string, string> = {
+  PUBLIC_FOOTER: "Public footer",
   ACCOUNT_REGISTRATION: "Account registration",
+  ORGANIZER_ONBOARDING: "Organizer onboarding",
+  PAYOUT_SETUP: "Payouts and paid events",
   TICKET_CHECKOUT: "Ticket checkout",
+  PRIVACY_CENTER: "Privacy centre",
 };
 
 export default function PlatformDocumentsPage() {
@@ -104,6 +108,11 @@ function DocumentRow({ document }: { document: LegalDocument }) {
             </Text>
             <Badge color={isPublished ? "teal" : "gray"}>{isPublished ? "Published" : "Draft only"}</Badge>
           </Group>
+          {document.description && (
+            <Text size="sm" c="dimmed" lineClamp={2}>
+              {document.description}
+            </Text>
+          )}
           <Text size="xs" c="dimmed">
             {placementLabels.length > 0 ? `Used on: ${placementLabels.join(", ")}` : "Not attached to any placement"}
           </Text>

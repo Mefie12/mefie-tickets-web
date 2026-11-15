@@ -51,6 +51,8 @@ export class ApiError extends Error {
   retryAfter?: number;
   /** Correlation id (body `request_id` or x-request-id header) to quote to support on 5xx failures. */
   requestId?: string;
+  /** The raw JSON error body, for the few errors that carry extra fields (e.g. LEGAL_ACCEPTANCE_REQUIRED lists the documents). */
+  data?: Record<string, unknown>;
 
   constructor(message: string, status: number, errors?: Record<string, string[]>, code?: string) {
     super(message);
@@ -72,6 +74,7 @@ export class ApiError extends Error {
  */
 export function buildApiError(res: Response, data: { message?: string; errors?: Record<string, string[]>; code?: string; retry_after?: number; request_id?: string } | null): ApiError {
   const error = new ApiError(data?.message ?? "Something went wrong.", res.status, data?.errors, data?.code);
+  if (data) error.data = data as Record<string, unknown>;
   const retryAfter = Number(data?.retry_after ?? res.headers.get("retry-after"));
   if (Number.isFinite(retryAfter) && retryAfter > 0) error.retryAfter = retryAfter;
   const requestId = data?.request_id ?? res.headers.get("x-request-id");
@@ -104,6 +107,8 @@ export function registerOrganization(input: {
   password: string;
   password_confirmation: string;
   accepted_terms: boolean;
+  /** Version ids of the legal documents displayed beside the checkbox. */
+  document_versions?: number[];
 }) {
   return request<{ user: CurrentUser }>("/api/auth/registration", { method: "POST", body: input });
 }
@@ -146,7 +151,7 @@ export function changeEmail(input: { email: string; current_password: string }) 
 
 export function acceptInvitation(
   token: string,
-  input: { password: string; password_confirmation: string },
+  input: { password: string; password_confirmation: string; document_versions?: number[] },
 ) {
   return request<{ user: CurrentUser }>(`/api/auth/invitation/${encodeURIComponent(token)}`, {
     method: "POST",
@@ -159,8 +164,11 @@ export function acceptInvitation(
  * — no body, since AcceptInvitationAction reads $request->user() instead
  * of a create-password payload in that case.
  */
-export function acceptInvitationAsCurrentUser(token: string) {
-  return request<{ user: CurrentUser }>(`/api/auth/invitation/${encodeURIComponent(token)}`, { method: "POST" });
+export function acceptInvitationAsCurrentUser(token: string, documentVersions: number[] = []) {
+  return request<{ user: CurrentUser }>(`/api/auth/invitation/${encodeURIComponent(token)}`, {
+    method: "POST",
+    body: { document_versions: documentVersions },
+  });
 }
 
 export type InvitationPreview = {

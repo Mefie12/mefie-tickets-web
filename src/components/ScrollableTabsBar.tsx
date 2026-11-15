@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { ActionIcon, Button, Group, Menu } from "@mantine/core";
+import { UnsavedDot } from "@/components/forms/UnsavedDot";
 import { IconCheck, IconChevronLeft, IconChevronRight, IconDots } from "@tabler/icons-react";
 import classes from "./scrollableTabsBar.module.css";
 
@@ -21,10 +22,13 @@ export function ScrollableTabsBar({
   tabs,
   value,
   onChange,
+  dirtyTabs = [],
 }: {
   tabs: TabDef[];
   value: string | null;
   onChange: (value: string) => void;
+  /** Tab values holding unsaved edits: they get a dot (plus hidden text for screen readers). */
+  dirtyTabs?: string[];
 }) {
   const activeIndex = Math.max(
     0,
@@ -69,6 +73,7 @@ export function ScrollableTabsBar({
             variant={t.value === value ? "filled" : "default"}
             onClick={() => onChange(t.value)}
             className={classes.pill}
+            rightSection={dirtyTabs.includes(t.value) ? <UnsavedDot /> : undefined}
           >
             {t.label}
           </Button>
@@ -111,6 +116,7 @@ export function ScrollableTabsBar({
                   <span style={{ display: "inline-block", width: 14 }} />
                 )
               }
+              rightSection={dirtyTabs.includes(t.value) ? <UnsavedDot /> : undefined}
               fw={t.value === value ? 600 : undefined}
             >
               {t.label}
@@ -121,3 +127,4 @@ export function ScrollableTabsBar({
     </Group>
   );
 }
+

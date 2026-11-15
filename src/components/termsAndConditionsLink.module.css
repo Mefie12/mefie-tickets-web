@@ -1,0 +1,28 @@
+/* Document links must read as links wherever they sit (a sentence, a checkbox label, a notice): coloured and always underlined. */
+.link {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--mantine-color-brand-6);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration-thickness: 2px;
+}
+
+.link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+:global([data-mantine-color-scheme="dark"]) .link {
+  color: var(--mantine-color-brand-3);
+}

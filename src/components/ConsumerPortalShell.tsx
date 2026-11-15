@@ -1,13 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
+import { LegalFooterLinks } from "@/components/LegalFooterLinks";
 import { AppShell, Avatar, Container, Group, Menu, Text, UnstyledButton } from "@mantine/core";
 import { IconChevronDown, IconLogout, IconLogout2, IconShieldLock } from "@tabler/icons-react";
-import { portalLogout, portalLogoutAll } from "@/lib/portalApi";
 import { usePrivacyConsent } from "@/components/privacy/PrivacyConsentProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { MefieLogo } from "@/components/MefieLogo";
+import { useSignOut } from "@/lib/useSignOut";
+import { useRecheckOnRestore } from "@/lib/useRecheckOnRestore";
 
 /**
  * Shell for the consumer ticket portal (`/tickets`). Deliberately its
@@ -21,17 +21,10 @@ export function ConsumerPortalShell({
   profile: { first_name: string | null; last_name: string | null; email: string };
   children: React.ReactNode;
 }) {
-  const router = useRouter();
   const { openPreferences } = usePrivacyConsent();
 
-  const logout = useMutation({
-    mutationFn: portalLogout,
-    onSuccess: () => router.push("/login"),
-  });
-  const logoutAll = useMutation({
-    mutationFn: portalLogoutAll,
-    onSuccess: () => router.push("/login"),
-  });
+  const { signOut, pending } = useSignOut();
+  useRecheckOnRestore("consumer");
 
   const initials = `${profile.first_name?.[0] ?? ""}${profile.last_name?.[0] ?? ""}`.toUpperCase();
 
@@ -68,16 +61,16 @@ export function ConsumerPortalShell({
                 </Menu.Item>
                 <Menu.Item
                   leftSection={<IconLogout size={16} />}
-                  onClick={() => logout.mutate()}
-                  disabled={logout.isPending}
+                  onClick={() => void signOut("consumer", { redirectTo: "/login" })}
+                  disabled={pending}
                 >
                   Sign out
                 </Menu.Item>
                 <Menu.Item
                   color="red"
                   leftSection={<IconLogout2 size={16} />}
-                  onClick={() => logoutAll.mutate()}
-                  disabled={logoutAll.isPending}
+                  onClick={() => void signOut("consumer-all", { redirectTo: "/login" })}
+                  disabled={pending}
                 >
                   Sign out everywhere
                 </Menu.Item>
@@ -90,6 +83,7 @@ export function ConsumerPortalShell({
       <AppShell.Main>
         <Container size="sm" px={0}>
           {children}
+          <LegalFooterLinks />
         </Container>
       </AppShell.Main>
     </AppShell>

@@ -48,7 +48,7 @@ async function request<T>(path: string, options: { method?: "GET" | "POST"; body
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new ApiError(data?.message ?? "Payment setup failed.", response.status, data?.errors, data?.code);
+  if (!response.ok) throw Object.assign(new ApiError(data?.message ?? "Payment setup failed.", response.status, data?.errors, data?.code), { data });
   return data as T;
 }
 
