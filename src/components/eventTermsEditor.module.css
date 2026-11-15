@@ -1,0 +1,61 @@
+/* Terms & Conditions tab. Surfaces use Mantine's default-* tokens so light and dark both follow the theme. */
+
+.hero {
+  overflow: hidden;
+  border-left: 4px solid var(--hero-accent, var(--mantine-color-gray-5));
+}
+
+.hero[data-tone="teal"] {
+  --hero-accent: var(--mantine-color-teal-6);
+}
+
+.hero[data-tone="yellow"] {
+  --hero-accent: var(--mantine-color-yellow-6);
+}
+
+.statLabel {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+/* A strip that holds the actions of a card: set apart from the content above it. */
+.actionBar {
+  border-top: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-default-hover);
+}
+
+.dashed {
+  border-style: dashed;
+}
+
+.historyRow {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--mantine-spacing-sm);
+  padding: var(--mantine-spacing-sm) var(--mantine-spacing-lg);
+}
+
+.historyRow + .historyRow {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+@media (hover: hover) {
+  .historyRow:hover {
+    background: var(--mantine-color-default-hover);
+  }
+}
+
+@media (max-width: 36em) {
+  .historyRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .historyMeta {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+}

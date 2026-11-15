@@ -19,3 +19,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   );
   return relayResponse(result);
 }
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string; versionId: string }> }) {
+  const { id, versionId } = await params;
+  const result = await backendRequest(
+    `/api/events/${encodeURIComponent(id)}/terms/versions/${encodeURIComponent(versionId)}`,
+    { method: "DELETE" },
+  );
+  return relayResponse(result);
+}

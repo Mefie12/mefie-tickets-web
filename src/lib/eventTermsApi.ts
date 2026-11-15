@@ -16,6 +16,8 @@ export type EventTermsVersion = {
   created_by: number;
   created_at: string;
   updated_at: string;
+  /** Orders that accepted this version at checkout (only on the terms listing). */
+  acceptances_count?: number;
 };
 
 export type EventTerms = {
@@ -32,7 +34,7 @@ export type EventTerms = {
 
 async function request<T>(
   path: string,
-  options: { method?: "GET" | "POST" | "PATCH"; body?: unknown } = {},
+  options: { method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown } = {},
 ): Promise<T> {
   const res = await fetch(path, {
     method: options.method ?? "GET",
@@ -68,16 +70,18 @@ export function updateTermsConfig(eventId: number, enabled: boolean) {
   return request<{ terms: EventTerms }>(`/api/events/${eventId}/terms`, { method: "PATCH", body: { enabled } });
 }
 
-export function createTermsVersion(eventId: number, richTextContent: string) {
+/** `replaceDraft` swaps the open draft for this one (switching between writing and a PDF) in a single step. */
+export function createTermsVersion(eventId: number, richTextContent: string, replaceDraft = false) {
   return request<{ version: EventTermsVersion }>(`/api/events/${eventId}/terms/versions`, {
     method: "POST",
-    body: { rich_text_content: richTextContent },
+    body: { rich_text_content: richTextContent, replace_draft: replaceDraft },
   });
 }
 
-export function createPdfTermsVersion(eventId: number, file: File) {
+export function createPdfTermsVersion(eventId: number, file: File, replaceDraft = false) {
   const formData = new FormData();
   formData.append("document", file);
+  if (replaceDraft) formData.append("replace_draft", "1");
   return upload<{ version: EventTermsVersion }>(`/api/events/${eventId}/terms/versions/pdf`, formData);
 }
 
@@ -88,8 +92,34 @@ export function updateTermsVersion(eventId: number, versionId: number, richTextC
   });
 }
 
-export function publishTermsVersion(eventId: number, versionId: number) {
+/** `requireAcceptance` sets the "require at checkout" switch in the same step; omit it to leave the switch as it is. */
+export function publishTermsVersion(eventId: number, versionId: number, requireAcceptance?: boolean) {
   return request<{ version: EventTermsVersion }>(`/api/events/${eventId}/terms/versions/${versionId}/publish`, {
     method: "PATCH",
+    body: requireAcceptance === undefined ? {} : { require_acceptance: requireAcceptance },
+  });
+}
+
+export function discardTermsDraft(eventId: number, versionId: number) {
+  return request<{ discarded: true }>(`/api/events/${eventId}/terms/versions/${versionId}`, { method: "DELETE" });
+}
+
+export type TermsCopySource = {
+  event_id: number;
+  event_title: string | null;
+  event_start_date: string | null;
+  version_number: number;
+  content_type: TermsContentType;
+  published_at: string | null;
+};
+
+export function getTermsCopySources(eventId: number) {
+  return request<{ sources: TermsCopySource[] }>(`/api/events/${eventId}/terms/sources`);
+}
+
+export function copyTermsFromEvent(eventId: number, sourceEventId: number) {
+  return request<{ version: EventTermsVersion }>(`/api/events/${eventId}/terms/versions/copy`, {
+    method: "POST",
+    body: { source_event_id: sourceEventId },
   });
 }
